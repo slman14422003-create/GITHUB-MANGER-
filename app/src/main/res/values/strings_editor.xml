@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_save">حفظ</string>
+    <string name="editor_save_as">حفظ نسخة جديدة…</string>
+    <string name="editor_share">مشاركة</string>
+    <string name="editor_read_aloud">قراءة صوتية</string>
+    <string name="editor_saved">تم الحفظ</string>
+    <string name="editor_save_failed">تعذّر الحفظ</string>
+    <string name="editor_unsaved_title">تغييرات غير محفوظة</string>
+    <string name="editor_unsaved_msg">هل تريد حفظ التعديلات قبل الخروج؟</string>
+    <string name="editor_discard">تجاهل</string>
+    <string name="editor_overwrite_title">حفظ التعديلات</string>
+    <string name="editor_overwrite_msg">يُعاد إنشاء الملف عند الحفظ، وقد تُفقد عناصر لا يدعمها المحرر (مخططات، تنسيق شرطي، أشكال...). يمكنك استبدال الملف الأصلي أو حفظ نسخة جديدة.</string>
+    <string name="editor_overwrite">استبدال الأصل</string>
+    <string name="editor_copy">حفظ كنسخة</string>
+</resources>
