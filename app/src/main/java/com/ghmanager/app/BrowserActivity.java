@@ -5,8 +5,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -54,8 +52,9 @@ public class BrowserActivity extends AppCompatActivity {
     private String path = "";
 
     private final List<JSONObject> items = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
+    private RowAdapter adapter;
     private TextView pathView;
+    private TextView emptyView;
     private Spinner spinner;
     private List<String> branches = new ArrayList<>();
 
@@ -79,7 +78,7 @@ public class BrowserActivity extends AppCompatActivity {
         repo = getIntent().getStringExtra("repo");
         branch = getIntent().getStringExtra("branch");
         if (branch == null || branch.isEmpty()) branch = "main";
-        setTitle(repo);
+        ((TextView) findViewById(R.id.title)).setText(repo);
         api = new GitHubApi(Store.getToken(this));
 
         spinner = findViewById(R.id.branchSpinner);
@@ -88,8 +87,12 @@ public class BrowserActivity extends AppCompatActivity {
         Button btnFolder = findViewById(R.id.btnFolder);
         Button btnFiles = findViewById(R.id.btnFiles);
 
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
+        emptyView = findViewById(R.id.empty);
+        adapter = new RowAdapter(this);
         list.setAdapter(adapter);
+        findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
+        findViewById(R.id.branchBox).setOnClickListener(v -> spinner.performClick());
 
         list.setOnItemClickListener((p, v, pos, id) -> {
             JSONObject o = items.get(pos);
@@ -105,7 +108,6 @@ public class BrowserActivity extends AppCompatActivity {
             confirmDelete(items.get(pos));
             return true;
         });
-        pathView.setOnClickListener(v -> goUp());
 
         treeLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocumentTree(), uri -> {
             if (uri != null) askUploadOptions(uri, null);
@@ -200,8 +202,8 @@ public class BrowserActivity extends AppCompatActivity {
 
     private void setupSpinner(List<String> names) {
         branches = names;
-        ArrayAdapter<String> a = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
-        a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        ArrayAdapter<String> a = new ArrayAdapter<>(this, R.layout.spinner_item, names);
+        a.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(a);
         int idx = names.indexOf(branch);
         if (idx >= 0) spinner.setSelection(idx);
@@ -256,31 +258,23 @@ public class BrowserActivity extends AppCompatActivity {
     private void show(List<JSONObject> list) {
         items.clear();
         items.addAll(list);
-        adapter.clear();
+        List<Row> rows = new ArrayList<>();
         for (JSONObject o : list) {
             boolean dir = "dir".equals(o.optString("type"));
-            adapter.add((dir ? "📁 " : "📄 ") + o.optString("name")
-                    + (dir ? "" : "  (" + humanSize(o.optLong("size")) + ")"));
+            rows.add(new Row(dir ? R.drawable.ic_folder : R.drawable.ic_file, dir,
+                    o.optString("name"), dir ? null : humanSize(o.optLong("size")), false, dir));
         }
-        if (list.isEmpty()) adapter.add(getString(R.string.empty_folder));
+        adapter.setRows(rows);
+        emptyView.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     // ---------- upload ----------
 
     private void askUploadOptions(final Uri tree, final List<Uri> files) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), 0);
-
-        final EditText target = new EditText(this);
-        target.setHint(R.string.target_folder);
-        target.setText(path);
-        final EditText msg = new EditText(this);
-        msg.setHint(R.string.commit_message);
-        msg.setText(R.string.default_commit);
-        final CheckBox includeRoot = new CheckBox(this);
-        includeRoot.setText(R.string.include_root_folder);
-        includeRoot.setChecked(true);
+        LinearLayout box = Ui.box(this);
+        final EditText target = Ui.edit(this, getString(R.string.target_folder), path);
+        final EditText msg = Ui.edit(this, getString(R.string.commit_message), getString(R.string.default_commit));
+        final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
 
         box.addView(target);
         box.addView(msg);
@@ -436,13 +430,16 @@ public class BrowserActivity extends AppCompatActivity {
     // ---------- progress ----------
 
     private void showProgress(String text) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(16), dp(20), dp(8));
+        LinearLayout box = Ui.box(this);
+        box.setPadding(Ui.dp(this, 22), Ui.dp(this, 14), Ui.dp(this, 22), Ui.dp(this, 8));
         progressText = new TextView(this);
         progressText.setText(text);
+        progressText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_secondary));
+        progressText.setTextSize(14);
+        progressText.setPadding(0, 0, 0, Ui.dp(this, 12));
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setIndeterminate(true);
+        Ui.tint(this, progressBar);
         box.addView(progressText);
         box.addView(progressBar);
         progressDialog = new AlertDialog.Builder(this)
@@ -472,23 +469,6 @@ public class BrowserActivity extends AppCompatActivity {
         progressBar = null;
         progressText = null;
         busy = false;
-    }
-
-    // ---------- menu ----------
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, R.string.refresh).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == 1) {
-            load();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     @Override

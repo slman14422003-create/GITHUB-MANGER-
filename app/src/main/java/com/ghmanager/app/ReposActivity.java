@@ -4,10 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
-import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -28,8 +25,9 @@ import java.util.concurrent.Executors;
 public class ReposActivity extends AppCompatActivity {
     private GitHubApi api;
     private final List<JSONObject> repos = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
+    private RowAdapter adapter;
     private TextView status;
+    private TextView count;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -37,21 +35,32 @@ public class ReposActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_repos);
-        setTitle(R.string.repos);
         api = new GitHubApi(Store.getToken(this));
         status = findViewById(R.id.status);
+        count = findViewById(R.id.count);
         ListView list = findViewById(R.id.list);
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
+        adapter = new RowAdapter(this);
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
             JSONObject o = repos.get(pos);
+            JSONObject own = o.optJSONObject("owner");
             Intent i = new Intent(ReposActivity.this, BrowserActivity.class);
-            i.putExtra("owner", o.optJSONObject("owner") != null ? o.optJSONObject("owner").optString("login") : "");
+            i.putExtra("owner", own != null ? own.optString("login") : "");
             i.putExtra("repo", o.optString("name"));
             i.putExtra("branch", o.optString("default_branch", "main"));
             startActivity(i);
         });
+
+        findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
+        findViewById(R.id.btnLogout).setOnClickListener(v -> logout());
         load();
+    }
+
+    private void logout() {
+        Store.clear(this);
+        startActivity(new Intent(this, LoginActivity.class));
+        finish();
     }
 
     private void load() {
@@ -61,31 +70,38 @@ public class ReposActivity extends AppCompatActivity {
             try {
                 JSONArray arr = api.listRepos();
                 final List<JSONObject> tmp = new ArrayList<>();
-                for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
+                final List<Row> rows = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.getJSONObject(i);
+                    tmp.add(o);
+                    JSONObject own = o.optJSONObject("owner");
+                    rows.add(new Row(R.drawable.ic_repo, true, o.optString("name"),
+                            own != null ? own.optString("login") : "",
+                            o.optBoolean("private"), true));
+                }
                 ui.post(() -> {
                     repos.clear();
                     repos.addAll(tmp);
-                    adapter.clear();
-                    for (JSONObject o : tmp) {
-                        adapter.add((o.optBoolean("private") ? "🔒 " : "") + o.optString("full_name"));
-                    }
+                    adapter.setRows(rows);
+                    count.setText(getString(R.string.repos_count, rows.size()));
                     status.setVisibility(View.GONE);
                 });
+            } catch (GitHubApi.ApiException e) {
+                if (e.code == 401) {
+                    ui.post(this::logout);
+                } else {
+                    ui.post(() -> status.setText(e.getMessage()));
+                }
             } catch (Exception e) {
-                ui.post(() -> status.setText(e.getMessage()));
+                ui.post(() -> status.setText(String.valueOf(e.getMessage())));
             }
         });
     }
 
     private void newRepoDialog() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (20 * getResources().getDisplayMetrics().density);
-        box.setPadding(pad, pad / 2, pad, 0);
-        final EditText name = new EditText(this);
-        name.setHint(R.string.repo_name);
-        final CheckBox priv = new CheckBox(this);
-        priv.setText(R.string.private_repo);
+        LinearLayout box = Ui.box(this);
+        final EditText name = Ui.edit(this, getString(R.string.repo_name), null);
+        final CheckBox priv = Ui.check(this, R.string.private_repo, false);
         box.addView(name);
         box.addView(priv);
         new AlertDialog.Builder(this)
@@ -102,39 +118,12 @@ public class ReposActivity extends AppCompatActivity {
                             api.createRepo(n, isPriv);
                             ui.post(this::load);
                         } catch (Exception e) {
-                            ui.post(() -> status.setText(e.getMessage()));
+                            ui.post(() -> status.setText(String.valueOf(e.getMessage())));
                         }
                     });
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, R.string.new_repo).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, 2, 1, R.string.refresh).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-        menu.add(0, 3, 2, R.string.logout).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case 1:
-                newRepoDialog();
-                return true;
-            case 2:
-                load();
-                return true;
-            case 3:
-                Store.clear(this);
-                startActivity(new Intent(this, LoginActivity.class));
-                finish();
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
-        }
     }
 
     @Override
