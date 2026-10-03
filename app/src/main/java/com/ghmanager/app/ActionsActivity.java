@@ -1,12 +1,27 @@
 package com.ghmanager.app;
 
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Workflow runs of a repository, with filters, quick actions and bulk cleanup. */
 public class ActionsActivity extends BaseRepoActivity {
@@ -24,6 +39,10 @@ public class ActionsActivity extends BaseRepoActivity {
     private boolean firstLoad = true;
     private int gen = 0;
     private JSONArray workflows = null;
+    private final Map<Long, int[]> progress = new HashMap<>();
+    private final Map<Long, String> stepNow = new HashMap<>();
+    private LinearLayout dash;
+    private RunAdapter runAdapter;
 
     private final Runnable poll = () -> {
         if (resumed && !busy) load(true, true);
@@ -35,6 +54,11 @@ public class ActionsActivity extends BaseRepoActivity {
         setContentView(R.layout.activity_list);
         bindHeader(getString(R.string.actions), repo);
         initList();
+        dash = new LinearLayout(this);
+        dash.setOrientation(LinearLayout.VERTICAL);
+        listView.addHeaderView(dash, null, false);
+        runAdapter = new RunAdapter();
+        listView.setAdapter(runAdapter);
         workflowId = getIntent().getLongExtra("workflowId", 0);
         workflowName = getIntent().getStringExtra("workflowName");
 
@@ -42,7 +66,9 @@ public class ActionsActivity extends BaseRepoActivity {
         action(btnA1, R.drawable.ic_run, R.string.run_workflow, v -> runWorkflowFlow());
         action(btnA2, R.drawable.ic_more, R.string.more, v -> moreMenu());
 
-        listView.setOnItemClickListener((p, v, pos, id) -> {
+        listView.setOnItemClickListener((p, v, position, id) -> {
+            int pos = position - listView.getHeaderViewsCount();
+            if (pos < 0) return;
             if (pos == runs.size()) {
                 page++;
                 load(false, false);
@@ -53,7 +79,8 @@ public class ActionsActivity extends BaseRepoActivity {
             i.putExtra("runId", runs.get(pos).optLong("id"));
             startActivity(i);
         });
-        listView.setOnItemLongClickListener((p, v, pos, id) -> {
+        listView.setOnItemLongClickListener((p, v, position, id) -> {
+            int pos = position - listView.getHeaderViewsCount();
             if (pos < 0 || pos >= runs.size()) return false;
             runMenu(runs.get(pos));
             return true;
@@ -123,10 +150,44 @@ public class ActionsActivity extends BaseRepoActivity {
                 if (arr != null) {
                     for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
                 }
+                final Map<Long, int[]> prog = new HashMap<>();
+                final Map<Long, String> cur = new HashMap<>();
+                int fetched = 0;
+                for (JSONObject r : tmp) {
+                    if (fetched >= 4) break;
+                    if (!"in_progress".equals(r.optString("status"))) continue;
+                    try {
+                        JSONArray jobs = api.listJobs(owner, repo, r.optLong("id"));
+                        int done = 0;
+                        int total = 0;
+                        String now = "";
+                        for (int j = 0; jobs != null && j < jobs.length(); j++) {
+                            JSONObject job = jobs.getJSONObject(j);
+                            JSONArray steps = job.optJSONArray("steps");
+                            for (int k = 0; steps != null && k < steps.length(); k++) {
+                                JSONObject stepObj = steps.getJSONObject(k);
+                                total++;
+                                String ss = stepObj.optString("status");
+                                if ("completed".equals(ss)) done++;
+                                else if ("in_progress".equals(ss) && now.isEmpty()) {
+                                    now = job.optString("name") + " › " + stepObj.optString("name");
+                                }
+                            }
+                        }
+                        if (total > 0) {
+                            prog.put(r.optLong("id"), new int[]{done, total});
+                            cur.put(r.optLong("id"), now);
+                        }
+                        fetched++;
+                    } catch (Exception ignored) {
+                    }
+                }
                 post(() -> {
                     if (myGen != gen) return;
                     loading(false);
                     showStatus(null);
+                    progress.putAll(prog);
+                    stepNow.putAll(cur);
                     if (pg == 1) runs.clear();
                     runs.addAll(tmp);
                     hasMore = tmp.size() >= PER_PAGE;
@@ -152,32 +213,390 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void render() {
-        List<Row> rows = new ArrayList<>();
-        for (JSONObject run : runs) {
-            String s = run.optString("status");
-            String c = run.optString("conclusion");
-            String title = Fmt.s(run, "display_title");
-            if (title.isEmpty()) title = Fmt.s(run, "name");
-            StringBuilder sub = new StringBuilder("#").append(run.optInt("run_number"));
-            String wfName = Fmt.s(run, "name");
-            if (!wfName.isEmpty()) sub.append(" · ").append(wfName);
-            sub.append(" · ").append(Fmt.s(run, "event"));
-            String hb = Fmt.s(run, "head_branch");
-            if (!hb.isEmpty()) sub.append(" · ").append(hb);
-            String ago = Fmt.ago(Fmt.s(run, "created_at"));
-            if (!ago.isEmpty()) sub.append(" · ").append(ago);
-            if ("completed".equals(s)) {
-                long a = Fmt.parse(Fmt.s(run, "run_started_at"));
-                long b = Fmt.parse(Fmt.s(run, "updated_at"));
-                if (a > 0 && b >= a) sub.append(" · ").append(Fmt.duration(b - a));
-            }
-            int color = Status.color(this, s, c);
-            rows.add(new Row(Status.icon(s, c), false, title, sub.toString(), false, true)
-                    .tint(color).badge(Status.label(s, c), color));
-        }
-        if (hasMore) rows.add(new Row(R.drawable.ic_refresh, false, getString(R.string.load_more), null, false, false));
-        adapter.setRows(rows);
+        renderDash();
+        runAdapter.notifyDataSetChanged();
         showEmpty(runs.isEmpty(), R.string.no_runs);
+    }
+
+    // ------------------------------------------------------------------ dashboard
+
+    private static boolean isBad(String state) {
+        return "failure".equals(state) || "timed_out".equals(state) || "startup_failure".equals(state);
+    }
+
+    private static boolean isWaiting(String state) {
+        return "queued".equals(state) || "waiting".equals(state) || "pending".equals(state)
+                || "requested".equals(state);
+    }
+
+    private static long runMillis(JSONObject run) {
+        long a = Fmt.parse(Fmt.s(run, "run_started_at"));
+        long b = Fmt.parse(Fmt.s(run, "updated_at"));
+        return a > 0 && b >= a ? b - a : 0;
+    }
+
+    private TextView text(CharSequence t, int sp, int colorRes) {
+        TextView v = new TextView(this);
+        v.setText(t);
+        v.setTextSize(sp);
+        v.setTextColor(Ui.color(this, colorRes));
+        return v;
+    }
+
+    private View statTile(int count, int labelRes, int colorRes) {
+        LinearLayout t = new LinearLayout(this);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setGravity(Gravity.CENTER);
+        int pv = Ui.dp(this, 12);
+        t.setPadding(Ui.dp(this, 4), pv, Ui.dp(this, 4), pv);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(Ui.dp(this, 20));
+        g.setColor(Ui.color(this, R.color.field));
+        t.setBackground(g);
+        TextView n = text(String.valueOf(count), 22, colorRes);
+        n.setTypeface(Typeface.SERIF);
+        n.setGravity(Gravity.CENTER);
+        TextView l = text(getString(labelRes), 12, R.color.text_secondary);
+        l.setGravity(Gravity.CENTER);
+        l.setSingleLine(true);
+        t.addView(n);
+        t.addView(l);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        lp.setMarginStart(Ui.dp(this, 3));
+        lp.setMarginEnd(Ui.dp(this, 3));
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    private void renderDash() {
+        dash.removeAllViews();
+        dash.setPadding(Ui.dp(this, 14), Ui.dp(this, 4), Ui.dp(this, 14), Ui.dp(this, 6));
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        int pad = Ui.dp(this, 16);
+        card.setPadding(pad, pad, pad, pad);
+        dash.addView(card, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        if (!runs.isEmpty()) {
+            int ok = 0;
+            int bad = 0;
+            int running = 0;
+            int waiting = 0;
+            long sum = 0;
+            int timed = 0;
+            for (JSONObject r : runs) {
+                String st = r.optString("status");
+                String state = Status.state(st, r.optString("conclusion"));
+                if ("success".equals(state)) ok++;
+                else if (isBad(state)) bad++;
+                else if ("in_progress".equals(state)) running++;
+                else if (isWaiting(state)) waiting++;
+                if ("completed".equals(st)) {
+                    long ms = runMillis(r);
+                    if (ms > 0) {
+                        sum += ms;
+                        timed++;
+                    }
+                }
+            }
+
+            TextView title = text(getString(R.string.act_dash_title), 18, R.color.text_primary);
+            title.setTypeface(Typeface.SERIF);
+            card.addView(title);
+            TextView sub = text(getString(R.string.act_dash_sub, runs.size()), 12, R.color.text_secondary);
+            sub.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 12));
+            card.addView(sub);
+
+            LinearLayout tiles = new LinearLayout(this);
+            tiles.setOrientation(LinearLayout.HORIZONTAL);
+            tiles.addView(statTile(ok, R.string.st_success, R.color.ok));
+            tiles.addView(statTile(bad, R.string.st_failure, R.color.bad));
+            tiles.addView(statTile(running, R.string.st_running, R.color.info));
+            tiles.addView(statTile(waiting, R.string.st_queued, R.color.warn));
+            card.addView(tiles, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            int finished = ok + bad;
+            if (finished > 0) {
+                int rate = Math.round(ok * 100f / finished);
+                LinearLayout line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                line.setPadding(0, Ui.dp(this, 16), 0, 0);
+                TextView l1 = text(getString(R.string.act_success_rate), 13, R.color.text_secondary);
+                TextView v1 = text(rate + "%", 13, rate >= 80 ? R.color.ok : rate >= 50 ? R.color.warn : R.color.bad);
+                v1.setTypeface(Typeface.DEFAULT_BOLD);
+                line.addView(l1, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+                line.addView(v1);
+                card.addView(line);
+                card.addView(Ui.bar(this, rate, rate >= 80 ? R.color.ok : rate >= 50 ? R.color.warn : R.color.bad),
+                        barParams());
+            }
+            if (timed > 0) {
+                LinearLayout line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                line.setPadding(0, Ui.dp(this, 6), 0, 0);
+                TextView l1 = text(getString(R.string.act_avg_duration), 13, R.color.text_secondary);
+                TextView v1 = text(Fmt.duration(sum / timed), 13, R.color.text_primary);
+                v1.setTypeface(Typeface.DEFAULT_BOLD);
+                line.addView(l1, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+                line.addView(v1);
+                card.addView(line);
+            }
+
+            // history strip: oldest on the left, newest on the right, height = duration
+            int n = Math.min(24, runs.size());
+            long max = 1;
+            for (int i = 0; i < n; i++) max = Math.max(max, runMillis(runs.get(i)));
+            LinearLayout strip = new LinearLayout(this);
+            strip.setOrientation(LinearLayout.HORIZONTAL);
+            strip.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+            strip.setGravity(Gravity.BOTTOM);
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 48));
+            sp.topMargin = Ui.dp(this, 16);
+            for (int i = n - 1; i >= 0; i--) {
+                JSONObject r = runs.get(i);
+                String state = Status.state(r.optString("status"), r.optString("conclusion"));
+                long ms = runMillis(r);
+                float f = Status.isActive(r.optString("status")) ? 0.55f : Math.max(0.25f, ms / (float) max);
+                View bar = new View(this);
+                GradientDrawable g = new GradientDrawable();
+                g.setCornerRadius(Ui.dp(this, 4));
+                g.setColor(Status.color(this, r.optString("status"), r.optString("conclusion")));
+                bar.setBackground(g);
+                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                        0, Math.max(Ui.dp(this, 10), Math.round(Ui.dp(this, 48) * f)), 1);
+                bp.setMarginStart(Ui.dp(this, 2));
+                bp.setMarginEnd(Ui.dp(this, 2));
+                strip.addView(bar, bp);
+            }
+            card.addView(strip, sp);
+            TextView cap = text(getString(R.string.act_last_runs, n), 11, R.color.text_hint);
+            cap.setPadding(0, Ui.dp(this, 6), 0, 0);
+            card.addView(cap);
+        }
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        android.widget.Button run = Ui.button(this, R.string.run_workflow, true);
+        run.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_play, 0, 0, 0);
+        run.setCompoundDrawablePadding(Ui.dp(this, 8));
+        run.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.color(this, R.color.on_accent)));
+        run.setOnClickListener(v -> runWorkflowFlow());
+        android.widget.Button more = Ui.button(this, R.string.more, false);
+        more.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_more, 0, 0, 0);
+        more.setCompoundDrawablePadding(Ui.dp(this, 8));
+        more.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.color(this, R.color.text_primary)));
+        more.setOnClickListener(v -> moreMenu());
+        LinearLayout.LayoutParams l1 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f);
+        l1.setMarginEnd(Ui.dp(this, 6));
+        LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        l2.setMarginStart(Ui.dp(this, 6));
+        btns.addView(run, l1);
+        btns.addView(more, l2);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bl.topMargin = Ui.dp(this, runs.isEmpty() ? 0 : 16);
+        card.addView(btns, bl);
+    }
+
+    private LinearLayout.LayoutParams barParams() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 6));
+        lp.topMargin = Ui.dp(this, 6);
+        return lp;
+    }
+
+    // ------------------------------------------------------------------ run cards
+
+    private void quickRerun(final JSONObject run, final boolean failedOnly) {
+        final long id = run.optLong("id");
+        bg(() -> {
+            if (failedOnly) api.rerunFailed(owner, repo, id);
+            else api.rerunRun(owner, repo, id);
+            post(() -> {
+                toast(R.string.done_ok);
+                ui.postDelayed(() -> load(true, true), 1500);
+            });
+        });
+    }
+
+    private void quickCancel(final JSONObject run) {
+        final long id = run.optLong("id");
+        bg(() -> {
+            api.cancelRun(owner, repo, id, false);
+            post(() -> {
+                toast(R.string.done_ok);
+                ui.postDelayed(() -> load(true, true), 1500);
+            });
+        });
+    }
+
+    private void styleAction(TextView t, int textRes, int iconRes) {
+        t.setVisibility(View.VISIBLE);
+        t.setText(textRes);
+        t.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0);
+        t.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.color(this, R.color.text_primary)));
+        int s = Ui.dp(this, 16);
+        android.graphics.drawable.Drawable[] d = t.getCompoundDrawablesRelative();
+        if (d[0] != null) d[0].setBounds(0, 0, s, s);
+        t.setCompoundDrawablesRelative(d[0], null, null, null);
+    }
+
+    private final class RunAdapter extends BaseAdapter {
+        @Override
+        public int getCount() {
+            return runs.size() + (hasMore ? 1 : 0);
+        }
+
+        @Override
+        public Object getItem(int position) {
+            return position < runs.size() ? runs.get(position) : null;
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+
+        @Override
+        public int getViewTypeCount() {
+            return 2;
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return position < runs.size() ? 0 : 1;
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            if (position >= runs.size()) {
+                View v = convertView != null ? convertView
+                        : LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_row, parent, false);
+                RowAdapter.bind(ActionsActivity.this, v, new Row(R.drawable.ic_refresh, false,
+                        getString(R.string.load_more), null, false, false));
+                Ui.shapeRow(ActionsActivity.this, v, true, true);
+                return v;
+            }
+            View v = convertView != null ? convertView
+                    : LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_run, parent, false);
+            bindRun(v, runs.get(position));
+            return v;
+        }
+    }
+
+    private void bindRun(View v, final JSONObject run) {
+        final String s = run.optString("status");
+        final String c = run.optString("conclusion");
+        final String state = Status.state(s, c);
+        final boolean active = Status.isActive(s);
+        final int color = Status.color(this, s, c);
+
+        // card with a status-tinted outline for failed / running runs
+        View card = v.findViewById(R.id.card);
+        GradientDrawable fill = new GradientDrawable();
+        fill.setColor(Ui.color(this, R.color.surface));
+        fill.setCornerRadius(Ui.dp(this, 28));
+        boolean hot = isBad(state) || "in_progress".equals(state);
+        fill.setStroke(Ui.dp(this, 1), hot ? ((color & 0x00FFFFFF) | 0x80000000)
+                : Ui.color(this, R.color.stroke_soft));
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadius(Ui.dp(this, 28));
+        card.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(Ui.color(this, R.color.ripple)), fill, mask));
+
+        ImageView icon = v.findViewById(R.id.icon);
+        icon.setImageResource(Status.icon(s, c));
+        icon.setImageTintList(ColorStateList.valueOf(color));
+
+        String title = Fmt.s(run, "display_title");
+        if (title.isEmpty()) title = Fmt.s(run, "name");
+        ((TextView) v.findViewById(R.id.title)).setText(title);
+
+        StringBuilder l1 = new StringBuilder("#").append(run.optInt("run_number"));
+        String wfName = Fmt.s(run, "name");
+        if (!wfName.isEmpty()) l1.append(" · ").append(wfName);
+        int attempt = run.optInt("run_attempt", 1);
+        if (attempt > 1) l1.append(" · ").append(getString(R.string.act_attempt, attempt));
+        ((TextView) v.findViewById(R.id.line1)).setText(l1.toString());
+
+        TextView badge = v.findViewById(R.id.badge);
+        badge.setText(Status.label(s, c));
+        badge.setTextColor(color);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(Ui.dp(this, 100));
+        bg.setColor((color & 0x00FFFFFF) | 0x26000000);
+        badge.setBackground(bg);
+
+        StringBuilder meta = new StringBuilder();
+        String hb = Fmt.s(run, "head_branch");
+        if (!hb.isEmpty()) meta.append("⎇ ").append(hb);
+        String sha = Fmt.s(run, "head_sha");
+        if (sha.length() >= 7) meta.append(meta.length() > 0 ? "  ·  " : "").append(sha, 0, 7);
+        JSONObject actor = run.optJSONObject("triggering_actor");
+        if (actor == null) actor = run.optJSONObject("actor");
+        if (actor != null && !actor.optString("login").isEmpty()) {
+            meta.append(meta.length() > 0 ? "  ·  " : "").append("@").append(actor.optString("login"));
+        }
+        String ev = Fmt.s(run, "event");
+        if (!ev.isEmpty()) meta.append(meta.length() > 0 ? "  ·  " : "").append(ev);
+        TextView metaV = v.findViewById(R.id.meta);
+        metaV.setText(meta.toString());
+        metaV.setVisibility(meta.length() == 0 ? View.GONE : View.VISIBLE);
+
+        StringBuilder time = new StringBuilder(Fmt.ago(Fmt.s(run, "created_at")));
+        if (active) {
+            long a = Fmt.parse(Fmt.s(run, "run_started_at"));
+            if (a > 0) {
+                time.append(time.length() > 0 ? "  ·  " : "")
+                        .append(getString(R.string.act_elapsed, Fmt.duration(System.currentTimeMillis() - a)));
+            }
+        } else if ("completed".equals(s)) {
+            long ms = runMillis(run);
+            if (ms > 0) {
+                time.append(time.length() > 0 ? "  ·  " : "")
+                        .append(getString(R.string.act_took, Fmt.duration(ms)));
+            }
+        }
+        ((TextView) v.findViewById(R.id.time)).setText(time.toString());
+
+        // live step progress for running runs
+        View progWrap = v.findViewById(R.id.progWrap);
+        int[] pr = progress.get(run.optLong("id"));
+        if ("in_progress".equals(s) && pr != null && pr[1] > 0) {
+            progWrap.setVisibility(View.VISIBLE);
+            ProgressBar pb = v.findViewById(R.id.prog);
+            pb.setProgress(Math.max(4, pr[0] * 100 / pr[1]));
+            String now = stepNow.get(run.optLong("id"));
+            String line = getString(R.string.act_step_progress, pr[0], pr[1])
+                    + (now == null || now.isEmpty() ? "" : "  ·  " + now);
+            ((TextView) v.findViewById(R.id.progText)).setText(line);
+        } else {
+            progWrap.setVisibility(View.GONE);
+        }
+
+        // quick actions
+        TextView a1 = v.findViewById(R.id.act1);
+        TextView a2 = v.findViewById(R.id.act2);
+        View a3 = v.findViewById(R.id.act3);
+        a2.setVisibility(View.GONE);
+        if (active) {
+            styleAction(a1, R.string.act_cancel_short, R.drawable.ic_cancel);
+            a1.setOnClickListener(x -> quickCancel(run));
+        } else {
+            styleAction(a1, R.string.act_rerun_short, R.drawable.ic_refresh);
+            a1.setOnClickListener(x -> quickRerun(run, false));
+            if (isBad(state)) {
+                styleAction(a2, R.string.act_rerun_failed_short, R.drawable.ic_undo);
+                a2.setOnClickListener(x -> quickRerun(run, true));
+            }
+        }
+        a3.setOnClickListener(x -> runMenu(run));
     }
 
     // ------------------------------------------------------------------ workflows / branches pickers
