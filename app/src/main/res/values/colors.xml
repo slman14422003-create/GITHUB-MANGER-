@@ -12,4 +12,5 @@
     <color name="on_accent">#FFFFFF</color>
     <color name="ripple">#1A000000</color>
     <color name="ripple_on_accent">#33FFFFFF</color>
+    <color name="ic_launcher_bg">#D97757</color>
 </resources>
