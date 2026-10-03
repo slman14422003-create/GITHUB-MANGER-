@@ -1,10 +1,9 @@
 package com.ghmanager.app;
 
 import android.content.ContentResolver;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -13,7 +12,6 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -22,7 +20,6 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -34,37 +31,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-public class BrowserActivity extends AppCompatActivity {
-
-    private interface Job {
-        void run() throws Exception;
-    }
+public class BrowserActivity extends BaseRepoActivity {
 
     private static final int MAX_FILE_BYTES = 25 * 1024 * 1024;
 
-    private GitHubApi api;
-    private String owner;
-    private String repo;
-    private String branch;
     private String path = "";
 
     private final List<JSONObject> items = new ArrayList<>();
-    private RowAdapter adapter;
     private TextView pathView;
-    private TextView emptyView;
     private Spinner spinner;
     private List<String> branches = new ArrayList<>();
-
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final Handler ui = new Handler(Looper.getMainLooper());
-
-    private AlertDialog progressDialog;
-    private ProgressBar progressBar;
-    private TextView progressText;
-    private boolean busy = false;
+    private boolean needsReload = false;
 
     private ActivityResultLauncher<Uri> treeLauncher;
     private ActivityResultLauncher<String[]> filesLauncher;
@@ -74,12 +52,7 @@ public class BrowserActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_browser);
 
-        owner = getIntent().getStringExtra("owner");
-        repo = getIntent().getStringExtra("repo");
-        branch = getIntent().getStringExtra("branch");
-        if (branch == null || branch.isEmpty()) branch = "main";
         ((TextView) findViewById(R.id.title)).setText(repo);
-        api = new GitHubApi(Store.getToken(this));
 
         spinner = findViewById(R.id.branchSpinner);
         pathView = findViewById(R.id.pathView);
@@ -92,6 +65,7 @@ public class BrowserActivity extends AppCompatActivity {
         list.setAdapter(adapter);
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
+        findViewById(R.id.btnNew).setOnClickListener(v -> newMenu());
         findViewById(R.id.branchBox).setOnClickListener(v -> spinner.performClick());
 
         list.setOnItemClickListener((p, v, pos, id) -> {
@@ -100,12 +74,11 @@ public class BrowserActivity extends AppCompatActivity {
                 path = o.optString("path");
                 load();
             } else {
-                Toast.makeText(this, o.optString("name") + " (" + humanSize(o.optLong("size")) + ")",
-                        Toast.LENGTH_SHORT).show();
+                openFile(o.optString("path"));
             }
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
-            confirmDelete(items.get(pos));
+            itemMenu(items.get(pos));
             return true;
         });
 
@@ -134,35 +107,16 @@ public class BrowserActivity extends AppCompatActivity {
         load();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (needsReload) {
+            needsReload = false;
+            load();
+        }
+    }
+
     // ---------- helpers ----------
-
-    private void bg(Job job) {
-        io.execute(() -> {
-            try {
-                job.run();
-            } catch (Exception e) {
-                showError(e);
-            }
-        });
-    }
-
-    private void showError(Exception e) {
-        final String msg = e.getMessage() == null ? e.toString() : e.getMessage();
-        ui.post(() -> {
-            hideProgress();
-            new AlertDialog.Builder(BrowserActivity.this)
-                    .setTitle(R.string.error)
-                    .setMessage(msg)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show();
-        });
-    }
-
-    private static String humanSize(long b) {
-        if (b < 1024) return b + " B";
-        if (b < 1024 * 1024) return (b / 1024) + " KB";
-        return String.format(java.util.Locale.US, "%.1f MB", b / 1048576.0);
-    }
 
     private static String normalize(String p) {
         String s = p.trim().replace('\\', '/');
@@ -171,8 +125,9 @@ public class BrowserActivity extends AppCompatActivity {
         return s;
     }
 
-    private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density);
+    private String join(String base, String name) {
+        String n = normalize(name);
+        return base.isEmpty() ? n : base + "/" + n;
     }
 
     private void goUp() {
@@ -180,6 +135,13 @@ public class BrowserActivity extends AppCompatActivity {
         int i = path.lastIndexOf('/');
         path = i < 0 ? "" : path.substring(0, i);
         load();
+    }
+
+    private void openFile(String filePath) {
+        Intent i = repoIntent(EditorActivity.class);
+        i.putExtra("path", filePath);
+        needsReload = true;
+        startActivity(i);
     }
 
     // ---------- browsing ----------
@@ -191,11 +153,11 @@ public class BrowserActivity extends AppCompatActivity {
                 final List<String> names = new ArrayList<>();
                 for (int i = 0; i < arr.length(); i++) names.add(arr.getJSONObject(i).optString("name"));
                 if (names.isEmpty()) names.add(branch);
-                ui.post(() -> setupSpinner(names));
+                post(() -> setupSpinner(names));
             } catch (Exception e) {
                 final List<String> names = new ArrayList<>();
                 names.add(branch);
-                ui.post(() -> setupSpinner(names));
+                post(() -> setupSpinner(names));
             }
         });
     }
@@ -242,10 +204,10 @@ public class BrowserActivity extends AppCompatActivity {
                         return x.optString("name").compareToIgnoreCase(y.optString("name"));
                     }
                 });
-                ui.post(() -> show(tmp));
+                post(() -> show(tmp));
             } catch (GitHubApi.ApiException e) {
                 if (e.code == 404) {
-                    ui.post(() -> show(new ArrayList<JSONObject>()));
+                    post(() -> show(new ArrayList<JSONObject>()));
                 } else {
                     showError(e);
                 }
@@ -262,10 +224,121 @@ public class BrowserActivity extends AppCompatActivity {
         for (JSONObject o : list) {
             boolean dir = "dir".equals(o.optString("type"));
             rows.add(new Row(dir ? R.drawable.ic_folder : R.drawable.ic_file, dir,
-                    o.optString("name"), dir ? null : humanSize(o.optLong("size")), false, dir));
+                    o.optString("name"), dir ? null : Fmt.size(o.optLong("size")), false, dir));
         }
         adapter.setRows(rows);
         emptyView.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    // ---------- item actions ----------
+
+    private void itemMenu(final JSONObject o) {
+        final boolean dir = "dir".equals(o.optString("type"));
+        final String name = o.optString("name");
+        final String p = o.optString("path");
+        List<String> labels = new ArrayList<>();
+        if (!dir) labels.add(getString(R.string.view_edit));
+        if (!dir) labels.add(getString(R.string.download));
+        labels.add(getString(R.string.rename_move));
+        labels.add(getString(R.string.copy_path));
+        labels.add(getString(R.string.copy_link));
+        labels.add(getString(R.string.delete));
+        final String[] arr = labels.toArray(new String[0]);
+        choose(name, arr, (d, which) -> {
+            String chosen = arr[which];
+            if (chosen.equals(getString(R.string.view_edit))) {
+                openFile(p);
+            } else if (chosen.equals(getString(R.string.download))) {
+                saveAs(name, () -> api.openDownload(api.contentRawPath(owner, repo, p, branch),
+                        "application/vnd.github.raw"));
+            } else if (chosen.equals(getString(R.string.rename_move))) {
+                renameDialog(o);
+            } else if (chosen.equals(getString(R.string.copy_path))) {
+                copy("path", p);
+            } else if (chosen.equals(getString(R.string.copy_link))) {
+                copy("link", webUrl((dir ? "/tree/" : "/blob/") + branch + "/" + p));
+            } else {
+                confirmDelete(o);
+            }
+        });
+    }
+
+    private void newMenu() {
+        String[] opts = {getString(R.string.new_file), getString(R.string.new_folder)};
+        choose(getString(R.string.new_item), opts, (d, which) -> {
+            LinearLayout box = Ui.box(this);
+            final EditText name = Ui.edit(this, getString(which == 0 ? R.string.file_name : R.string.folder_name), null);
+            box.addView(name);
+            new AlertDialog.Builder(this)
+                    .setTitle(which == 0 ? R.string.new_file : R.string.new_folder)
+                    .setView(box)
+                    .setPositiveButton(R.string.create, (dd, w) -> {
+                        final String n = normalize(name.getText().toString());
+                        if (n.isEmpty()) return;
+                        final String full = join(path, n);
+                        if (which == 0) {
+                            Intent i = repoIntent(EditorActivity.class);
+                            i.putExtra("path", full);
+                            i.putExtra("new", true);
+                            needsReload = true;
+                            startActivity(i);
+                        } else {
+                            showProgress(getString(R.string.working));
+                            bg(() -> {
+                                api.putFileContent(owner, repo, full + "/.gitkeep", new byte[0],
+                                        "Create folder " + n, branch, null);
+                                post(() -> {
+                                    hideProgress();
+                                    load();
+                                });
+                            });
+                        }
+                    })
+                    .setNegativeButton(R.string.cancel, null)
+                    .show();
+        });
+    }
+
+    private void renameDialog(final JSONObject o) {
+        final String oldPath = o.optString("path");
+        final boolean dir = "dir".equals(o.optString("type"));
+        final String blobSha = o.optString("sha");
+        LinearLayout box = Ui.box(this);
+        final EditText target = Ui.edit(this, getString(R.string.new_path), oldPath);
+        box.addView(target);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.rename_move)
+                .setView(box)
+                .setPositiveButton(R.string.save, (d, w) -> {
+                    final String newPath = normalize(target.getText().toString());
+                    if (newPath.isEmpty() || newPath.equals(oldPath)) return;
+                    if (busy) return;
+                    busy = true;
+                    showProgress(getString(R.string.working));
+                    final String b = branch;
+                    bg(() -> {
+                        List<GitHubApi.TreeEntry> entries = new ArrayList<>();
+                        if (dir) {
+                            for (GitHubApi.TreeEntry t : api.listBlobsUnder(owner, repo, b, oldPath)) {
+                                String rel = t.path.substring(oldPath.length());
+                                entries.add(new GitHubApi.TreeEntry(newPath + rel, t.sha, t.mode));
+                                entries.add(new GitHubApi.TreeEntry(t.path, null));
+                            }
+                        } else {
+                            entries.add(new GitHubApi.TreeEntry(newPath, blobSha));
+                            entries.add(new GitHubApi.TreeEntry(oldPath, null));
+                        }
+                        if (!entries.isEmpty()) {
+                            api.commitEntries(owner, repo, b, entries, "Move " + oldPath + " to " + newPath);
+                        }
+                        post(() -> {
+                            hideProgress();
+                            load();
+                        });
+                    });
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     // ---------- upload ----------
@@ -329,7 +402,7 @@ public class BrowserActivity extends AppCompatActivity {
                 }
             }
             if (all.isEmpty()) {
-                ui.post(() -> {
+                post(() -> {
                     hideProgress();
                     Toast.makeText(BrowserActivity.this, R.string.no_files, Toast.LENGTH_LONG).show();
                 });
@@ -351,7 +424,7 @@ public class BrowserActivity extends AppCompatActivity {
             for (FileScanner.Item it : all) {
                 final int cur = idx;
                 final String name = it.path;
-                ui.post(() -> updateProgress(cur, total, name));
+                post(() -> updateProgress(cur, total, name));
                 idx++;
                 byte[] data = readBytes(cr, it.uri);
                 if (data == null) {
@@ -369,7 +442,7 @@ public class BrowserActivity extends AppCompatActivity {
             }
 
             if (!entries.isEmpty()) {
-                ui.post(() -> {
+                post(() -> {
                     if (progressText != null) progressText.setText(R.string.committing);
                 });
                 api.commitEntries(owner, repo, b, entries, message);
@@ -382,7 +455,7 @@ public class BrowserActivity extends AppCompatActivity {
                 for (int i = 0; i < Math.min(skipped.size(), 10); i++) names.append(skipped.get(i)).append('\n');
                 sb.append("\n\n").append(getString(R.string.skipped_summary, skipped.size(), names.toString()));
             }
-            ui.post(() -> {
+            post(() -> {
                 hideProgress();
                 new AlertDialog.Builder(BrowserActivity.this)
                         .setTitle(R.string.done)
@@ -417,7 +490,7 @@ public class BrowserActivity extends AppCompatActivity {
                             for (String s : paths) entries.add(new GitHubApi.TreeEntry(s, null));
                             api.commitEntries(owner, repo, b, entries, "Delete " + name);
                         }
-                        ui.post(() -> {
+                        post(() -> {
                             hideProgress();
                             load();
                         });
@@ -425,55 +498,5 @@ public class BrowserActivity extends AppCompatActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
-    }
-
-    // ---------- progress ----------
-
-    private void showProgress(String text) {
-        LinearLayout box = Ui.box(this);
-        box.setPadding(Ui.dp(this, 22), Ui.dp(this, 14), Ui.dp(this, 22), Ui.dp(this, 8));
-        progressText = new TextView(this);
-        progressText.setText(text);
-        progressText.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.text_secondary));
-        progressText.setTextSize(14);
-        progressText.setPadding(0, 0, 0, Ui.dp(this, 12));
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setIndeterminate(true);
-        Ui.tint(this, progressBar);
-        box.addView(progressText);
-        box.addView(progressBar);
-        progressDialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.working)
-                .setView(box)
-                .setCancelable(false)
-                .create();
-        progressDialog.show();
-    }
-
-    private void updateProgress(int cur, int total, String text) {
-        if (progressBar == null) return;
-        progressBar.setIndeterminate(false);
-        progressBar.setMax(total);
-        progressBar.setProgress(cur);
-        progressText.setText((cur + 1) + "/" + total + "\n" + text);
-    }
-
-    private void hideProgress() {
-        if (progressDialog != null) {
-            try {
-                progressDialog.dismiss();
-            } catch (Exception ignored) {
-            }
-            progressDialog = null;
-        }
-        progressBar = null;
-        progressText = null;
-        busy = false;
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        io.shutdown();
     }
 }

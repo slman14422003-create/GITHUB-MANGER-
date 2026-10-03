@@ -12,4 +12,8 @@
     <color name="on_accent">#FFFFFF</color>
     <color name="ripple">#22FFFFFF</color>
     <color name="ripple_on_accent">#33FFFFFF</color>
+    <color name="ok">#5BBF85</color>
+    <color name="bad">#E8756A</color>
+    <color name="warn">#E0A84A</color>
+    <color name="info">#6AA6E8</color>
 </resources>

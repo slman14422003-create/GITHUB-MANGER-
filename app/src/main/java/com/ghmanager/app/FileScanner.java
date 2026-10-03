@@ -33,6 +33,19 @@ public class FileScanner {
         return null;
     }
 
+    /** Size in bytes, or -1 when the provider does not report it. */
+    public static long size(ContentResolver cr, Uri uri) {
+        Cursor c = null;
+        try {
+            c = cr.query(uri, new String[]{OpenableColumns.SIZE}, null, null, null);
+            if (c != null && c.moveToFirst() && !c.isNull(0)) return c.getLong(0);
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        return -1;
+    }
+
     private static String docName(ContentResolver cr, Uri docUri) {
         Cursor c = null;
         try {
