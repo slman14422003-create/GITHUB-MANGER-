@@ -32,4 +32,11 @@
     <string name="empty_folder">المجلد فارغ</string>
     <string name="upload_summary">تم رفع %1$d ملف في commit واحد.</string>
     <string name="skipped_summary">تم تجاوز %1$d ملف (أكبر من 25MB أو تعذّرت قراءته):\n%2$s</string>
+    <string name="login_subtitle">أدِر مستودعاتك وارفع مجلداتك بترتيبها الكامل من هاتفك</string>
+    <string name="token_label">رمز الوصول</string>
+    <string name="long_press_hint">اضغط مطولًا على أي عنصر لحذفه</string>
+    <string name="repos_count">%d مستودع</string>
+    <string name="back">رجوع</string>
+    <string name="branch_label">الفرع</string>
+    <string name="folder_label">مجلد</string>
 </resources>
