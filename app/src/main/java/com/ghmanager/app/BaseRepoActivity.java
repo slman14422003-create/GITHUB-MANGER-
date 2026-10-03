@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,8 +30,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /** Shared plumbing for every repository screen: API client, threading, dialogs, downloads. */
 public abstract class BaseRepoActivity extends AppCompatActivity {
@@ -71,6 +75,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     private ActivityResultLauncher<String> saveLauncher;
     private Source pendingSource;
+    private boolean pendingExtractApk;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,8 +83,10 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         saveLauncher = registerForActivityResult(
                 new ActivityResultContracts.CreateDocument("application/octet-stream"), uri -> {
                     Source s = pendingSource;
+                    boolean extract = pendingExtractApk;
                     pendingSource = null;
-                    if (uri != null && s != null) runDownload(uri, s);
+                    pendingExtractApk = false;
+                    if (uri != null && s != null) runDownload(uri, s, extract);
                 });
         Intent i = getIntent();
         owner = i.getStringExtra("owner");
@@ -398,16 +405,23 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     // ------------------------------------------------------------------ downloads (save to a user-chosen location)
 
     protected void saveAs(String fileName, Source src) {
+        saveAs(fileName, src, false);
+    }
+
+    /** When {@code extractApk} is true the source is a ZIP and only the .apk inside it is saved. */
+    protected void saveAs(String fileName, Source src, boolean extractApk) {
         pendingSource = src;
+        pendingExtractApk = extractApk;
         try {
             saveLauncher.launch(fileName);
         } catch (Exception e) {
             pendingSource = null;
+            pendingExtractApk = false;
             toast(R.string.cannot_save);
         }
     }
 
-    private void runDownload(final Uri uri, final Source src) {
+    private void runDownload(final Uri uri, final Source src, final boolean extractApk) {
         if (busy) return;
         busy = true;
         showProgress(getString(R.string.downloading));
@@ -419,7 +433,30 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
                 OutputStream out = getContentResolver().openOutputStream(uri);
                 if (out == null) throw new IOException("Cannot open destination");
                 try {
-                    GitHubApi.copy(in, out, total, (done, tot) -> post(() -> updateBytes(done, tot)));
+                    GitHubApi.Progress prog = (done, tot) -> post(() -> updateBytes(done, tot));
+                    if (extractApk) {
+                        ZipInputStream zin = new ZipInputStream(in);
+                        ZipEntry e;
+                        boolean found = false;
+                        while ((e = zin.getNextEntry()) != null) {
+                            if (!e.isDirectory() && e.getName().toLowerCase(Locale.US).endsWith(".apk")) {
+                                GitHubApi.copy(zin, out, e.getSize(), prog);
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) throw new IOException(getString(R.string.no_apk_in_artifact));
+                    } else {
+                        GitHubApi.copy(in, out, total, prog);
+                    }
+                } catch (Exception ex) {
+                    if (extractApk) {
+                        try {
+                            DocumentsContract.deleteDocument(getContentResolver(), uri);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    throw ex;
                 } finally {
                     out.close();
                     in.close();
@@ -429,8 +466,59 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             }
             post(() -> {
                 hideProgress();
-                toast(R.string.saved);
+                if (extractApk) offerInstall(uri);
+                else toast(R.string.saved);
             });
+        });
+    }
+
+    private void offerInstall(final Uri uri) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.saved)
+                .setMessage(R.string.install_apk_msg)
+                .setPositiveButton(R.string.install_now, (d, w) -> installApk(uri))
+                .setNegativeButton(R.string.install_later, null)
+                .show();
+    }
+
+    private void installApk(Uri uri) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(i);
+        } catch (Exception e) {
+            toast(R.string.install_failed);
+        }
+    }
+
+    // ------------------------------------------------------------------ artifacts (build outputs such as the APK)
+
+    /** Menu for one Actions artifact: save the APK itself, save the raw ZIP, or delete it. */
+    protected void artifactMenu(final JSONObject art, final Runnable onChanged) {
+        final long id = art.optLong("id");
+        final String name = art.optString("name");
+        String[] items = {getString(R.string.artifact_apk), getString(R.string.artifact_zip),
+                getString(R.string.delete)};
+        choose(name, items, (d, which) -> {
+            if (which == 2) {
+                confirm(getString(R.string.delete), getString(R.string.delete_msg, name), R.string.delete, () ->
+                        bg(() -> {
+                            api.deleteArtifact(owner, repo, id);
+                            post(() -> {
+                                if (onChanged != null) onChanged.run();
+                            });
+                        }));
+                return;
+            }
+            if (art.optBoolean("expired")) {
+                toast(R.string.artifact_expired);
+                return;
+            }
+            Source src = () -> api.openDownload(api.artifactZipPath(owner, repo, id),
+                    "application/vnd.github+json");
+            if (which == 0) saveAs(name + ".apk", src, true);
+            else saveAs(name + ".zip", src, false);
         });
     }
 

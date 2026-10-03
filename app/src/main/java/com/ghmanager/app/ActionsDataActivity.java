@@ -137,24 +137,9 @@ public class ActionsDataActivity extends BaseRepoActivity {
 
     private void itemMenu(final JSONObject o) {
         switch (mode) {
-            case "artifacts": {
-                final long id = o.optLong("id");
-                final String name = o.optString("name");
-                String[] opts = {getString(R.string.download), getString(R.string.delete)};
-                choose(name, opts, (d, which) -> {
-                    if (which == 0) {
-                        if (o.optBoolean("expired")) {
-                            toast(R.string.artifact_expired);
-                            return;
-                        }
-                        saveAs(name + ".zip", () -> api.openDownload(api.artifactZipPath(owner, repo, id),
-                                "application/vnd.github+json"));
-                    } else {
-                        deleteWithConfirm(name, () -> api.deleteArtifact(owner, repo, id));
-                    }
-                });
+            case "artifacts":
+                artifactMenu(o, this::load);
                 break;
-            }
             case "caches": {
                 final long id = o.optLong("id");
                 String key = o.optString("key");

@@ -1,5 +1,6 @@
 package com.ghmanager.app;
 
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.view.View;
@@ -119,6 +120,13 @@ public class RepoHomeActivity extends BaseRepoActivity {
         addRow(new Row(R.drawable.ic_tag, true, getString(R.string.releases),
                 getString(R.string.releases_sub), false, true),
                 v -> startActivity(repoIntent(ReleasesActivity.class)));
+
+        addRow(new Row(R.drawable.ic_package, true, getString(R.string.artifacts),
+                getString(R.string.artifacts_sub), false, true), v -> {
+            Intent ai = repoIntent(ActionsDataActivity.class);
+            ai.putExtra("mode", "artifacts");
+            startActivity(ai);
+        });
 
         addRow(new Row(R.drawable.ic_commit, true, getString(R.string.commits),
                 getString(R.string.commits_sub), false, true),

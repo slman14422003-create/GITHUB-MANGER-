@@ -170,7 +170,7 @@ public class RunDetailActivity extends BaseRepoActivity {
                 Row ar = new Row(R.drawable.ic_package, false, art.optString("name"),
                         Fmt.size(art.optLong("size_in_bytes")), false, true);
                 if (expired) ar.badge(getString(R.string.expired), Ui.color(this, R.color.warn));
-                content.addView(Ui.rowView(this, content, ar, v -> artifactMenu(art)));
+                content.addView(Ui.rowView(this, content, ar, v -> artifactMenu(art, () -> load(true))));
             }
         }
     }
@@ -316,28 +316,6 @@ public class RunDetailActivity extends BaseRepoActivity {
                 });
             } else {
                 openUrl(Fmt.s(job, "html_url"));
-            }
-        });
-    }
-
-    private void artifactMenu(final JSONObject art) {
-        final long id = art.optLong("id");
-        final String name = art.optString("name");
-        String[] items = {getString(R.string.download), getString(R.string.delete)};
-        choose(name, items, (d, which) -> {
-            if (which == 0) {
-                if (art.optBoolean("expired")) {
-                    toast(R.string.artifact_expired);
-                    return;
-                }
-                saveAs(name + ".zip", () -> api.openDownload(api.artifactZipPath(owner, repo, id),
-                        "application/vnd.github+json"));
-            } else {
-                confirm(getString(R.string.delete), getString(R.string.delete_msg, name), R.string.delete, () ->
-                        bg(() -> {
-                            api.deleteArtifact(owner, repo, id);
-                            post(() -> load(true));
-                        }));
             }
         });
     }
