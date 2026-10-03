@@ -211,6 +211,7 @@ public class RunDetailActivity extends BaseRepoActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), 0);
         boolean any = false;
+        boolean isFailure = false;
         if (Status.isActive(s)) {
             Button cancel = Ui.button(this, R.string.cancel_run, false);
             cancel.setOnClickListener(v -> doRunAction("cancel"));
@@ -226,9 +227,46 @@ public class RunDetailActivity extends BaseRepoActivity {
                 Button failed = Ui.button(this, R.string.rerun_failed, false);
                 failed.setOnClickListener(v -> doRunAction("rerun_failed"));
                 row.addView(failed, weighted());
+                isFailure = true;
             }
         }
         if (any) content.addView(row);
+        if (isFailure) {
+            LinearLayout back = new LinearLayout(this);
+            back.setOrientation(LinearLayout.HORIZONTAL);
+            back.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), 0);
+            Button rollback = Ui.button(this, R.string.rollback_before_run, false);
+            rollback.setOnClickListener(v -> rollbackBeforeRun());
+            back.addView(rollback, weighted());
+            content.addView(back);
+        }
+    }
+
+    /** The run failed: put the branch back to the version just before the commit that was built. */
+    private void rollbackBeforeRun() {
+        if (run == null) return;
+        final String headSha = Fmt.s(run, "head_sha");
+        if (headSha.isEmpty()) return;
+        final String runBranch = Fmt.s(run, "head_branch").isEmpty() ? branch : Fmt.s(run, "head_branch");
+        JSONObject hc = run.optJSONObject("head_commit");
+        final String detail = getString(R.string.rollback_detail, Fmt.shortSha(headSha),
+                hc == null ? "" : Fmt.firstLine(hc.optString("message")));
+        loading(true);
+        io.execute(() -> {
+            try {
+                final String parent = api.getParentSha(owner, repo, headSha);
+                post(() -> {
+                    loading(false);
+                    if (parent == null) {
+                        toast(R.string.no_previous_version);
+                        return;
+                    }
+                    restoreVersion(runBranch, parent, Fmt.shortSha(parent), detail, null);
+                });
+            } catch (Exception e) {
+                fail(e);
+            }
+        });
     }
 
     private LinearLayout.LayoutParams weighted() {

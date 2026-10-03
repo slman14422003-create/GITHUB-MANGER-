@@ -28,6 +28,7 @@ public class CommitsActivity extends BaseRepoActivity {
         initList();
         btnRefresh.setOnClickListener(v -> load(true));
         action(btnA1, R.drawable.ic_branch, R.string.branch_label, v -> pickBranch());
+        action(btnA2, R.drawable.ic_undo, R.string.undo_last, v -> undoLast());
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == items.size()) {
                 page++;
@@ -67,7 +68,8 @@ public class CommitsActivity extends BaseRepoActivity {
 
     private void render() {
         List<Row> rows = new ArrayList<>();
-        for (JSONObject o : items) {
+        for (int idx = 0; idx < items.size(); idx++) {
+            JSONObject o = items.get(idx);
             JSONObject c = o.optJSONObject("commit");
             String msg = c == null ? "" : Fmt.firstLine(c.optString("message"));
             JSONObject au = c == null ? null : c.optJSONObject("author");
@@ -77,7 +79,9 @@ public class CommitsActivity extends BaseRepoActivity {
                 String ago = Fmt.ago(Fmt.s(au, "date"));
                 if (!ago.isEmpty()) sub.append(" · ").append(ago);
             }
-            rows.add(new Row(R.drawable.ic_commit, true, msg, sub.toString(), false, true));
+            Row row = new Row(R.drawable.ic_commit, true, msg, sub.toString(), false, true);
+            if (idx == 0) row.badge(getString(R.string.current_version), Ui.color(this, R.color.ok));
+            rows.add(row);
         }
         if (hasMore) rows.add(new Row(R.drawable.ic_refresh, false, getString(R.string.load_more), null, false, false));
         adapter.setRows(rows);
@@ -107,14 +111,36 @@ public class CommitsActivity extends BaseRepoActivity {
 
     private void menu(final JSONObject o) {
         final String sha = o.optString("sha");
-        String[] opts = {getString(R.string.details), getString(R.string.copy_sha),
+        JSONObject cm = o.optJSONObject("commit");
+        final String msg = cm == null ? "" : Fmt.firstLine(cm.optString("message"));
+        String[] opts = {getString(R.string.details), getString(R.string.download_version),
+                getString(R.string.restore_here), getString(R.string.copy_sha),
                 getString(R.string.create_branch_here), getString(R.string.open_in_github)};
         choose(Fmt.shortSha(sha), opts, (d, which) -> {
             if (which == 0) details(sha);
-            else if (which == 1) copy("sha", sha);
-            else if (which == 2) branchHere(sha);
+            else if (which == 1) downloadVersion(sha, Fmt.shortSha(sha));
+            else if (which == 2) restoreVersion(sha, Fmt.shortSha(sha), msg, () -> load(true));
+            else if (which == 3) copy("sha", sha);
+            else if (which == 4) branchHere(sha);
             else openUrl(Fmt.s(o, "html_url"));
         });
+    }
+
+    /** One tap rollback: puts the branch back to the version just before the latest commit. */
+    private void undoLast() {
+        if (items.isEmpty()) return;
+        JSONObject head = items.get(0);
+        JSONArray parents = head.optJSONArray("parents");
+        JSONObject first = parents == null ? null : parents.optJSONObject(0);
+        if (first == null) {
+            toast(R.string.no_previous_version);
+            return;
+        }
+        JSONObject cm = head.optJSONObject("commit");
+        String detail = getString(R.string.undo_detail,
+                cm == null ? "" : Fmt.firstLine(cm.optString("message")));
+        String parent = first.optString("sha");
+        restoreVersion(parent, Fmt.shortSha(parent), detail, () -> load(true));
     }
 
     private void details(final String sha) {

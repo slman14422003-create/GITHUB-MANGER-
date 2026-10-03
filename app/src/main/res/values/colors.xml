@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#F0EEE6</color>
-    <color name="surface">#FAF9F5</color>
-    <color name="stroke">#DDD9CE</color>
-    <color name="text_primary">#141413</color>
-    <color name="text_secondary">#6B6A64</color>
-    <color name="text_hint">#9A978D</color>
-    <color name="accent">#C96442</color>
-    <color name="accent_soft">#F2DDD3</color>
-    <color name="neutral_soft">#E8E5DA</color>
+    <!-- Dark neutral surfaces (ChatGPT) + warm terracotta accent and serif titles (Claude) -->
+    <color name="bg">#212121</color>
+    <color name="surface">#2A2A2A</color>
+    <color name="field">#303030</color>
+    <color name="stroke">#3D3D3D</color>
+    <color name="text_primary">#ECECEC</color>
+    <color name="text_secondary">#B4B4B4</color>
+    <color name="text_hint">#8A8A8A</color>
+    <color name="accent">#D97757</color>
+    <color name="accent_soft">#3D2B24</color>
+    <color name="neutral_soft">#363636</color>
     <color name="on_accent">#FFFFFF</color>
-    <color name="ripple">#1A000000</color>
+    <color name="ripple">#22FFFFFF</color>
     <color name="ripple_on_accent">#33FFFFFF</color>
     <color name="ic_launcher_bg">#D97757</color>
-    <color name="ok">#2F7D4F</color>
-    <color name="bad">#C0392B</color>
-    <color name="warn">#B7791F</color>
-    <color name="info">#2B6CB0</color>
+    <color name="ok">#5BBF85</color>
+    <color name="bad">#E8756A</color>
+    <color name="warn">#E0A84A</color>
+    <color name="info">#6AA6E8</color>
 </resources>

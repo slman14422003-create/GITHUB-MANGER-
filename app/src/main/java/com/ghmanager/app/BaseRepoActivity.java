@@ -434,6 +434,48 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         });
     }
 
+    // ------------------------------------------------------------------ previous versions / rollback
+
+    /** Lets the user save any version (commit sha, tag or branch) of the repository as a ZIP. */
+    protected void downloadVersion(final String ref, String label) {
+        String name = (label == null || label.isEmpty()) ? ref : label;
+        saveAs(repo + "-" + name.replaceAll("[^A-Za-z0-9._-]", "-") + ".zip",
+                () -> api.openZipball(owner, repo, ref));
+    }
+
+    protected void restoreVersion(String ref, String label, String detail, Runnable after) {
+        restoreVersion(branch, ref, label, detail, after);
+    }
+
+    /**
+     * Rolls {@code targetBranch} back to the content of {@code ref} (commit sha or tag) after an
+     * explicit confirmation. It adds a new commit, so nothing is lost and the rollback is reversible.
+     */
+    protected void restoreVersion(final String targetBranch, final String ref, final String label,
+                                  final String detail, final Runnable after) {
+        String msg = getString(R.string.restore_msg, label, targetBranch);
+        if (detail != null && !detail.isEmpty()) msg = msg + "\n\n" + detail;
+        confirm(getString(R.string.restore_title), msg, R.string.restore_action, () -> {
+            if (busy) return;
+            busy = true;
+            showProgress(getString(R.string.restoring));
+            bg(() -> {
+                final String sha = api.resolveCommitSha(owner, repo, ref);
+                final String result = api.restoreToCommit(owner, repo, targetBranch, sha,
+                        getString(R.string.restore_commit_msg, label));
+                post(() -> {
+                    hideProgress();
+                    if (result == null) {
+                        info(getString(R.string.restore_title), getString(R.string.restore_same));
+                    } else {
+                        toast(R.string.restore_done);
+                        if (after != null) after.run();
+                    }
+                });
+            });
+        });
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

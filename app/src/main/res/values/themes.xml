@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
         <item name="colorPrimaryDark">@color/bg</item>
         <item name="colorAccent">@color/accent</item>
@@ -13,9 +13,13 @@
         <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="android:textColorHint">@color/text_hint</item>
         <item name="alertDialogTheme">@style/AppDialog</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="colorControlNormal">@color/text_secondary</item>
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="android:textColorLink">@color/accent</item>
     </style>
 
-    <style name="AppDialog" parent="Theme.AppCompat.DayNight.Dialog.Alert">
+    <style name="AppDialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@drawable/bg_dialog</item>
         <item name="android:textColorPrimary">@color/text_primary</item>

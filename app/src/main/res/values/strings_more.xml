@@ -30,9 +30,9 @@
     <string name="comments_count">%d تعليق</string>
     <string name="comments_title">التعليقات (%d)</string>
     <string name="commit_changes">حفظ التعديلات (commit)</string>
-    <string name="commits">سجل الـ Commits</string>
+    <string name="commits">السجل والنسخ السابقة</string>
     <string name="commits_count">%d commit</string>
-    <string name="commits_sub">تاريخ التعديلات وتفاصيلها</string>
+    <string name="commits_sub">حمّل أي نسخة سابقة أو ارجع إليها بسهولة إذا فشل المشروع</string>
     <string name="confirm_ok">تأكيد</string>
     <string name="copied">تم النسخ</string>
     <string name="copy_clone_url">نسخ رابط الاستنساخ</string>

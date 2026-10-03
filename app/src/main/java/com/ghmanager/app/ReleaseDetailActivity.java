@@ -130,6 +130,14 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         content.addView(Ui.rowView(this, content,
                 new Row(R.drawable.ic_download, false, "Source code (tar.gz)", null, false, false),
                 v -> saveAs(repo + "-" + tag.replace('/', '-') + ".tar.gz", () -> api.openTarball(owner, repo, tag))));
+
+        if (!rel.optBoolean("draft")) {
+            content.addView(Ui.sectionTitle(this, getString(R.string.rollback_section)));
+            content.addView(Ui.rowView(this, content,
+                    new Row(R.drawable.ic_undo, true, getString(R.string.restore_to_release, tag),
+                            getString(R.string.restore_to_release_sub, branch), false, false),
+                    v -> restoreVersion(tag, tag, null, null)));
+        }
     }
 
     private LinearLayout.LayoutParams weighted() {

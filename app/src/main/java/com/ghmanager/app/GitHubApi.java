@@ -504,6 +504,41 @@ public class GitHubApi {
         return obj(repo(o, r) + "/commits/" + sha);
     }
 
+    // ------------------------------------------------------------------ versions / rollback
+
+    /** Resolves a commit sha, branch or tag (annotated or not) to the full sha of its commit. */
+    public String resolveCommitSha(String o, String r, String ref) throws Exception {
+        return obj(repo(o, r) + "/commits/" + enc(ref)).getString("sha");
+    }
+
+    /** First parent of a commit, or null when it is the very first commit of the history. */
+    public String getParentSha(String o, String r, String commitSha) throws Exception {
+        JSONArray parents = obj(repo(o, r) + "/git/commits/" + commitSha).optJSONArray("parents");
+        if (parents == null || parents.length() == 0) return null;
+        return parents.getJSONObject(0).getString("sha");
+    }
+
+    /**
+     * Rolls a branch back to the exact content of {@code targetSha} by adding ONE new commit on top
+     * of the current head. History is kept and nothing is force-pushed, so the rollback can itself
+     * be undone later. Returns the new commit sha, or null when the branch already has that content.
+     */
+    public String restoreToCommit(String o, String r, String branch, String targetSha, String message) throws Exception {
+        String headSha = getBranchSha(o, r, branch);
+        String targetTree = getCommitTree(o, r, targetSha);
+        if (targetTree.equals(getCommitTree(o, r, headSha))) return null;
+        JSONObject cb = new JSONObject();
+        cb.put("message", message);
+        cb.put("tree", targetTree);
+        cb.put("parents", new JSONArray().put(headSha));
+        String newCommit = new JSONObject(request("POST", repo(o, r) + "/git/commits", cb)).getString("sha");
+        JSONObject ub = new JSONObject();
+        ub.put("sha", newCommit);
+        ub.put("force", false);
+        request("PATCH", repo(o, r) + "/git/refs/heads/" + enc(branch), ub);
+        return newCommit;
+    }
+
     // ------------------------------------------------------------------ actions
 
     public JSONArray listWorkflows(String o, String r) throws Exception {
