@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">مدير جيتهاب</string>
+    <string name="token_hint">رمز الوصول الشخصي (Personal Access Token)</string>
+    <string name="login">تسجيل الدخول</string>
+    <string name="token_help">أنشئ الرمز من GitHub ← Settings ← Developer settings ← Personal access tokens، وأعطه صلاحية repo.</string>
+    <string name="invalid_token">تعذّر التحقق من الرمز</string>
+    <string name="repos">المستودعات</string>
+    <string name="new_repo">مستودع جديد</string>
+    <string name="repo_name">اسم المستودع</string>
+    <string name="private_repo">مستودع خاص</string>
+    <string name="logout">تسجيل الخروج</string>
+    <string name="refresh">تحديث</string>
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="upload_folder">رفع مجلد</string>
+    <string name="upload_files">رفع ملفات</string>
+    <string name="target_folder">المسار الهدف داخل المستودع (فارغ = الجذر)</string>
+    <string name="commit_message">رسالة الـ commit</string>
+    <string name="default_commit">Upload via GitHub Manager</string>
+    <string name="include_root_folder">إنشاء المجلد نفسه داخل المستودع</string>
+    <string name="upload">رفع</string>
+    <string name="working">جارٍ العمل…</string>
+    <string name="preparing">جارٍ تجهيز الملفات…</string>
+    <string name="committing">جارٍ إنشاء الـ commit…</string>
+    <string name="error">خطأ</string>
+    <string name="done">تم</string>
+    <string name="no_files">لا توجد ملفات للرفع</string>
+    <string name="delete_title">حذف</string>
+    <string name="delete_msg">هل تريد حذف «%s»؟ سيتم الحذف بـ commit جديد.</string>
+    <string name="delete">حذف</string>
+    <string name="empty_folder">المجلد فارغ</string>
+    <string name="upload_summary">تم رفع %1$d ملف في commit واحد.</string>
+    <string name="skipped_summary">تم تجاوز %1$d ملف (أكبر من 25MB أو تعذّرت قراءته):\n%2$s</string>
+    <string name="login_subtitle">أدِر مستودعاتك وارفع مجلداتك بترتيبها الكامل من هاتفك</string>
+    <string name="token_label">رمز الوصول</string>
+    <string name="long_press_hint">اضغط مطولًا على أي عنصر لحذفه</string>
+    <string name="repos_count">%d مستودع</string>
+    <string name="back">رجوع</string>
+    <string name="branch_label">الفرع</string>
+    <string name="folder_label">مجلد</string>
+</resources>
