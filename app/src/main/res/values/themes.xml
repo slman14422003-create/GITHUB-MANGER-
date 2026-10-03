@@ -56,7 +56,7 @@
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/anim_spark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/anim_mark</item>
         <item name="windowSplashScreenAnimationDuration">900</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>

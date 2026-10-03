@@ -27,6 +27,13 @@ public class LoginActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         final long start = SystemClock.uptimeMillis();
         splash.setKeepOnScreenCondition(() -> SystemClock.uptimeMillis() - start < SPLASH_MS);
+        splash.setOnExitAnimationListener(provider -> provider.getView().animate()
+                .alpha(0f)
+                .scaleX(0.92f)
+                .scaleY(0.92f)
+                .setDuration(220)
+                .withEndAction(provider::remove)
+                .start());
         if (!Store.getToken(this).isEmpty()) {
             ui.postDelayed(() -> {
                 if (isFinishing()) return;

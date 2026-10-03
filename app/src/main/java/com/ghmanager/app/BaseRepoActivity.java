@@ -483,15 +483,40 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void installApk(Uri uri) {
-        try {
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(uri, "application/vnd.android.package-archive");
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(i);
-        } catch (Exception e) {
-            toast(R.string.install_failed);
+    /**
+     * Copies the saved APK to the app cache and installs it through a FileProvider URI. Installing
+     * straight from a Storage-Access-Framework URI fails on many devices ("parse error"), and the
+     * "install unknown apps" permission is checked first so the user is sent to the right screen.
+     */
+    private void installApk(final Uri uri) {
+        if (!Perms.canInstall(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.perm_install_title)
+                    .setMessage(R.string.perm_install_dialog)
+                    .setPositiveButton(R.string.perm_open_settings, (d, w) -> Perms.requestInstall(this))
+                    .setNegativeButton(R.string.cancel, null)
+                    .show();
+            return;
         }
+        showProgress(getString(R.string.preparing));
+        bg(() -> {
+            java.io.File dir = new java.io.File(getCacheDir(), "apk");
+            if (!dir.exists()) dir.mkdirs();
+            java.io.File[] old = dir.listFiles();
+            if (old != null) for (java.io.File o : old) o.delete();
+            final java.io.File apk = new java.io.File(dir, "install.apk");
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 OutputStream out = new java.io.FileOutputStream(apk)) {
+                if (in == null) throw new IOException("Cannot open " + uri);
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            }
+            post(() -> {
+                hideProgress();
+                Perms.installApk(BaseRepoActivity.this, apk);
+            });
+        });
     }
 
     // ------------------------------------------------------------------ artifacts (build outputs such as the APK)

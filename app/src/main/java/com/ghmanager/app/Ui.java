@@ -199,6 +199,11 @@ public final class Ui {
 
     /** Shapes a row card so rows of one section read as a single rounded group (ChatGPT style). */
     public static void shapeRow(Context c, View v, boolean first, boolean last) {
+        shapeRow(c, v, first, last, R.color.surface);
+    }
+
+    /** Same as above with a custom fill (used to highlight selected rows). */
+    public static void shapeRow(Context c, View v, boolean first, boolean last, int fillRes) {
         View card = v.findViewById(R.id.card);
         if (card == null) return;
         float big = dp(c, 24);
@@ -207,7 +212,7 @@ public final class Ui {
         float bottom = last ? big : small;
         float[] radii = {top, top, top, top, bottom, bottom, bottom, bottom};
         GradientDrawable fill = new GradientDrawable();
-        fill.setColor(color(c, R.color.surface));
+        fill.setColor(color(c, fillRes));
         fill.setCornerRadii(radii);
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(0xFFFFFFFF);

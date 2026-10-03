@@ -21,5 +21,5 @@
     <color name="bad">#FF6B6B</color>
     <color name="warn">#F5B94A</color>
     <color name="info">#6AA6FF</color>
-    <color name="ic_launcher_bg">#3566EF</color>
+    <color name="ic_launcher_bg">#000000</color>
 </resources>

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ================= File manager ================= -->
+    <string name="fm_title">مدير الملفات</string>
+    <string name="fm_title_sub">تصفّح ملفات هاتفك وأدِرها من داخل التطبيق</string>
+    <string name="fm_internal">التخزين الداخلي</string>
+    <string name="fm_downloads">التنزيلات</string>
+    <string name="fm_dcim">الكاميرا</string>
+    <string name="fm_pictures">الصور</string>
+    <string name="fm_documents">المستندات</string>
+    <string name="fm_music">الموسيقى</string>
+    <string name="fm_movies">الفيديو</string>
+    <string name="fm_sdcard">بطاقة SD</string>
+    <string name="fm_app_folder">مجلد التطبيق</string>
+    <string name="fm_favorites">المفضلة</string>
+    <string name="fm_largest">الأكبر حجمًا</string>
+    <string name="fm_search_hint">ابحث في هذا المجلد وما بداخله…</string>
+    <string name="fm_search_results">نتائج البحث (%d)</string>
+    <string name="fm_no_results">لا توجد نتائج</string>
+    <string name="fm_no_favs">لا توجد عناصر في المفضلة.\nحدّد ملفًا أو مجلدًا ثم اختر «المزيد ← إضافة للمفضلة».</string>
+    <string name="fm_empty">المجلد فارغ</string>
+    <string name="fm_denied">لا يمكن قراءة هذا المجلد. قد يكون محميًا من النظام أو ينقصه إذن الوصول للملفات.</string>
+    <string name="fm_unreadable">غير متاح</string>
+    <string name="fm_items_n">%d عنصر</string>
+    <string name="fm_selected_n">%d محدّد</string>
+    <string name="fm_select_all">تحديد الكل</string>
+    <string name="fm_storage_line">المستخدم %1$s من %2$s · المتاح %3$s</string>
+    <string name="fm_folder">مجلد</string>
+
+    <string name="fm_sort">الترتيب</string>
+    <string name="fm_sort_name">الاسم</string>
+    <string name="fm_sort_date">تاريخ التعديل</string>
+    <string name="fm_sort_size">الحجم</string>
+    <string name="fm_sort_type">النوع</string>
+    <string name="fm_order_asc">الاتجاه: تصاعدي (اضغط للعكس)</string>
+    <string name="fm_order_desc">الاتجاه: تنازلي (اضغط للعكس)</string>
+    <string name="fm_show_hidden">إظهار الملفات المخفية</string>
+    <string name="fm_hide_hidden">إخفاء الملفات المخفية</string>
+
+    <string name="fm_new">جديد</string>
+    <string name="fm_new_folder">مجلد جديد</string>
+    <string name="fm_new_file">ملف نصي جديد</string>
+    <string name="fm_import_files">إضافة ملفات من الجهاز</string>
+    <string name="fm_importing">جارٍ نسخ الملفات…</string>
+    <string name="fm_open_folder_first">افتح مجلدًا أولًا</string>
+    <string name="fm_name_hint">الاسم</string>
+    <string name="fm_bad_name">اسم غير صالح</string>
+    <string name="fm_exists">يوجد عنصر بنفس الاسم</string>
+    <string name="fm_create_failed">تعذّر الإنشاء. تحقق من الأذونات</string>
+    <string name="fm_rename">إعادة تسمية</string>
+    <string name="fm_rename_failed">تعذّرت إعادة التسمية</string>
+
+    <string name="fm_copy">نسخ</string>
+    <string name="fm_move">قص / نقل</string>
+    <string name="fm_paste_here">لصق</string>
+    <string name="fm_clip_copy_n">نسخ %d عنصر — انتقل للمجلد الهدف</string>
+    <string name="fm_clip_cut_n">نقل %d عنصر — انتقل للمجلد الهدف</string>
+    <string name="fm_clip_hint">افتح المجلد الهدف ثم اضغط «لصق»</string>
+    <string name="fm_copying">جارٍ النسخ…</string>
+    <string name="fm_moving">جارٍ النقل…</string>
+    <string name="fm_deleting">جارٍ الحذف…</string>
+    <string name="fm_done_n">تم بنجاح (%d)</string>
+    <string name="fm_cancelled">تم الإلغاء</string>
+    <string name="delete_msg_local">هل تريد حذف «%s» نهائيًا؟ لا يمكن التراجع عن ذلك.</string>
+    <string name="delete_msg_local_n">هل تريد حذف %d عنصر نهائيًا؟ لا يمكن التراجع عن ذلك.</string>
+
+    <string name="fm_compress">ضغط إلى ZIP</string>
+    <string name="fm_compressing">جارٍ الضغط…</string>
+    <string name="fm_archive_name">أرشيف</string>
+    <string name="fm_created_name">تم إنشاء %s</string>
+    <string name="fm_extract_here">استخراج هنا</string>
+    <string name="fm_extract_folder">استخراج إلى مجلد</string>
+    <string name="fm_extracting">جارٍ الاستخراج…</string>
+    <string name="fm_extracted_n">تم استخراج %d ملف</string>
+    <string name="fm_zip_view">عرض المحتويات</string>
+
+    <string name="fm_open_with">فتح بتطبيق آخر</string>
+    <string name="fm_no_app">لا يوجد تطبيق قادر على فتح هذا الملف</string>
+    <string name="fm_details">التفاصيل</string>
+    <string name="fm_calculating">جارٍ الحساب…</string>
+    <string name="fm_copy_path">نسخ المسار</string>
+    <string name="fm_favorite">إضافة للمفضلة</string>
+    <string name="fm_unfavorite">إزالة من المفضلة</string>
+    <string name="fm_favorited">أُضيف إلى المفضلة</string>
+    <string name="fm_unfavorited">أُزيل من المفضلة</string>
+    <string name="fm_d_path">المسار</string>
+    <string name="fm_d_type">النوع</string>
+    <string name="fm_d_modified">آخر تعديل</string>
+    <string name="fm_d_access">الصلاحيات</string>
+    <string name="fm_d_size">الحجم</string>
+    <string name="fm_d_contents">المحتوى</string>
+    <string name="fm_d_contents_v">%1$d ملف، %2$d مجلد</string>
+
+    <string name="fm_err_mkdir">تعذّر إنشاء المجلد %s</string>
+    <string name="fm_err_delete">تعذّر حذف %s</string>
+    <string name="fm_err_into_self">لا يمكن نسخ أو نقل مجلد إلى داخل نفسه</string>
+    <string name="fm_err_zip_unsafe">الملف المضغوط يحتوي مسارات غير آمنة، تم إيقاف الاستخراج</string>
+
+    <string name="fm_cannot_open">تعذّر فتح الملف</string>
+    <string name="fm_too_large">الملف كبير جدًا للتحرير (الحد 2MB)</string>
+    <string name="fm_not_text">هذا ليس ملفًا نصيًا</string>
+    <string name="fm_read_only">الملف للقراءة فقط</string>
+    <string name="fm_save_failed">تعذّر الحفظ</string>
+
+    <string name="fm_perm_title">مطلوب إذن الوصول إلى الملفات</string>
+    <string name="fm_perm_body">لتصفّح كل ملفاتك وإدارتها (نسخ، نقل، حذف، ضغط) اسمح للتطبيق بالوصول إلى كل الملفات. بدون الإذن يعمل مدير الملفات داخل مجلد التطبيق فقط.</string>
+    <string name="fm_perm_grant">منح الإذن</string>
+
+    <!-- ================= Permissions screen ================= -->
+    <string name="perm_title">الأذونات</string>
+    <string name="perm_subtitle">راجع الأذونات وأصلحها بضغطة واحدة</string>
+    <string name="perm_intro">يستخدم التطبيق أقل عدد ممكن من الأذونات. اضغط على أي إذن غير ممنوح لفتح صفحة الإعدادات الصحيحة، وعند العودة تتحدّث الحالة تلقائيًا.</string>
+    <string name="perm_section_needed">الأذونات</string>
+    <string name="perm_section_other">أخرى</string>
+    <string name="perm_granted">ممنوح</string>
+    <string name="perm_denied">غير ممنوح</string>
+    <string name="perm_auto">تلقائي</string>
+    <string name="perm_files_title">الوصول إلى الملفات</string>
+    <string name="perm_files_sub_r">لتصفّح كل ملفات الجهاز في مدير الملفات (إذن «الوصول لكل الملفات»)</string>
+    <string name="perm_files_sub">لقراءة الملفات وكتابتها في مدير الملفات</string>
+    <string name="perm_install_title">تثبيت التطبيقات</string>
+    <string name="perm_install_sub">لتثبيت ملفات APK التي تبنيها وتنزّلها من GitHub Actions</string>
+    <string name="perm_install_dialog">لتثبيت ملف APK يجب السماح لهذا التطبيق بتثبيت التطبيقات من مصادر غير معروفة. افتح الإعدادات وفعّل الخيار ثم ارجع واضغط تثبيت مرة أخرى.</string>
+    <string name="perm_open_settings">فتح الإعدادات</string>
+    <string name="perm_internet_title">الإنترنت</string>
+    <string name="perm_internet_sub">للاتصال بـ GitHub، ولا يحتاج موافقة منك</string>
+    <string name="perm_app_settings">إعدادات التطبيق في النظام</string>
+    <string name="perm_app_settings_sub">فتح صفحة التطبيق لإدارة كل الأذونات يدويًا</string>
+</resources>

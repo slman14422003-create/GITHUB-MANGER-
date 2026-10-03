@@ -63,6 +63,10 @@ public class ReposActivity extends AppCompatActivity {
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
         findViewById(R.id.btnLogout).setOnClickListener(v -> logout());
+        findViewById(R.id.btnFiles).setOnClickListener(v ->
+                startActivity(new Intent(ReposActivity.this, FileManagerActivity.class)));
+        findViewById(R.id.btnPerms).setOnClickListener(v ->
+                startActivity(new Intent(ReposActivity.this, PermissionsActivity.class)));
 
         ((EditText) findViewById(R.id.search)).addTextChangedListener(new TextWatcher() {
             @Override
