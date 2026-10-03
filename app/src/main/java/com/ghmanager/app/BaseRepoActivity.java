@@ -188,11 +188,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         post(() -> {
             hideProgress();
             loading(false);
-            new AlertDialog.Builder(BaseRepoActivity.this)
-                    .setTitle(R.string.error)
-                    .setMessage(msg)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .show();
+            Dlg.result(BaseRepoActivity.this, false, getString(R.string.error), msg);
         });
     }
 
@@ -233,7 +229,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void confirm(String title, String msg, int positiveRes, Runnable onYes) {
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(title)
                 .setMessage(msg)
                 .setPositiveButton(positiveRes, (d, w) -> onYes.run())
@@ -242,11 +238,11 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void choose(String title, String[] items, DialogInterface.OnClickListener l) {
-        new AlertDialog.Builder(this).setTitle(title).setItems(items, l).show();
+        new Dlg(this).setTitle(title).setItems(items, l).show();
     }
 
     protected void info(String title, String msg) {
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(title)
                 .setMessage(msg)
                 .setPositiveButton(android.R.string.ok, null)
@@ -328,7 +324,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         final EditText inputs = Ui.editMulti(this, getString(R.string.inputs_hint), null, 3);
         box.addView(ref);
         box.addView(inputs);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(getString(R.string.run_workflow) + ": " + workflowName)
                 .setView(box)
                 .setPositiveButton(R.string.run, (d, w) -> {
@@ -363,7 +359,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         Ui.tint(this, progressBar);
         box.addView(progressText);
         box.addView(progressBar);
-        progressDialog = new AlertDialog.Builder(this)
+        progressDialog = new Dlg(this)
                 .setTitle(R.string.working)
                 .setView(box)
                 .setCancelable(false)
@@ -475,7 +471,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     private void offerInstall(final Uri uri) {
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.saved)
                 .setMessage(R.string.install_apk_msg)
                 .setPositiveButton(R.string.install_now, (d, w) -> installApk(uri))
@@ -490,7 +486,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
      */
     private void installApk(final Uri uri) {
         if (!Perms.canInstall(this)) {
-            new AlertDialog.Builder(this)
+            new Dlg(this)
                     .setTitle(R.string.perm_install_title)
                     .setMessage(R.string.perm_install_dialog)
                     .setPositiveButton(R.string.perm_open_settings, (d, w) -> Perms.requestInstall(this))

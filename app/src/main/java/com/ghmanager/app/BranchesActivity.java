@@ -137,7 +137,7 @@ public class BranchesActivity extends BaseRepoActivity {
         box.addView(name);
         box.addView(Ui.label(this, getString(R.string.create_from)));
         box.addView(sp);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.new_branch)
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {

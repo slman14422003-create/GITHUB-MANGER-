@@ -161,6 +161,12 @@ public class FileManagerActivity extends AppCompatActivity {
     private AlertDialog busy;
     private TextView busyText;
 
+    /** "files" / "folder" when opened by the repo browser to choose what to upload, else null. */
+    private String pickMode;
+    private View pickBar;
+    private Button pickGo;
+    private TextView pickText;
+
     private ActivityResultLauncher<String> importLauncher;
     private final Runnable searchRun = () -> {
         if (query.isEmpty()) return;
@@ -213,9 +219,16 @@ public class FileManagerActivity extends AppCompatActivity {
         listView.setAdapter(adapter);
         listView.setOnItemClickListener((p, v, pos, id) -> onItemClick(pos));
         listView.setOnItemLongClickListener((p, v, pos, id) -> {
+            if ("folder".equals(pickMode)) return true;
             toggleSelect(pos);
             return true;
         });
+
+        pickMode = getIntent().getStringExtra("pick");
+        pickBar = findViewById(R.id.pickBar);
+        pickGo = findViewById(R.id.pickGo);
+        pickText = findViewById(R.id.pickText);
+        pickGo.setOnClickListener(v -> finishPick());
 
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         action(btnA1, R.drawable.ic_sort, R.string.fm_sort, v -> sortMenu());
@@ -629,7 +642,12 @@ public class FileManagerActivity extends AppCompatActivity {
             buildCrumbs();
             updateStorage();
         }
-        boolean sel = !selected.isEmpty();
+        if (pickMode != null) {
+            titleView.setText("files".equals(pickMode) ? getString(R.string.pk_title_files)
+                    : getString(R.string.pk_title_folder));
+            updatePickBar();
+        }
+        boolean sel = !selected.isEmpty() && pickMode == null;
         selBar.setVisibility(sel ? View.VISIBLE : View.GONE);
         searchView.setVisibility(sel ? View.GONE : View.VISIBLE);
         if (sel) selCount.setText(getString(R.string.fm_selected_n, selected.size()));
@@ -972,9 +990,47 @@ public class FileManagerActivity extends AppCompatActivity {
         Entry e = shown.get(pos);
         if (e.dir) {
             navigate(e.f);
-        } else {
+        } else if ("files".equals(pickMode)) {
+            toggleSelect(pos);
+        } else if (pickMode == null) {
             openFile(e);
         }
+    }
+
+    private void updatePickBar() {
+        if (pickMode == null || pickBar == null) return;
+        pickBar.setVisibility(View.VISIBLE);
+        if ("files".equals(pickMode)) {
+            int n = selected.size();
+            pickGo.setEnabled(n > 0);
+            pickGo.setAlpha(n > 0 ? 1f : 0.4f);
+            pickGo.setText(R.string.pk_upload);
+            pickText.setText(n > 0 ? getString(R.string.pk_selected_n, n) : getString(R.string.pk_hint_files));
+        } else {
+            boolean ok = mode == M_DIR;
+            pickGo.setEnabled(ok);
+            pickGo.setAlpha(ok ? 1f : 0.4f);
+            pickGo.setText(R.string.pk_upload_folder);
+            pickText.setText(cur.getAbsolutePath());
+        }
+    }
+
+    private void finishPick() {
+        ArrayList<String> paths = new ArrayList<>();
+        if ("files".equals(pickMode)) {
+            for (File f : selectedFiles()) paths.add(f.getAbsolutePath());
+        } else {
+            paths.add(cur.getAbsolutePath());
+        }
+        if (paths.isEmpty()) {
+            toast(R.string.pk_nothing);
+            return;
+        }
+        Intent r = new Intent();
+        r.putStringArrayListExtra("paths", paths);
+        r.putExtra("folder", "folder".equals(pickMode));
+        setResult(RESULT_OK, r);
+        finish();
     }
 
     private void toggleSelect(int pos) {
@@ -1056,7 +1112,7 @@ public class FileManagerActivity extends AppCompatActivity {
     private void zipMenu(final File zip) {
         String[] items = {getString(R.string.fm_zip_view), getString(R.string.fm_extract_here),
                 getString(R.string.fm_extract_folder), getString(R.string.fm_open_with)};
-        new AlertDialog.Builder(this).setTitle(zip.getName()).setItems(items, (d, which) -> {
+        new Dlg(this).setTitle(zip.getName()).setItems(items, (d, which) -> {
             if (which == 0) listZip(zip);
             else if (which == 1) extract(zip, false);
             else if (which == 2) extract(zip, true);
@@ -1093,7 +1149,7 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void info(String title, String msg) {
-        new AlertDialog.Builder(this).setTitle(title).setMessage(msg)
+        new Dlg(this).setTitle(title).setMessage(msg)
                 .setPositiveButton(android.R.string.ok, null).show();
     }
 
@@ -1106,7 +1162,7 @@ public class FileManagerActivity extends AppCompatActivity {
         for (int i = 0; i < names.length; i++) items.add((i == sortMode ? "● " : "○ ") + names[i]);
         items.add(getString(sortDesc ? R.string.fm_order_desc : R.string.fm_order_asc));
         items.add(getString(showHidden ? R.string.fm_hide_hidden : R.string.fm_show_hidden));
-        new AlertDialog.Builder(this).setTitle(R.string.fm_sort)
+        new Dlg(this).setTitle(R.string.fm_sort)
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     if (which < 4) {
                         sortMode = which;
@@ -1124,7 +1180,7 @@ public class FileManagerActivity extends AppCompatActivity {
     private void newMenu() {
         String[] items = {getString(R.string.fm_new_folder), getString(R.string.fm_new_file),
                 getString(R.string.fm_import_files)};
-        new AlertDialog.Builder(this).setTitle(R.string.fm_new).setItems(items, (d, which) -> {
+        new Dlg(this).setTitle(R.string.fm_new).setItems(items, (d, which) -> {
             if (mode != M_DIR) {
                 toast(R.string.fm_open_folder_first);
                 return;
@@ -1139,7 +1195,7 @@ public class FileManagerActivity extends AppCompatActivity {
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.fm_name_hint), null);
         box.addView(name);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(folder ? R.string.fm_new_folder : R.string.fm_new_file)
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
@@ -1193,7 +1249,7 @@ public class FileManagerActivity extends AppCompatActivity {
         add(labels, ids, getString(allFav ? R.string.fm_unfavorite : R.string.fm_favorite), 7);
         if (single) add(labels, ids, getString(R.string.fm_copy_path), 8);
 
-        new AlertDialog.Builder(this).setTitle(getString(R.string.fm_selected_n, files.size()))
+        new Dlg(this).setTitle(getString(R.string.fm_selected_n, files.size()))
                 .setItems(labels.toArray(new String[0]), (d, which) -> {
                     switch (ids.get(which)) {
                         case 0:
@@ -1289,7 +1345,7 @@ public class FileManagerActivity extends AppCompatActivity {
         Ui.tint(this, bar);
         box.addView(busyText);
         box.addView(bar);
-        busy = new AlertDialog.Builder(this).setTitle(R.string.working).setView(box)
+        busy = new Dlg(this).setTitle(R.string.working).setView(box)
                 .setCancelable(false)
                 .setNegativeButton(R.string.cancel, (d, w) -> cancelled = true)
                 .create();
@@ -1423,7 +1479,7 @@ public class FileManagerActivity extends AppCompatActivity {
         String msg = files.size() == 1
                 ? getString(R.string.delete_msg_local, files.get(0).getName())
                 : getString(R.string.delete_msg_local_n, files.size());
-        new AlertDialog.Builder(this).setTitle(R.string.delete_title).setMessage(msg)
+        new Dlg(this).setTitle(R.string.delete_title).setMessage(msg)
                 .setPositiveButton(R.string.delete, (d, w) -> {
                     selected.clear();
                     runTask(getString(R.string.fm_deleting), () -> {
@@ -1441,7 +1497,7 @@ public class FileManagerActivity extends AppCompatActivity {
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.fm_name_hint), f.getName());
         box.addView(name);
-        new AlertDialog.Builder(this).setTitle(R.string.fm_rename).setView(box)
+        new Dlg(this).setTitle(R.string.fm_rename).setView(box)
                 .setPositiveButton(R.string.save, (d, w) -> {
                     String n = name.getText().toString().trim();
                     if (!validName(n)) {
@@ -1466,7 +1522,7 @@ public class FileManagerActivity extends AppCompatActivity {
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.fm_name_hint), def + ".zip");
         box.addView(name);
-        new AlertDialog.Builder(this).setTitle(R.string.fm_compress).setView(box)
+        new Dlg(this).setTitle(R.string.fm_compress).setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
                     String n = name.getText().toString().trim();
                     if (!validName(n)) {
@@ -1650,7 +1706,7 @@ public class FileManagerActivity extends AppCompatActivity {
             final String copy = files.size() == 1 ? files.get(0).getAbsolutePath() : null;
             post(() -> {
                 hideBusy();
-                AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle(title)
+                AlertDialog.Builder b = new Dlg(this).setTitle(title)
                         .setMessage(sb.toString()).setPositiveButton(android.R.string.ok, null);
                 if (copy != null) b.setNeutralButton(R.string.fm_copy_path, (d, w) -> copyText(copy));
                 b.show();

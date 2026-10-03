@@ -5,3 +5,11 @@
 /build
 /app/build
 .DS_Store
+# Release signing secrets: never commit these
+keystore.properties
+*.jks
+*.keystore
+*.p12
+signing/
+/.cxx
+/captures

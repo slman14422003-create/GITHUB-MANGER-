@@ -141,7 +141,7 @@ public class IssuesActivity extends BaseRepoActivity {
         final EditText body = Ui.editMulti(this, getString(R.string.issue_body), null, 4);
         box.addView(title);
         box.addView(body);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.new_issue)
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {

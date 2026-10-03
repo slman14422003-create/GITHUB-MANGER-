@@ -196,7 +196,7 @@ public class RepoSettingsActivity extends BaseRepoActivity {
         box.addView(Ui.label(this, getString(R.string.delete_repo_msg, repo)));
         final EditText confirmText = Ui.edit(this, repo, null);
         box.addView(confirmText);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.delete_repo)
                 .setView(box)
                 .setPositiveButton(R.string.delete, (d, w) -> {

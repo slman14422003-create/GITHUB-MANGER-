@@ -192,7 +192,7 @@ public class ReposActivity extends AppCompatActivity {
         final CheckBox priv = Ui.check(this, R.string.private_repo, false);
         box.addView(name);
         box.addView(priv);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.new_repo)
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {

@@ -204,7 +204,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
         if (existing != null) name.setEnabled(false);
         box.addView(name);
         box.addView(value);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(existing == null ? R.string.add_variable : R.string.edit_variable)
                 .setView(box)
                 .setPositiveButton(R.string.save, (d, w) -> {

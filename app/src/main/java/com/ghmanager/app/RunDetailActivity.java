@@ -24,6 +24,10 @@ public class RunDetailActivity extends BaseRepoActivity {
     private JSONArray artifacts = new JSONArray();
     private boolean resumed = false;
     private boolean firstLoad = true;
+    private JSONObject previewJob;
+    private long previewJobId = 0;
+    private String previewJobName = "";
+    private String previewRaw = "";
 
     private final Runnable poll = () -> {
         if (resumed) load(true);
@@ -69,6 +73,19 @@ public class RunDetailActivity extends BaseRepoActivity {
                     a = api.listRunArtifacts(owner, repo, runId);
                 } catch (Exception ignored) {
                 }
+                final JSONObject pj = pickLogJob(j);
+                String pRaw = "";
+                if (pj != null) {
+                    String ps = pj.optString("status");
+                    if (!"queued".equals(ps) && !"waiting".equals(ps) && !"pending".equals(ps)) {
+                        try {
+                            pRaw = api.readTail(api.jobLogsPath(owner, repo, pj.optLong("id")),
+                                    "application/vnd.github+json", 48 * 1024).text;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+                final String fPreview = pRaw;
                 final JSONArray fj = j == null ? new JSONArray() : j;
                 final JSONArray fa = a == null ? new JSONArray() : a;
                 post(() -> {
@@ -76,9 +93,13 @@ public class RunDetailActivity extends BaseRepoActivity {
                     run = r;
                     jobs = fj;
                     artifacts = fa;
+                    previewJob = fPreview.isEmpty() ? null : pj;
+                    previewJobId = previewJob == null ? 0 : previewJob.optLong("id");
+                    previewJobName = previewJob == null ? "" : previewJob.optString("name");
+                    previewRaw = fPreview;
                     render();
                     ui.removeCallbacks(poll);
-                    if (resumed && Status.isActive(r.optString("status"))) ui.postDelayed(poll, 6000);
+                    if (resumed && Status.isActive(r.optString("status"))) ui.postDelayed(poll, 4000);
                 });
             } catch (Exception e) {
                 fail(e);
@@ -130,6 +151,7 @@ public class RunDetailActivity extends BaseRepoActivity {
         content.addView(Ui.body(this, det.toString().trim(), 13, R.color.text_secondary));
 
         addButtons(s, c);
+        addLogPreview();
 
         // jobs
         content.addView(Ui.sectionTitle(this, getString(R.string.jobs_count, jobs.length())));
@@ -151,7 +173,12 @@ public class RunDetailActivity extends BaseRepoActivity {
             if (!runner.isEmpty()) jsub.append(jsub.length() > 0 ? " · " : "").append(runner);
             Row jr = new Row(Status.icon(js, jc), false, job.optString("name"), jsub.toString(), false, true)
                     .tint(jcol).badge(Status.label(js, jc), jcol);
-            content.addView(Ui.rowView(this, content, jr, v -> jobMenu(job)));
+            View jv = Ui.rowView(this, content, jr, v -> openLog(job));
+            jv.setOnLongClickListener(v -> {
+                jobMenu(job);
+                return true;
+            });
+            content.addView(jv);
             if (steps != null && steps.length() > 0) {
                 TextView st = Ui.body(this, stepsText(steps), 12, R.color.text_secondary);
                 st.setTypeface(Typeface.MONOSPACE);
@@ -173,6 +200,74 @@ public class RunDetailActivity extends BaseRepoActivity {
                 content.addView(Ui.rowView(this, content, ar, v -> artifactMenu(art, () -> load(true))));
             }
         }
+    }
+
+    /** The job whose log is most useful right now: a failed one, else a running one, else the last. */
+    private static JSONObject pickLogJob(JSONArray j) {
+        if (j == null || j.length() == 0) return null;
+        JSONObject running = null;
+        JSONObject last = null;
+        for (int i = 0; i < j.length(); i++) {
+            JSONObject o = j.optJSONObject(i);
+            if (o == null) continue;
+            last = o;
+            if ("failure".equals(o.optString("conclusion"))) return o;
+            if (running == null && "in_progress".equals(o.optString("status"))) running = o;
+        }
+        return running != null ? running : last;
+    }
+
+    private void openLog(JSONObject job) {
+        Intent i = repoIntent(LogActivity.class);
+        i.putExtra("jobId", job.optLong("id"));
+        i.putExtra("jobName", job.optString("name"));
+        i.putExtra("active", Status.isActive(job.optString("status")));
+        startActivity(i);
+    }
+
+    /** Last lines of the most relevant job's log, shown right on the run page, with a copy button. */
+    private void addLogPreview() {
+        if (previewJob == null || previewRaw.isEmpty()) return;
+        content.addView(Ui.sectionTitle(this, getString(R.string.lg_preview_title, previewJobName)));
+        TextView t = new TextView(this);
+        t.setText(LogFmt.format(this, previewRaw, 0, 40));
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setTextSize(11);
+        t.setTextColor(Ui.color(this, R.color.text_primary));
+        t.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setTextIsSelectable(true);
+        int p = Ui.dp(this, 12);
+        t.setPadding(p, p, p, p);
+        t.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 8));
+        content.addView(t, lp);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 8));
+        Button copyB = Ui.button(this, R.string.lg_copy_all, true);
+        copyB.setOnClickListener(v -> copyFullLog());
+        Button openB = Ui.button(this, R.string.lg_open_full, false);
+        final JSONObject pj = previewJob;
+        openB.setOnClickListener(v -> openLog(pj));
+        row.addView(copyB, weighted());
+        row.addView(openB, weighted());
+        content.addView(row);
+    }
+
+    private void copyFullLog() {
+        final long id = previewJobId;
+        if (id == 0) return;
+        bg(() -> {
+            GitHubApi.TextResult r = api.readTail(api.jobLogsPath(owner, repo, id),
+                    "application/vnd.github+json", 300 * 1024);
+            String plain = LogFmt.format(this, r.text, 0, 0).toString().trim();
+            final String out = plain.length() > 150000 ? plain.substring(plain.length() - 150000) : plain;
+            post(() -> copy("log", out));
+        });
     }
 
     private CharSequence stepsText(JSONArray steps) {
@@ -298,10 +393,7 @@ public class RunDetailActivity extends BaseRepoActivity {
                 getString(R.string.open_in_github)};
         choose(job.optString("name"), items, (d, which) -> {
             if (which == 0) {
-                Intent i = repoIntent(LogActivity.class);
-                i.putExtra("jobId", jobId);
-                i.putExtra("jobName", job.optString("name"));
-                startActivity(i);
+                openLog(job);
             } else if (which == 1) {
                 if (!done) {
                     toast(R.string.job_not_finished);

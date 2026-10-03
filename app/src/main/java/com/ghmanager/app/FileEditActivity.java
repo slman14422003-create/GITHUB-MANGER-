@@ -103,7 +103,7 @@ public class FileEditActivity extends AppCompatActivity {
     }
 
     private void confirmDiscard(final Runnable onYes) {
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.discard_title)
                 .setMessage(R.string.discard_msg)
                 .setPositiveButton(R.string.discard, (d, w) -> onYes.run())

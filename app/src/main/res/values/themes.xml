@@ -24,6 +24,16 @@
         <item name="android:windowBackground">@drawable/bg_dialog</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:backgroundDimAmount">0.62</item>
+        <item name="android:windowAnimationStyle">@style/DialogAnim</item>
+        <item name="windowMinWidthMinor">92%</item>
+        <item name="windowMinWidthMajor">60%</item>
+        <item name="android:windowElevation">0dp</item>
+    </style>
+
+    <style name="DialogAnim" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/dlg_in</item>
+        <item name="android:windowExitAnimation">@anim/dlg_out</item>
     </style>
 
     <style name="IconButton">

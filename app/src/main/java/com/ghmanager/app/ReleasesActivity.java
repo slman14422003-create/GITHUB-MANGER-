@@ -140,7 +140,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         box.addView(pre);
         ScrollView sv = new ScrollView(this);
         sv.addView(box);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.new_release)
                 .setView(sv)
                 .setPositiveButton(R.string.create, (d, w) -> {

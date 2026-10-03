@@ -160,7 +160,7 @@ public class EditorActivity extends BaseRepoActivity {
         final EditText msg = Ui.edit(this, getString(R.string.commit_message),
                 getString(isNew ? R.string.create_file_commit : R.string.update_file_commit, name));
         box.addView(msg);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.commit_changes)
                 .setView(box)
                 .setPositiveButton(R.string.save, (d, w) -> {

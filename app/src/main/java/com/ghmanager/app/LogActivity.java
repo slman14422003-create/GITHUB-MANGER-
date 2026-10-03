@@ -1,39 +1,43 @@
 package com.ghmanager.app;
 
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StyleSpan;
 import android.view.View;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.json.JSONObject;
 
-/** Viewer for a job's log with error highlighting and an "errors only" filter. */
+/**
+ * Live viewer for a job's log: follows the output while the job runs, highlights errors and lets the
+ * user copy everything (or only the errors) with one tap.
+ */
 public class LogActivity extends BaseRepoActivity {
     private static final int MAX_BYTES = 300 * 1024;
     private static final int MAX_CLIP_CHARS = 150000;
-    private static final Pattern TS = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z ?");
-    private static final Pattern ANSI = Pattern.compile("\\x1B\\[[0-9;?]*[ -/]*[@-~]");
+    private static final long POLL_MS = 3000;
 
     private long jobId;
     private String raw = "";
     private boolean truncated = false;
     private int mode = 0;
+    private boolean active = false;
+    private boolean resumed = false;
+    private boolean firstLoad = true;
+    private String statusLabel = "";
     private TextView text;
     private ScrollView scroll;
-    private CharSequence rendered = "";
+
+    private final Runnable poll = () -> {
+        if (resumed && active) load(true);
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_log);
         jobId = getIntent().getLongExtra("jobId", 0);
+        active = getIntent().getBooleanExtra("active", false);
         String jobName = getIntent().getStringExtra("jobName");
         bindHeader(jobName == null ? getString(R.string.view_log) : jobName, getString(R.string.log_title));
         text = findViewById(R.id.text);
@@ -41,109 +45,134 @@ public class LogActivity extends BaseRepoActivity {
         chipRow = findViewById(R.id.chipRow);
         filterScroll = findViewById(R.id.filterScroll);
 
-        btnRefresh.setOnClickListener(v -> load());
-        action(btnA1, R.drawable.ic_download, R.string.download, v -> saveAs("job-" + jobId + "-log.txt",
-                () -> api.openDownload(api.jobLogsPath(owner, repo, jobId), "application/vnd.github+json")));
+        btnRefresh.setOnClickListener(v -> load(false));
+        action(btnA1, R.drawable.ic_copy, R.string.lg_copy_all, v -> copyLog(0));
         action(btnA2, R.drawable.ic_more, R.string.more, v -> moreMenu());
+        findViewById(R.id.btnCopyAll).setOnClickListener(v -> copyLog(0));
+        findViewById(R.id.btnCopyErr).setOnClickListener(v -> copyLog(1));
+        findViewById(R.id.btnShare).setOnClickListener(v -> shareText(plain(0)));
         buildChips();
-        load();
+        load(false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        ui.removeCallbacks(poll);
+        if (active && !firstLoad) ui.postDelayed(poll, POLL_MS);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        resumed = false;
+        ui.removeCallbacks(poll);
     }
 
     private void buildChips() {
         setChipRow(new String[]{getString(R.string.log_all), getString(R.string.log_errors)}, mode, idx -> {
             mode = idx;
             buildChips();
-            render(idx == 0 ? true : false);
+            render(true);
         });
     }
 
-    private void load() {
-        loading(true);
+    private void load(final boolean silent) {
+        if (!silent) loading(true);
         io.execute(() -> {
+            String newRaw = null;
+            boolean cut = false;
+            Exception err = null;
             try {
                 final GitHubApi.TextResult r = api.readTail(api.jobLogsPath(owner, repo, jobId),
                         "application/vnd.github+json", MAX_BYTES);
-                post(() -> {
-                    loading(false);
-                    raw = r.text;
-                    truncated = r.truncated;
-                    render(true);
-                });
+                newRaw = r.text;
+                cut = r.truncated;
             } catch (Exception e) {
-                fail(e);
+                err = e;
             }
+            boolean stillActive = active;
+            String label = statusLabel;
+            try {
+                JSONObject job = api.getJob(owner, repo, jobId);
+                stillActive = Status.isActive(job.optString("status"));
+                label = Status.label(job.optString("status"), job.optString("conclusion"));
+            } catch (Exception ignored) {
+            }
+            final String fRaw = newRaw;
+            final boolean fCut = cut;
+            final Exception fErr = err;
+            final boolean fActive = stillActive;
+            final String fLabel = label;
+            post(() -> {
+                loading(false);
+                active = fActive;
+                statusLabel = fLabel;
+                if (fErr != null && !silent && !fActive) {
+                    fail(fErr);
+                    return;
+                }
+                setSubtitle(active ? "● " + getString(R.string.lg_live) : statusLabel);
+                if (fRaw != null && (firstLoad || !fRaw.equals(raw))) {
+                    raw = fRaw;
+                    truncated = fCut;
+                    render(firstLoad);
+                } else if (fRaw == null && raw.isEmpty()) {
+                    text.setText(R.string.lg_waiting);
+                }
+                firstLoad = false;
+                ui.removeCallbacks(poll);
+                if (resumed && active) ui.postDelayed(poll, POLL_MS);
+            });
         });
     }
 
-    private static boolean looksLikeError(String lower) {
-        return lower.contains("error") || lower.contains("fatal") || lower.contains("failed")
-                || lower.contains("exception") || lower.contains("traceback");
-    }
-
-    private void render(final boolean toEnd) {
+    private void render(boolean forceEnd) {
+        View child = scroll.getChildAt(0);
+        boolean atBottom = forceEnd || child == null
+                || child.getBottom() - (scroll.getHeight() + scroll.getScrollY()) <= Ui.dp(this, 120);
         SpannableStringBuilder sb = new SpannableStringBuilder();
-        if (truncated) sb.append(getString(R.string.log_truncated)).append("\n\n");
-        final int bad = Ui.color(this, R.color.bad);
-        final int warn = Ui.color(this, R.color.warn);
-        final int info = Ui.color(this, R.color.info);
-        String[] lines = raw.split("\n", -1);
-        int shown = 0;
-        for (String l : lines) {
-            String line = l;
-            if (line.endsWith("\r")) line = line.substring(0, line.length() - 1);
-            Matcher m = TS.matcher(line);
-            if (m.find()) line = line.substring(m.end());
-            line = ANSI.matcher(line).replaceAll("");
-
-            int color = 0;
-            boolean bold = false;
-            boolean isError = false;
-            if (line.startsWith("##[group]")) {
-                line = "▶ " + line.substring(9);
-                bold = true;
-            } else if (line.startsWith("##[endgroup]")) {
-                continue;
-            } else if (line.startsWith("##[error]")) {
-                line = "✖ " + line.substring(9);
-                color = bad;
-                bold = true;
-                isError = true;
-            } else if (line.startsWith("##[warning]")) {
-                line = "⚠ " + line.substring(11);
-                color = warn;
-            } else if (line.startsWith("##[command]")) {
-                line = "$ " + line.substring(11);
-                color = info;
-            }
-            if (mode == 1 && !isError && !looksLikeError(line.toLowerCase(Locale.ROOT))) continue;
-
-            int start = sb.length();
-            sb.append(line).append('\n');
-            int end = sb.length() - 1;
-            if (color != 0) sb.setSpan(new ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            if (bold) sb.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            shown++;
+        if (truncated && mode == 0) sb.append(getString(R.string.log_truncated)).append("\n\n");
+        SpannableStringBuilder body = LogFmt.format(this, raw, mode, 0);
+        if (body.length() == 0) {
+            sb.append(getString(raw.isEmpty() ? R.string.lg_waiting
+                    : mode == 1 ? R.string.log_no_errors : R.string.log_empty));
+        } else {
+            sb.append(body);
         }
-        if (shown == 0) sb.append(getString(mode == 1 ? R.string.log_no_errors : R.string.log_empty));
-        rendered = sb;
         text.setText(sb);
-        if (toEnd) scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
-        else scroll.post(() -> scroll.scrollTo(0, 0));
+        if (atBottom) scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
     }
 
-    private String tail(CharSequence cs) {
-        String s = cs.toString();
+    private String plain(int m) {
+        String s = LogFmt.format(this, raw, m, 0).toString().trim();
         return s.length() > MAX_CLIP_CHARS ? s.substring(s.length() - MAX_CLIP_CHARS) : s;
     }
 
+    private void copyLog(int m) {
+        String s = plain(m);
+        if (s.isEmpty()) {
+            toast(m == 1 ? R.string.lg_no_errors_copy : R.string.log_empty);
+            return;
+        }
+        copy("log", s);
+    }
+
     private void moreMenu() {
-        String[] items = {getString(R.string.copy_log), getString(R.string.share), getString(R.string.go_top),
+        String[] items = {getString(R.string.download), getString(R.string.share), getString(R.string.go_top),
                 getString(R.string.go_bottom)};
         choose(getString(R.string.more), items, (d, which) -> {
-            if (which == 0) copy("log", tail(rendered));
-            else if (which == 1) shareText(tail(rendered));
-            else if (which == 2) scroll.post(() -> scroll.fullScroll(View.FOCUS_UP));
-            else scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+            if (which == 0) {
+                saveAs("job-" + jobId + "-log.txt",
+                        () -> api.openDownload(api.jobLogsPath(owner, repo, jobId), "application/vnd.github+json"));
+            } else if (which == 1) {
+                shareText(plain(0));
+            } else if (which == 2) {
+                scroll.post(() -> scroll.fullScroll(View.FOCUS_UP));
+            } else {
+                scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+            }
         });
     }
 }

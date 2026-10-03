@@ -154,7 +154,7 @@ public class IssueDetailActivity extends BaseRepoActivity {
         LinearLayout box = Ui.box(this);
         final EditText body = Ui.editMulti(this, getString(R.string.comment_hint), null, 4);
         box.addView(body);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.add_comment)
                 .setView(box)
                 .setPositiveButton(R.string.send, (d, w) -> {

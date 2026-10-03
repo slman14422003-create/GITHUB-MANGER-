@@ -191,7 +191,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         box.addView(pre);
         ScrollView sv = new ScrollView(this);
         sv.addView(box);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.edit)
                 .setView(sv)
                 .setPositiveButton(R.string.save, (d, w) -> {
@@ -237,7 +237,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         final CheckBox delTag = Ui.check(this, R.string.delete_tag_too, false);
         box.addView(msg);
         box.addView(delTag);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.delete_release)
                 .setView(box)
                 .setPositiveButton(R.string.delete, (d, w) -> {

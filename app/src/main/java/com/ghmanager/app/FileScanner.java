@@ -21,6 +21,31 @@ public class FileScanner {
         }
     }
 
+    /** Files and folders chosen in the in-app file manager (plain java.io paths). */
+    public static void scanFiles(List<java.io.File> roots, boolean includeFolderName, List<Item> out) {
+        for (java.io.File r : roots) {
+            if (r.isDirectory()) {
+                walkFile(r, includeFolderName ? r.getName() + "/" : "", out);
+            } else if (r.isFile()) {
+                out.add(new Item(r.getName(), Uri.fromFile(r)));
+            }
+        }
+    }
+
+    private static void walkFile(java.io.File dir, String prefix, List<Item> out) {
+        java.io.File[] kids = dir.listFiles();
+        if (kids == null) return;
+        java.util.Arrays.sort(kids);
+        for (java.io.File k : kids) {
+            if (k.isDirectory()) {
+                if (".git".equals(k.getName())) continue;
+                walkFile(k, prefix + k.getName() + "/", out);
+            } else if (k.isFile()) {
+                out.add(new Item(prefix + k.getName(), Uri.fromFile(k)));
+            }
+        }
+    }
+
     public static String displayName(ContentResolver cr, Uri uri) {
         Cursor c = null;
         try {

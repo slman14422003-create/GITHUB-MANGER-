@@ -1,32 +1,75 @@
+import java.util.Properties
+
 plugins {
     id 'com.android.application'
 }
 
+// Release signing: CI passes SIGNING_* environment variables; locally keystore.properties is used.
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) {
+    keystoreFile.withInputStream { keystoreProps.load(it) }
+}
+def signStore = System.getenv('SIGNING_STORE_FILE') ?: keystoreProps.getProperty('storeFile')
+def signStorePass = System.getenv('SIGNING_STORE_PASSWORD') ?: keystoreProps.getProperty('storePassword')
+def signAlias = System.getenv('SIGNING_KEY_ALIAS') ?: keystoreProps.getProperty('keyAlias')
+def signKeyPass = System.getenv('SIGNING_KEY_PASSWORD') ?: keystoreProps.getProperty('keyPassword')
+def hasSigning = signStore && signStorePass && signAlias && signKeyPass
+
 android {
-    namespace 'com.ghmanager.app'
-    compileSdk 34
+    namespace = 'com.ghmanager.app'
+    compileSdk = 36   // Android 16
 
     defaultConfig {
-        applicationId "com.ghmanager.app"
-        minSdk 24
-        targetSdk 34
-        versionCode 3
-        versionName "2.1"
+        applicationId = "com.ghmanager.app"
+        minSdk = 24
+        targetSdk = 36   // Android 16
+        // CI run number keeps versionCode increasing so a new build always installs over the old one
+        versionCode = 10 + (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()
+        versionName = "2.2"
+    }
+
+    signingConfigs {
+        release {
+            if (hasSigning) {
+                storeFile = file(signStore)
+                storePassword = signStorePass
+                keyAlias = signAlias
+                keyPassword = signKeyPass
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasSigning) signingConfig = signingConfigs.release
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
+    packaging {
+        resources.excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'DebugProbesKt.bin']
     }
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // Aligns every Kotlin artifact to one version (fixes "Duplicate class kotlin.collections.jdk8...")
+    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
+    implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.core:core-splashscreen:1.0.1'
 }

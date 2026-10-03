@@ -94,7 +94,7 @@ public final class Perms {
      */
     public static void installApk(final Activity a, final File apk) {
         if (!canInstall(a)) {
-            new AlertDialog.Builder(a)
+            new Dlg(a)
                     .setTitle(R.string.perm_install_title)
                     .setMessage(R.string.perm_install_dialog)
                     .setPositiveButton(R.string.perm_open_settings, (d, w) -> requestInstall(a))

@@ -46,6 +46,9 @@ public class BrowserActivity extends BaseRepoActivity {
 
     private ActivityResultLauncher<Uri> treeLauncher;
     private ActivityResultLauncher<String[]> filesLauncher;
+    private ActivityResultLauncher<Intent> pickLauncher;
+    private List<java.io.File> pickedRoots;
+    private boolean pickedFolder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,8 +91,23 @@ public class BrowserActivity extends BaseRepoActivity {
         filesLauncher = registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
             if (uris != null && !uris.isEmpty()) askUploadOptions(null, uris);
         });
-        btnFolder.setOnClickListener(v -> treeLauncher.launch(null));
-        btnFiles.setOnClickListener(v -> filesLauncher.launch(new String[]{"*/*"}));
+        pickLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
+            Intent d = res.getData();
+            if (res.getResultCode() != RESULT_OK || d == null) return;
+            List<String> paths = d.getStringArrayListExtra("paths");
+            if (paths == null || paths.isEmpty()) return;
+            List<java.io.File> roots = new ArrayList<>();
+            for (String s : paths) roots.add(new java.io.File(s));
+            pickedRoots = roots;
+            pickedFolder = d.getBooleanExtra("folder", false);
+            askUploadOptions(null, null);
+        });
+        // Both buttons open the app's own file manager in "pick" mode.
+        // (The system pickers above stay registered as a fallback.)
+        btnFolder.setOnClickListener(v -> pickLauncher.launch(
+                new Intent(this, FileManagerActivity.class).putExtra("pick", "folder")));
+        btnFiles.setOnClickListener(v -> pickLauncher.launch(
+                new Intent(this, FileManagerActivity.class).putExtra("pick", "files")));
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -269,7 +287,7 @@ public class BrowserActivity extends BaseRepoActivity {
             LinearLayout box = Ui.box(this);
             final EditText name = Ui.edit(this, getString(which == 0 ? R.string.file_name : R.string.folder_name), null);
             box.addView(name);
-            new AlertDialog.Builder(this)
+            new Dlg(this)
                     .setTitle(which == 0 ? R.string.new_file : R.string.new_folder)
                     .setView(box)
                     .setPositiveButton(R.string.create, (dd, w) -> {
@@ -306,7 +324,7 @@ public class BrowserActivity extends BaseRepoActivity {
         LinearLayout box = Ui.box(this);
         final EditText target = Ui.edit(this, getString(R.string.new_path), oldPath);
         box.addView(target);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.rename_move)
                 .setView(box)
                 .setPositiveButton(R.string.save, (d, w) -> {
@@ -351,9 +369,9 @@ public class BrowserActivity extends BaseRepoActivity {
 
         box.addView(target);
         box.addView(msg);
-        if (tree != null) box.addView(includeRoot);
+        if (tree != null || (pickedRoots != null && pickedFolder)) box.addView(includeRoot);
 
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.upload)
                 .setView(box)
                 .setPositiveButton(R.string.upload, (d, w) -> startUpload(tree, files,
@@ -366,7 +384,12 @@ public class BrowserActivity extends BaseRepoActivity {
     }
 
     private static byte[] readBytes(ContentResolver cr, Uri u) throws IOException {
-        InputStream is = cr.openInputStream(u);
+        InputStream is;
+        try {
+            is = cr.openInputStream(u);
+        } catch (java.io.FileNotFoundException e) {
+            return null;
+        }
         if (is == null) return null;
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -388,12 +411,17 @@ public class BrowserActivity extends BaseRepoActivity {
         busy = true;
         showProgress(getString(R.string.preparing));
         final String b = branch;
+        final List<java.io.File> roots = tree == null && files == null ? pickedRoots : null;
+        final boolean folderPick = pickedFolder;
+        pickedRoots = null;
 
         bg(() -> {
             ContentResolver cr = getContentResolver();
             List<FileScanner.Item> all = new ArrayList<>();
             if (tree != null) {
                 FileScanner.scanTree(cr, tree, includeRoot, all);
+            } else if (roots != null) {
+                FileScanner.scanFiles(roots, folderPick ? includeRoot : true, all);
             } else {
                 for (Uri u : files) {
                     String n = FileScanner.displayName(cr, u);
@@ -457,11 +485,7 @@ public class BrowserActivity extends BaseRepoActivity {
             }
             post(() -> {
                 hideProgress();
-                new AlertDialog.Builder(BrowserActivity.this)
-                        .setTitle(R.string.done)
-                        .setMessage(sb.toString())
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
+                Dlg.result(BrowserActivity.this, true, getString(R.string.done), sb.toString());
                 load();
             });
         });
@@ -473,7 +497,7 @@ public class BrowserActivity extends BaseRepoActivity {
         final String name = o.optString("name");
         final String p = o.optString("path");
         final boolean dir = "dir".equals(o.optString("type"));
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.delete_title)
                 .setMessage(getString(R.string.delete_msg, name))
                 .setPositiveButton(R.string.delete, (d, w) -> {

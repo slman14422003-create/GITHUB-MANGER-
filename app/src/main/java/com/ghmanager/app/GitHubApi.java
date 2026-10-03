@@ -560,6 +560,10 @@ public class GitHubApi {
         return obj(repo(o, r) + "/actions/runs/" + runId);
     }
 
+    public JSONObject getJob(String o, String r, long jobId) throws Exception {
+        return obj(repo(o, r) + "/actions/jobs/" + jobId);
+    }
+
     public JSONArray listJobs(String o, String r, long runId) throws Exception {
         return obj(repo(o, r) + "/actions/runs/" + runId + "/jobs?per_page=100&filter=latest").optJSONArray("jobs");
     }

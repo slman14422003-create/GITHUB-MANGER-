@@ -183,7 +183,7 @@ public class CommitsActivity extends BaseRepoActivity {
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.new_branch_name), null);
         box.addView(name);
-        new AlertDialog.Builder(this)
+        new Dlg(this)
                 .setTitle(R.string.create_branch_here)
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
