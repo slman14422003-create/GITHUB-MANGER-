@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -43,7 +44,7 @@ public final class Ui {
         e.setHintTextColor(ContextCompat.getColor(c, R.color.text_hint));
         e.setTextSize(15);
         int p = dp(c, 14);
-        e.setPadding(p, p, p, p);
+        e.setPadding(dp(c, 18), p, dp(c, 18), p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(c, 10);
@@ -128,20 +129,19 @@ public final class Ui {
 
     public static void setChip(Context c, TextView t, boolean selected) {
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dp(c, 18));
+        g.setCornerRadius(dp(c, 100));
         g.setStroke(dp(c, 1), color(c, selected ? R.color.accent : R.color.stroke));
-        g.setColor(color(c, selected ? R.color.accent_soft : R.color.bg));
+        g.setColor(color(c, selected ? R.color.accent_soft : R.color.surface));
         t.setBackground(g);
-        t.setTextColor(color(c, selected ? R.color.accent : R.color.text_secondary));
+        t.setTextColor(color(c, selected ? R.color.accent_text : R.color.text_secondary));
     }
 
     public static TextView sectionTitle(Context c, CharSequence text) {
         TextView t = new TextView(c);
         t.setText(text);
         t.setTextColor(color(c, R.color.text_secondary));
-        t.setTextSize(13);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setPadding(dp(c, 22), dp(c, 18), dp(c, 22), dp(c, 6));
+        t.setTextSize(14);
+        t.setPadding(dp(c, 26), dp(c, 22), dp(c, 26), dp(c, 8));
         return t;
     }
 
@@ -152,7 +152,7 @@ public final class Ui {
         t.setTextColor(color(c, colorRes));
         t.setTextSize(sizeSp);
         t.setLineSpacing(0, 1.15f);
-        t.setPadding(dp(c, 22), dp(c, 6), dp(c, 22), dp(c, 6));
+        t.setPadding(dp(c, 26), dp(c, 6), dp(c, 26), dp(c, 6));
         t.setTextIsSelectable(true);
         return t;
     }
@@ -177,24 +177,73 @@ public final class Ui {
         l.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(c, 6));
-        lp.setMargins(dp(c, 22), dp(c, 2), dp(c, 22), dp(c, 8));
+        lp.setMargins(dp(c, 26), dp(c, 2), dp(c, 26), dp(c, 8));
         l.setLayoutParams(lp);
         float pct = (float) Math.max(1, Math.min(100, percent));
         View fill = new View(c);
         GradientDrawable g1 = new GradientDrawable();
-        g1.setCornerRadius(dp(c, 3));
+        g1.setCornerRadius(dp(c, 6));
         g1.setColor(color(c, colorRes));
         fill.setBackground(g1);
         fill.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, pct));
         View rest = new View(c);
         GradientDrawable g2 = new GradientDrawable();
-        g2.setCornerRadius(dp(c, 3));
+        g2.setCornerRadius(dp(c, 6));
         g2.setColor(color(c, R.color.neutral_soft));
         rest.setBackground(g2);
         rest.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 100f - pct));
         l.addView(fill);
         l.addView(rest);
         return l;
+    }
+
+    /** Shapes a row card so rows of one section read as a single rounded group (ChatGPT style). */
+    public static void shapeRow(Context c, View v, boolean first, boolean last) {
+        View card = v.findViewById(R.id.card);
+        if (card == null) return;
+        float big = dp(c, 24);
+        float small = dp(c, 6);
+        float top = first ? big : small;
+        float bottom = last ? big : small;
+        float[] radii = {top, top, top, top, bottom, bottom, bottom, bottom};
+        GradientDrawable fill = new GradientDrawable();
+        fill.setColor(color(c, R.color.surface));
+        fill.setCornerRadii(radii);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadii(radii);
+        card.setBackground(new RippleDrawable(
+                ColorStateList.valueOf(color(c, R.color.ripple)), fill, mask));
+    }
+
+    /** Groups every run of consecutive row cards inside a container. */
+    public static void group(Context c, ViewGroup g) {
+        int n = g.getChildCount();
+        for (int i = 0; i < n; i++) {
+            View v = g.getChildAt(i);
+            if (v.findViewById(R.id.card) == null) continue;
+            boolean first = i == 0 || g.getChildAt(i - 1).findViewById(R.id.card) == null;
+            boolean last = i == n - 1 || g.getChildAt(i + 1).findViewById(R.id.card) == null;
+            shapeRow(c, v, first, last);
+        }
+    }
+
+    /** Keeps row groups shaped automatically while a screen adds or removes rows. */
+    public static void autoGroup(final Context c, final ViewGroup g) {
+        final Runnable r = () -> group(c, g);
+        g.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+            @Override
+            public void onChildViewAdded(View parent, View child) {
+                g.removeCallbacks(r);
+                g.post(r);
+            }
+
+            @Override
+            public void onChildViewRemoved(View parent, View child) {
+                g.removeCallbacks(r);
+                g.post(r);
+            }
+        });
     }
 
     /** Inflates a row and binds it. */

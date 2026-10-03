@@ -137,7 +137,7 @@ public class IssueDetailActivity extends BaseRepoActivity {
             if (c == null) continue;
             JSONObject cu = c.optJSONObject("user");
             String head = (cu == null ? "" : cu.optString("login")) + " · " + Fmt.ago(Fmt.s(c, "created_at"));
-            TextView h = Ui.body(this, head, 12, R.color.accent);
+            TextView h = Ui.body(this, head, 12, R.color.accent_text);
             h.setTypeface(Typeface.DEFAULT_BOLD);
             content.addView(h);
             content.addView(Ui.body(this, Fmt.s(c, "body"), 14, R.color.text_primary));

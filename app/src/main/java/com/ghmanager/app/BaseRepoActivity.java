@@ -109,6 +109,8 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         btnRefresh = findViewById(R.id.btnRefresh);
         loadingBar = findViewById(R.id.loading);
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);
+        View rows = findViewById(R.id.content);
+        if (rows instanceof android.view.ViewGroup) Ui.autoGroup(this, (android.view.ViewGroup) rows);
     }
 
     protected void setSubtitle(String s) {

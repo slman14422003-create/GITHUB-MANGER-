@@ -50,6 +50,7 @@ public class RowAdapter extends BaseAdapter {
     public View getView(int position, View convertView, ViewGroup parent) {
         View v = convertView != null ? convertView : inflater.inflate(R.layout.item_row, parent, false);
         bind(ctx, v, rows.get(position));
+        Ui.shapeRow(ctx, v, position == 0, position == rows.size() - 1);
         return v;
     }
 
@@ -58,9 +59,8 @@ public class RowAdapter extends BaseAdapter {
         ImageView icon = v.findViewById(R.id.icon);
         icon.setImageResource(r.icon);
         boolean colored = r.iconColor != 0;
-        icon.setBackgroundResource(r.accent && !colored ? R.drawable.bg_circle_accent : R.drawable.bg_circle_neutral);
-        int tint = colored ? r.iconColor
-                : ContextCompat.getColor(ctx, r.accent ? R.color.accent : R.color.text_secondary);
+        icon.setBackground(null);
+        int tint = colored ? r.iconColor : ContextCompat.getColor(ctx, R.color.text_primary);
         icon.setImageTintList(ColorStateList.valueOf(tint));
 
         ((TextView) v.findViewById(R.id.title)).setText(r.title);
@@ -80,7 +80,7 @@ public class RowAdapter extends BaseAdapter {
             badge.setText(r.badge);
             badge.setTextColor(r.badgeColor);
             GradientDrawable g = new GradientDrawable();
-            g.setCornerRadius(Ui.dp(ctx, 10));
+            g.setCornerRadius(Ui.dp(ctx, 100));
             g.setColor((r.badgeColor & 0x00FFFFFF) | 0x26000000);
             badge.setBackground(g);
             badge.setVisibility(View.VISIBLE);

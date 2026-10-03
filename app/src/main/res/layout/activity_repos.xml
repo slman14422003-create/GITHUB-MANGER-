@@ -5,20 +5,29 @@
     android:background="@color/bg"
     android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="20dp"
+        android:minHeight="76dp"
+        android:paddingStart="14dp"
         android:paddingTop="14dp"
-        android:paddingEnd="10dp"
+        android:paddingEnd="14dp"
         android:paddingBottom="8dp">
 
+        <ImageButton
+            android:id="@+id/btnLogout"
+            style="@style/IconButton"
+            android:layout_gravity="start|center_vertical"
+            android:contentDescription="@string/logout"
+            android:src="@drawable/ic_logout" />
+
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:layout_gravity="center"
+            android:layout_marginStart="64dp"
+            android:layout_marginEnd="104dp"
+            android:gravity="center_horizontal"
             android:orientation="vertical">
 
             <TextView
@@ -27,7 +36,7 @@
                 android:fontFamily="serif"
                 android:text="@string/repos"
                 android:textColor="@color/text_primary"
-                android:textSize="30sp" />
+                android:textSize="26sp" />
 
             <TextView
                 android:id="@+id/count"
@@ -37,41 +46,46 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/btnNew"
-            style="@style/IconButton"
-            android:contentDescription="@string/new_repo"
-            android:src="@drawable/ic_add" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|center_vertical"
+            android:orientation="horizontal">
 
-        <ImageButton
-            android:id="@+id/btnRefresh"
-            style="@style/IconButton"
-            android:contentDescription="@string/refresh"
-            android:src="@drawable/ic_refresh" />
+            <ImageButton
+                android:id="@+id/btnNew"
+                style="@style/IconButton"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/new_repo"
+                android:src="@drawable/ic_add" />
 
-        <ImageButton
-            android:id="@+id/btnLogout"
-            style="@style/IconButton"
-            android:contentDescription="@string/logout"
-            android:src="@drawable/ic_logout" />
-    </LinearLayout>
+            <ImageButton
+                android:id="@+id/btnRefresh"
+                style="@style/IconButton"
+                android:contentDescription="@string/refresh"
+                android:src="@drawable/ic_refresh" />
+        </LinearLayout>
+    </FrameLayout>
 
     <EditText
         android:id="@+id/search"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
+        android:layout_marginStart="14dp"
         android:layout_marginTop="4dp"
-        android:layout_marginEnd="16dp"
+        android:layout_marginEnd="14dp"
         android:background="@drawable/bg_input"
         android:drawableStart="@drawable/ic_search"
-        android:drawablePadding="10dp"
+        android:drawablePadding="12dp"
         android:drawableTint="@color/text_hint"
         android:hint="@string/search_repos"
         android:importantForAutofill="no"
         android:inputType="text"
         android:maxLines="1"
-        android:padding="12dp"
+        android:paddingStart="18dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="14dp"
         android:textColor="@color/text_primary"
         android:textColorHint="@color/text_hint"
         android:textSize="15sp" />

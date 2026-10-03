@@ -63,7 +63,7 @@ public class BranchesActivity extends BaseRepoActivity {
             JSONObject c = o.optJSONObject("commit");
             Row r = new Row(R.drawable.ic_branch, name.equals(defaultBranch), name,
                     c == null ? "" : Fmt.shortSha(c.optString("sha")), o.optBoolean("protected"), true);
-            if (name.equals(defaultBranch)) r.badge(getString(R.string.default_label), Ui.color(this, R.color.accent));
+            if (name.equals(defaultBranch)) r.badge(getString(R.string.default_label), Ui.color(this, R.color.accent_text));
             rows.add(r);
         }
         adapter.setRows(rows);

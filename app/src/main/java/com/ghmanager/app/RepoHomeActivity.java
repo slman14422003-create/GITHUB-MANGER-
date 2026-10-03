@@ -28,7 +28,7 @@ public class RepoHomeActivity extends BaseRepoActivity {
     }
 
     private void updateStar() {
-        int c = Ui.color(this, starred ? R.color.accent : R.color.text_primary);
+        int c = Ui.color(this, starred ? R.color.warn : R.color.text_primary);
         btnA1.setImageTintList(ColorStateList.valueOf(c));
     }
 
