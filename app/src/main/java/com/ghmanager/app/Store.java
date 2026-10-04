@@ -41,30 +41,8 @@ public class Store {
         return g.generateKey();
     }
 
-    public static String getToken(Context c) {
-        SharedPreferences p = sp(c);
-        String enc = p.getString(TOKEN_ENC, "");
-        if (enc != null && !enc.isEmpty()) {
-            try {
-                byte[] all = Base64.decode(enc, Base64.NO_WRAP);
-                Cipher ci = Cipher.getInstance("AES/GCM/NoPadding");
-                ci.init(Cipher.DECRYPT_MODE, tokenKey(), new GCMParameterSpec(128, all, 0, 12));
-                return new String(ci.doFinal(all, 12, all.length - 12), StandardCharsets.UTF_8);
-            } catch (Exception e) {
-                return "";
-            }
-        }
-        // one-time migration of a token saved in plain text by an older version
-        String old = p.getString("token", "");
-        if (old != null && !old.isEmpty()) {
-            setToken(c, old);
-            return old;
-        }
-        return "";
-    }
-
-    public static void setToken(Context c, String t) {
-        SharedPreferences.Editor e = sp(c).edit().remove("token");
+    /** Encrypts a secret with the Keystore key (Base64 of IV + ciphertext); "" on failure. */
+    static String encrypt(String t) {
         try {
             Cipher ci = Cipher.getInstance("AES/GCM/NoPadding");
             ci.init(Cipher.ENCRYPT_MODE, tokenKey());
@@ -73,18 +51,64 @@ public class Store {
             byte[] all = new byte[iv.length + ct.length];
             System.arraycopy(iv, 0, all, 0, iv.length);
             System.arraycopy(ct, 0, all, iv.length, ct.length);
-            e.putString(TOKEN_ENC, Base64.encodeToString(all, Base64.NO_WRAP));
+            return Base64.encodeToString(all, Base64.NO_WRAP);
         } catch (Exception ex) {
-            // never fall back to plain text: without the keystore the token is simply not kept
-            e.remove(TOKEN_ENC);
+            // never fall back to plain text: without the keystore the secret is simply not kept
+            return "";
         }
-        e.apply();
+    }
+
+    /** Reverse of encrypt(); "" when the value is empty, damaged, or the key is gone. */
+    static String decrypt(String enc) {
+        if (enc == null || enc.isEmpty()) return "";
+        try {
+            byte[] all = Base64.decode(enc, Base64.NO_WRAP);
+            Cipher ci = Cipher.getInstance("AES/GCM/NoPadding");
+            ci.init(Cipher.DECRYPT_MODE, tokenKey(), new GCMParameterSpec(128, all, 0, 12));
+            return new String(ci.doFinal(all, 12, all.length - 12), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    static String rawPref(Context c, String key) {
+        String v = sp(c).getString(key, "");
+        return v == null ? "" : v;
+    }
+
+    static void putPrefs(Context c, String k1, String v1, String k2, String v2) {
+        sp(c).edit().putString(k1, v1).putString(k2, v2).apply();
+    }
+
+    /** The encrypted token the single-account versions kept (migrates a plain-text one first). */
+    static String legacyEncrypted(Context c) {
+        SharedPreferences p = sp(c);
+        String enc = p.getString(TOKEN_ENC, "");
+        if (enc != null && !enc.isEmpty()) return enc;
+        String old = p.getString("token", "");
+        if (old != null && !old.isEmpty()) return encrypt(old);
+        return "";
+    }
+
+    static void dropLegacy(Context c) {
+        sp(c).edit().remove("token").remove(TOKEN_ENC).apply();
+    }
+
+    /** Token of the active account ("" when nobody is signed in). */
+    public static String getToken(Context c) {
+        return Accounts.activeToken(c);
+    }
+
+    /** Saves a token as the (only) account when the user has no profile yet. Prefer Accounts.add. */
+    public static void setToken(Context c, String t) {
+        Accounts.add(c, t, null, "token");
     }
 
     /**
      * Signs out. Called ONLY from the explicit logout buttons: the app never signs the user out on
      * its own (not on network errors, not on a 401, not on a timeout).
-     * Removes everything except the in-app update preferences (keys starting with upd_).
+     * Removes every account and everything else except the in-app preferences (keys starting with upd_,
+     * which include the mirror settings so the user can sign in again where GitHub is blocked).
      */
     public static void clear(Context c) {
         SharedPreferences p = sp(c);
@@ -157,5 +181,36 @@ public class Store {
 
     public static void setLanguage(Context c, String v) {
         sp(c).edit().putString("upd_lang", v == null ? "system" : v).apply();
+    }
+
+    // ------------------------------------------------------------------ proxy mirror / OAuth
+
+    public static boolean mirrorOn(Context c) {
+        return sp(c).getBoolean("upd_mirror_on", false);
+    }
+
+    public static String mirrorUrl(Context c) {
+        return rawPref(c, "upd_mirror_url");
+    }
+
+    /** Optional access key of the Worker, encrypted like the tokens. */
+    public static String mirrorKey(Context c) {
+        return decrypt(rawPref(c, "upd_mirror_key"));
+    }
+
+    public static void setMirror(Context c, boolean on, String url, String key) {
+        sp(c).edit().putBoolean("upd_mirror_on", on)
+                .putString("upd_mirror_url", url == null ? "" : url.trim())
+                .putString("upd_mirror_key", key == null || key.isEmpty() ? "" : encrypt(key))
+                .apply();
+    }
+
+    /** Client ID of the user's own GitHub OAuth App (Device Flow sign-in). */
+    public static String oauthClientId(Context c) {
+        return rawPref(c, "upd_oauth_client");
+    }
+
+    public static void setOauthClientId(Context c, String v) {
+        sp(c).edit().putString("upd_oauth_client", v == null ? "" : v.trim()).apply();
     }
 }

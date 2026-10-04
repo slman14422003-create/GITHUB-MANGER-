@@ -9,6 +9,7 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -35,6 +36,7 @@ public class ReposActivity extends AppCompatActivity {
     private LinearLayout chipRow;
     private int filter = 0;
     private String query = "";
+    private ImageView accountBtn;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -61,17 +63,15 @@ public class ReposActivity extends AppCompatActivity {
         });
 
         for (int id : new int[]{R.id.btnFiles, R.id.btnPerms, R.id.btnSettings, R.id.btnNew,
-                R.id.btnRefresh, R.id.btnLogout}) {
+                R.id.btnRefresh, R.id.btnAccount}) {
             Ui.press(this, findViewById(id));
         }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
-        findViewById(R.id.btnLogout).setOnClickListener(v -> new Dlg(this)
-                .setTitle(R.string.logout)
-                .setMessage(R.string.set_logout_msg)
-                .setPositiveButton(R.string.logout, (d, w) -> logout())
-                .setNegativeButton(R.string.cancel, null)
-                .show());
+        accountBtn = findViewById(R.id.btnAccount);
+        accountBtn.setOnClickListener(v -> AccountSheet.show(this));
+        refreshAccountIcon();
+        fillProfileIfMissing();
         findViewById(R.id.btnSettings).setOnClickListener(v ->
                 startActivity(new Intent(ReposActivity.this, SettingsActivity.class)));
         findViewById(R.id.btnFiles).setOnClickListener(v ->
@@ -117,10 +117,33 @@ public class ReposActivity extends AppCompatActivity {
         }
     }
 
-    private void logout() {
-        Store.clear(this);
-        startActivity(new Intent(this, LoginActivity.class));
-        finish();
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (accountBtn != null) refreshAccountIcon();
+    }
+
+    private void refreshAccountIcon() {
+        Accounts.Acc a = Accounts.active(this);
+        Avatar.load(accountBtn, a == null ? "" : a.avatar, 10);
+    }
+
+    /** Accounts migrated from an older version have no profile yet: fetch it once for the icon. */
+    private void fillProfileIfMissing() {
+        final Accounts.Acc a = Accounts.active(this);
+        if (a == null || !a.avatar.isEmpty()) return;
+        final String id = a.id;
+        io.execute(() -> {
+            try {
+                final JSONObject u = api.getUser();
+                ui.post(() -> {
+                    if (isFinishing()) return;
+                    Accounts.updateProfile(this, id, u);
+                    refreshAccountIcon();
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private boolean matches(JSONObject o) {

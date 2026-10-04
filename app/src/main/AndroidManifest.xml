@@ -62,6 +62,7 @@
         <activity android:name=".UpdateActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".AdvancedSettingsActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".CollaboratorsActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".AccountActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".PermissionsActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <!-- keeps the in-app language choice across restarts on Android 12 and older -->

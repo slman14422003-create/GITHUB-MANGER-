@@ -20,6 +20,7 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         Lang.init(this);
+        Mirror.load(this);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity a, Bundle b) {

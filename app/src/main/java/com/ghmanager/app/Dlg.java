@@ -52,7 +52,8 @@ public class Dlg extends AlertDialog.Builder {
             R.string.delete, R.string.delete_all_caches, R.string.delete_all_completed_runs,
             R.string.delete_cancelled_runs, R.string.delete_failed_runs, R.string.delete_release,
             R.string.delete_repo, R.string.delete_run, R.string.force_cancel, R.string.cancel_run,
-            R.string.col_remove, R.string.adv_prot_remove};
+            R.string.col_remove, R.string.adv_prot_remove,
+            R.string.acc_signout, R.string.acc_signout_all};
 
     /** True for labels of actions that remove or abort something (shown in red). */
     static boolean destructive(Context c, CharSequence label) {

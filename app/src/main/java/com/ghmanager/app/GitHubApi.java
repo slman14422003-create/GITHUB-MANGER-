@@ -107,10 +107,14 @@ public class GitHubApi {
     private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
         // never talk plain HTTP (a redirect to http:// must not downgrade a download)
         if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        final String real = Mirror.map(url);
+        HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
         c.setRequestMethod(method);
         c.setConnectTimeout(20000);
         c.setReadTimeout(120000);
+        if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
+            c.setRequestProperty("X-Mirror-Key", Mirror.key());
+        }
         if (api) {
             c.setRequestProperty("Authorization", "Bearer " + token);
             c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
@@ -254,6 +258,117 @@ public class GitHubApi {
 
     public JSONObject getUser() throws Exception {
         return new JSONObject(request("GET", "/user", null));
+    }
+
+    /** Like getUser() plus "_scopes": the scopes GitHub reports for a classic / OAuth token ("" otherwise). */
+    public JSONObject getUserMeta() throws Exception {
+        HttpURLConnection c = open("GET", BASE + "/user", JSON, true);
+        int code = c.getResponseCode();
+        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        String resp = is == null ? "" : readAll(is);
+        String scopes = c.getHeaderField("X-OAuth-Scopes");
+        c.disconnect();
+        if (code >= 400) throw toException(code, resp);
+        JSONObject u = new JSONObject(resp);
+        u.put("_scopes", scopes == null ? "" : scopes.trim());
+        return u;
+    }
+
+    public JSONObject updateProfile(JSONObject patch) throws Exception {
+        return new JSONObject(request("PATCH", "/user", patch));
+    }
+
+    public JSONArray listEmails() throws Exception {
+        return new JSONArray(request("GET", "/user/emails", null));
+    }
+
+    public JSONArray listSshKeys() throws Exception {
+        return new JSONArray(request("GET", "/user/keys?per_page=100", null));
+    }
+
+    public void addSshKey(String title, String key) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("title", title);
+        b.put("key", key);
+        request("POST", "/user/keys", b);
+    }
+
+    public void deleteSshKey(long id) throws Exception {
+        request("DELETE", "/user/keys/" + id, null);
+    }
+
+    public JSONArray listOrgs() throws Exception {
+        return new JSONArray(request("GET", "/user/orgs?per_page=100", null));
+    }
+
+    /** The "core" bucket of /rate_limit: limit, remaining, reset (epoch seconds). */
+    public JSONObject rateLimit() throws Exception {
+        JSONObject r = obj("/rate_limit").optJSONObject("resources");
+        JSONObject core = r == null ? null : r.optJSONObject("core");
+        return core == null ? new JSONObject() : core;
+    }
+
+    /** Unauthenticated form POST (GitHub device flow). Returns the body whatever the status is. */
+    public static String postForm(String url, String form) throws Exception {
+        if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
+        String real = Mirror.map(url);
+        HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
+        c.setRequestMethod("POST");
+        c.setConnectTimeout(20000);
+        c.setReadTimeout(30000);
+        c.setRequestProperty("Accept", "application/json");
+        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        c.setRequestProperty("User-Agent", "GitHubManagerApp");
+        if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
+            c.setRequestProperty("X-Mirror-Key", Mirror.key());
+        }
+        byte[] data = form.getBytes(StandardCharsets.UTF_8);
+        c.setDoOutput(true);
+        c.setFixedLengthStreamingMode(data.length);
+        OutputStream os = c.getOutputStream();
+        os.write(data);
+        os.close();
+        int code = c.getResponseCode();
+        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        String resp = is == null ? "" : readAll(is);
+        c.disconnect();
+        return resp;
+    }
+
+    /** Small unauthenticated download (avatars). Returns null on any failure. */
+    public static byte[] fetchBytes(String url, int maxBytes) {
+        try {
+            if (!url.startsWith("https://")) return null;
+            String real = Mirror.map(url);
+            HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(20000);
+            c.setRequestProperty("User-Agent", "GitHubManagerApp");
+            if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
+                c.setRequestProperty("X-Mirror-Key", Mirror.key());
+            }
+            if (c.getResponseCode() != 200) {
+                c.disconnect();
+                return null;
+            }
+            InputStream is = c.getInputStream();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) != -1) {
+                bos.write(buf, 0, n);
+                if (bos.size() > maxBytes) {
+                    is.close();
+                    c.disconnect();
+                    return null;
+                }
+            }
+            is.close();
+            c.disconnect();
+            return bos.toByteArray();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public JSONArray listRepos() throws Exception {

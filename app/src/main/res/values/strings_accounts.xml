@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- accounts -->
+    <string name="acc_title">حسابات GitHub</string>
+    <string name="acc_manage">إدارة الحساب</string>
+    <string name="acc_manage_sub">الملف الشخصي، الوصول، مفاتيح SSH والمزيد</string>
+    <string name="acc_add">إضافة حساب</string>
+    <string name="acc_active">نشط</string>
+    <string name="acc_switch">التبديل إلى هذا الحساب</string>
+    <string name="acc_accounts">الحسابات على هذا الجهاز</string>
+    <string name="acc_signout">تسجيل الخروج من هذا الحساب</string>
+    <string name="acc_signout_msg">سيُحذف رمز هذا الحساب من الجهاز، وتبقى الحسابات الأخرى كما هي.</string>
+    <string name="acc_signout_all">تسجيل الخروج من كل الحسابات</string>
+    <string name="acc_signout_all_msg">سيتم حذف كل الحسابات ورموزها من هذا الجهاز.</string>
+    <string name="acc_profile">الملف الشخصي</string>
+    <string name="acc_edit">تعديل الملف الشخصي</string>
+    <string name="acc_name">الاسم</string>
+    <string name="acc_bio">النبذة</string>
+    <string name="acc_company">الشركة</string>
+    <string name="acc_location">الموقع</string>
+    <string name="acc_blog">الموقع الإلكتروني</string>
+    <string name="acc_saved">تم الحفظ</string>
+    <string name="acc_emails">البريد الإلكتروني</string>
+    <string name="acc_keys">مفاتيح SSH</string>
+    <string name="acc_key_add">إضافة مفتاح SSH</string>
+    <string name="acc_key_title">عنوان المفتاح</string>
+    <string name="acc_key_body">المفتاح العام (ssh-ed25519 …)</string>
+    <string name="acc_key_delete_msg">سيُحذف هذا المفتاح من حسابك على GitHub.</string>
+    <string name="acc_orgs">المنظمات</string>
+    <string name="acc_none">لا يوجد</string>
+    <string name="acc_access">الوصول</string>
+    <string name="acc_token_type">طريقة الدخول</string>
+    <string name="acc_type_oauth">تسجيل الدخول عبر GitHub</string>
+    <string name="acc_type_token">رمز وصول شخصي</string>
+    <string name="acc_scopes">الصلاحيات</string>
+    <string name="acc_scopes_none">رمز مفصّل — GitHub لا يعرض قائمة صلاحياته</string>
+    <string name="acc_rate">حدّ الطلبات</string>
+    <string name="acc_rate_val">%1$d من %2$d متبقٍ · يتجدد بعد %3$s</string>
+    <string name="acc_open">فتح الملف الشخصي على GitHub</string>
+    <string name="acc_followers">متابِع</string>
+    <string name="acc_following">يتابع</string>
+    <string name="acc_repos">مستودع</string>
+    <string name="acc_since">انضممت إلى GitHub في %1$s</string>
+    <string name="acc_private_plan">الخطة: %1$s</string>
+
+    <!-- sign-in -->
+    <string name="login_add_title">إضافة حساب</string>
+    <string name="login_gh">المتابعة عبر GitHub</string>
+    <string name="login_gh_hint">Google · البريد الإلكتروني · كلمة المرور · مفتاح المرور — تختارها من صفحة GitHub نفسها، والتطبيق لا يرى كلمة مرورك أبداً.</string>
+    <string name="login_or">أو</string>
+    <string name="login_token_title">الدخول برمز وصول</string>
+    <string name="login_code_title">أدخل هذا الرمز في صفحة GitHub</string>
+    <string name="login_open_gh">فتح صفحة GitHub</string>
+    <string name="login_copy_code">نسخ الرمز</string>
+    <string name="login_wait">بانتظار تأكيدك في GitHub…</string>
+    <string name="login_cancel_flow">إلغاء</string>
+    <string name="login_client_title">معرّف تطبيق OAuth</string>
+    <string name="login_client_msg">لتسجيل الدخول عبر GitHub أنشئ OAuth App من GitHub ← Settings ← Developer settings ← OAuth Apps، فعّل خيار Device Flow، ثم الصق الـ Client ID هنا.</string>
+    <string name="login_client_hint">Client ID</string>
+    <string name="login_client_set">ضبط Client ID</string>
+    <string name="login_expired">انتهت صلاحية الرمز، ابدأ من جديد.</string>
+    <string name="login_denied">رفضت الطلب في GitHub.</string>
+    <string name="login_failed">تعذّر تسجيل الدخول: %1$s</string>
+
+    <!-- proxy mirror -->
+    <string name="mir_title">المرآة (Proxy)</string>
+    <string name="mir_row_sub_on">مفعّلة · %1$s</string>
+    <string name="mir_row_sub_off">متوقفة</string>
+    <string name="mir_enable">استخدام المرآة لتجاوز الحجب</string>
+    <string name="mir_enable_sub">تمر طلبات GitHub والتحميلات عبر Cloudflare Worker الخاص بك</string>
+    <string name="mir_url">رابط المرآة</string>
+    <string name="mir_url_hint">https://اسمك.workers.dev</string>
+    <string name="mir_key">مفتاح الوصول (اختياري)</string>
+    <string name="mir_test">اختبار الاتصال</string>
+    <string name="mir_testing">جارٍ الاختبار…</string>
+    <string name="mir_ok">المرآة تعمل ✓</string>
+    <string name="mir_fail">فشل الاتصال: %1$s</string>
+    <string name="mir_bad_url">أدخل رابط https صالحاً للمرآة</string>
+    <string name="mir_help">انشر ملف worker/mirror.js على Cloudflare ثم الصق رابطه هنا. إن ضبطت MIRROR_KEY في الـ Worker فأدخله في خانة المفتاح.</string>
+    <string name="mir_settings_link">إعدادات المرآة (Proxy)</string>
+
+    <!-- live run board -->
+    <string name="live_queued">في الانتظار لمُشغّل…</string>
+    <string name="live_starting">يبدأ التشغيل…</string>
+    <string name="live_now">يعمل الآن: %1$s</string>
+    <string name="live_progress">خطوة %1$d من %2$d · مهمة %3$d من %4$d</string>
+    <string name="live_done_ok">اكتمل بنجاح</string>
+    <string name="live_done_fail">توقّف بسبب فشل</string>
+    <string name="live_done_other">انتهى</string>
+    <string name="live_total">المدة الكلية %1$s</string>
+    <string name="live_no_steps">بانتظار بدء الخطوات…</string>
+    <string name="live_log">السجل</string>
+    <string name="live_jobs">خط التنفيذ المباشر</string>
+</resources>

@@ -16,11 +16,13 @@
         android:paddingEnd="12dp"
         android:paddingBottom="8dp">
 
-        <ImageButton
-            android:id="@+id/btnLogout"
-            style="@style/IconButton"
-            android:contentDescription="@string/logout"
-            android:src="@drawable/ic_logout" />
+        <ImageView
+            android:id="@+id/btnAccount"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:clickable="true"
+            android:contentDescription="@string/acc_title"
+            android:focusable="true" />
 
         <LinearLayout
             android:layout_width="0dp"

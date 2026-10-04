@@ -24,13 +24,23 @@ public class RunDetailActivity extends BaseRepoActivity {
     private JSONArray artifacts = new JSONArray();
     private boolean resumed = false;
     private boolean firstLoad = true;
-    private JSONObject previewJob;
-    private long previewJobId = 0;
-    private String previewJobName = "";
-    private String previewRaw = "";
+    private boolean silentRender = false;
+    private LiveBoard board;
+
+    private static final long POLL_MS = 2500;
 
     private final Runnable poll = () -> {
         if (resumed) load(true);
+    };
+
+    /** Keeps the running clocks of the live board ticking every second. */
+    private final Runnable ticker = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed) return;
+            if (board != null) board.tick();
+            ui.postDelayed(this, 1000);
+        }
     };
 
     @Override
@@ -40,6 +50,17 @@ public class RunDetailActivity extends BaseRepoActivity {
         runId = getIntent().getLongExtra("runId", 0);
         bindHeader(getString(R.string.run_title), repo);
         content = findViewById(R.id.content);
+        board = new LiveBoard(this, new LiveBoard.Listener() {
+            @Override
+            public void onJob(JSONObject job) {
+                openLog(job);
+            }
+
+            @Override
+            public void onJobMenu(JSONObject job) {
+                jobMenu(job);
+            }
+        });
         btnRefresh.setOnClickListener(v -> load(false));
         action(btnA1, R.drawable.ic_open, R.string.open_in_github, v -> {
             if (run != null) openUrl(Fmt.s(run, "html_url"));
@@ -53,6 +74,8 @@ public class RunDetailActivity extends BaseRepoActivity {
         resumed = true;
         load(!firstLoad);
         firstLoad = false;
+        ui.removeCallbacks(ticker);
+        ui.postDelayed(ticker, 1000);
     }
 
     @Override
@@ -60,6 +83,7 @@ public class RunDetailActivity extends BaseRepoActivity {
         super.onPause();
         resumed = false;
         ui.removeCallbacks(poll);
+        ui.removeCallbacks(ticker);
     }
 
     private void load(final boolean silent) {
@@ -73,19 +97,6 @@ public class RunDetailActivity extends BaseRepoActivity {
                     a = api.listRunArtifacts(owner, repo, runId);
                 } catch (Exception ignored) {
                 }
-                final JSONObject pj = pickLogJob(j);
-                String pRaw = "";
-                if (pj != null) {
-                    String ps = pj.optString("status");
-                    if (!"queued".equals(ps) && !"waiting".equals(ps) && !"pending".equals(ps)) {
-                        try {
-                            pRaw = api.readTail(api.jobLogsPath(owner, repo, pj.optLong("id")),
-                                    "application/vnd.github+json", 48 * 1024).text;
-                        } catch (Exception ignored) {
-                        }
-                    }
-                }
-                final String fPreview = pRaw;
                 final JSONArray fj = j == null ? new JSONArray() : j;
                 final JSONArray fa = a == null ? new JSONArray() : a;
                 post(() -> {
@@ -93,13 +104,11 @@ public class RunDetailActivity extends BaseRepoActivity {
                     run = r;
                     jobs = fj;
                     artifacts = fa;
-                    previewJob = fPreview.isEmpty() ? null : pj;
-                    previewJobId = previewJob == null ? 0 : previewJob.optLong("id");
-                    previewJobName = previewJob == null ? "" : previewJob.optString("name");
-                    previewRaw = fPreview;
+                    silentRender = silent;
+                    board.update(r, fj);
                     render();
                     ui.removeCallbacks(poll);
-                    if (resumed && Status.isActive(r.optString("status"))) ui.postDelayed(poll, 4000);
+                    if (resumed && Status.isActive(r.optString("status"))) ui.postDelayed(poll, POLL_MS);
                 });
             } catch (Exception e) {
                 fail(e);
@@ -120,16 +129,17 @@ public class RunDetailActivity extends BaseRepoActivity {
         t.setTypeface(Typeface.DEFAULT_BOLD);
         content.addView(t);
 
-        int color = Status.color(this, s, c);
-        StringBuilder sub = new StringBuilder();
-        sub.append(Fmt.s(run, "event"));
-        JSONObject actor = run.optJSONObject("actor");
-        if (actor != null) sub.append(" · ").append(actor.optString("login"));
-        sub.append(" · ").append(Fmt.ago(Fmt.s(run, "created_at")));
-        content.addView(Ui.rowView(this, content,
-                new Row(Status.icon(s, c), false, Status.label(s, c), sub.toString(), false, false).tint(color), null));
+        // the live board survives re-renders: it is detached above and attached again here
+        content.addView(board);
+        board.animate().cancel();
+        board.setAlpha(1f);
+        board.setTranslationY(0f);
 
         StringBuilder det = new StringBuilder();
+        det.append(Fmt.s(run, "event"));
+        JSONObject actor = run.optJSONObject("actor");
+        if (actor != null) det.append(" · ").append(actor.optString("login"));
+        det.append(" · ").append(Fmt.ago(Fmt.s(run, "created_at"))).append('\n');
         JSONObject hc = run.optJSONObject("head_commit");
         String sha = Fmt.shortSha(Fmt.s(run, "head_sha"));
         if (!sha.isEmpty()) {
@@ -151,41 +161,6 @@ public class RunDetailActivity extends BaseRepoActivity {
         content.addView(Ui.body(this, det.toString().trim(), 13, R.color.text_secondary));
 
         addButtons(s, c);
-        addLogPreview();
-
-        // jobs
-        content.addView(Ui.sectionTitle(this, getString(R.string.jobs_count, jobs.length())));
-        if (jobs.length() == 0) {
-            content.addView(Ui.body(this, getString(R.string.no_jobs), 14, R.color.text_hint));
-        }
-        for (int i = 0; i < jobs.length(); i++) {
-            final JSONObject job = jobs.optJSONObject(i);
-            if (job == null) continue;
-            String js = job.optString("status");
-            String jc = job.optString("conclusion");
-            int jcol = Status.color(this, js, jc);
-            JSONArray steps = job.optJSONArray("steps");
-            StringBuilder jsub = new StringBuilder();
-            long a = Fmt.parse(Fmt.s(job, "started_at"));
-            long b = Fmt.parse(Fmt.s(job, "completed_at"));
-            if (a > 0 && b >= a) jsub.append(Fmt.duration(b - a));
-            String runner = Fmt.s(job, "runner_name");
-            if (!runner.isEmpty()) jsub.append(jsub.length() > 0 ? " · " : "").append(runner);
-            Row jr = new Row(Status.icon(js, jc), false, job.optString("name"), jsub.toString(), false, true)
-                    .tint(jcol).badge(Status.label(js, jc), jcol);
-            View jv = Ui.rowView(this, content, jr, v -> openLog(job));
-            jv.setOnLongClickListener(v -> {
-                jobMenu(job);
-                return true;
-            });
-            content.addView(jv);
-            if (steps != null && steps.length() > 0) {
-                TextView st = Ui.body(this, stepsText(steps), 12, R.color.text_secondary);
-                st.setTypeface(Typeface.MONOSPACE);
-                st.setPadding(Ui.dp(this, 30), 0, Ui.dp(this, 22), Ui.dp(this, 8));
-                content.addView(st);
-            }
-        }
 
         // artifacts
         if (artifacts.length() > 0) {
@@ -200,21 +175,16 @@ public class RunDetailActivity extends BaseRepoActivity {
                 content.addView(Ui.rowView(this, content, ar, v -> artifactMenu(art, () -> load(true))));
             }
         }
-    }
 
-    /** The job whose log is most useful right now: a failed one, else a running one, else the last. */
-    private static JSONObject pickLogJob(JSONArray j) {
-        if (j == null || j.length() == 0) return null;
-        JSONObject running = null;
-        JSONObject last = null;
-        for (int i = 0; i < j.length(); i++) {
-            JSONObject o = j.optJSONObject(i);
-            if (o == null) continue;
-            last = o;
-            if ("failure".equals(o.optString("conclusion"))) return o;
-            if (running == null && "in_progress".equals(o.optString("status"))) running = o;
+        // a silent refresh must not replay the "slide in" animation of every block
+        if (silentRender) {
+            for (int i = 0; i < content.getChildCount(); i++) {
+                View v = content.getChildAt(i);
+                v.animate().cancel();
+                v.setAlpha(1f);
+                v.setTranslationY(0f);
+            }
         }
-        return running != null ? running : last;
     }
 
     private void openLog(JSONObject job) {
@@ -223,82 +193,6 @@ public class RunDetailActivity extends BaseRepoActivity {
         i.putExtra("jobName", job.optString("name"));
         i.putExtra("active", Status.isActive(job.optString("status")));
         startActivity(i);
-    }
-
-    /** Last lines of the most relevant job's log, shown right on the run page, with a copy button. */
-    private void addLogPreview() {
-        if (previewJob == null || previewRaw.isEmpty()) return;
-        content.addView(Ui.sectionTitle(this, getString(R.string.lg_preview_title, previewJobName)));
-        TextView t = new TextView(this);
-        t.setText(LogFmt.format(this, previewRaw, 0, 40));
-        t.setTypeface(Typeface.MONOSPACE);
-        t.setTextSize(11);
-        t.setTextColor(Ui.color(this, R.color.text_primary));
-        t.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-        t.setTextIsSelectable(true);
-        int p = Ui.dp(this, 12);
-        t.setPadding(p, p, p, p);
-        t.setBackgroundResource(R.drawable.bg_card);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 8));
-        content.addView(t, lp);
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 8));
-        Button copyB = Ui.button(this, R.string.lg_copy_all, true);
-        copyB.setOnClickListener(v -> copyFullLog());
-        Button openB = Ui.button(this, R.string.lg_open_full, false);
-        final JSONObject pj = previewJob;
-        openB.setOnClickListener(v -> openLog(pj));
-        row.addView(copyB, weighted());
-        row.addView(openB, weighted());
-        content.addView(row);
-    }
-
-    private void copyFullLog() {
-        final long id = previewJobId;
-        if (id == 0) return;
-        bg(() -> {
-            GitHubApi.TextResult r = api.readTail(api.jobLogsPath(owner, repo, id),
-                    "application/vnd.github+json", 300 * 1024);
-            String plain = LogFmt.format(this, r.text, 0, 0).toString().trim();
-            final String out = plain.length() > 150000 ? plain.substring(plain.length() - 150000) : plain;
-            post(() -> copy("log", out));
-        });
-    }
-
-    private CharSequence stepsText(JSONArray steps) {
-        SpannableStringBuilder sb = new SpannableStringBuilder();
-        int n = steps.length();
-        for (int i = 0; i < n; i++) {
-            JSONObject st = steps.optJSONObject(i);
-            if (st == null) continue;
-            String s = st.optString("status");
-            String c = st.optString("conclusion");
-            StringBuilder line = new StringBuilder();
-            line.append(Status.glyph(s, c)).append(' ').append(st.optInt("number")).append(". ")
-                    .append(st.optString("name"));
-            long a = Fmt.parse(Fmt.s(st, "started_at"));
-            long b = Fmt.parse(Fmt.s(st, "completed_at"));
-            if (a > 0 && b >= a && b - a >= 1000) line.append("  (").append(Fmt.duration(b - a)).append(')');
-            int start = sb.length();
-            sb.append(line);
-            int end = sb.length();
-            String state = Status.state(s, c);
-            if ("failure".equals(state) || "timed_out".equals(state)) {
-                sb.setSpan(new ForegroundColorSpan(Ui.color(this, R.color.bad)), start, end,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            } else if ("in_progress".equals(state)) {
-                sb.setSpan(new ForegroundColorSpan(Ui.color(this, R.color.info)), start, end,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-            if (i < n - 1) sb.append('\n');
-        }
-        return sb;
     }
 
     private void addButtons(String s, String c) {

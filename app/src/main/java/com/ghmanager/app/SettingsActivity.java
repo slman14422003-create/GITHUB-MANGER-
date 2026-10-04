@@ -63,16 +63,30 @@ public class SettingsActivity extends BaseRepoActivity {
         addRow(new Row(R.drawable.ic_shield, true, getString(R.string.perm_title), null, false, true),
                 v -> startActivity(new Intent(this, PermissionsActivity.class)));
 
+        // ---- proxy mirror (for places where github.com is blocked)
+        content.addView(Ui.sectionTitle(this, getString(R.string.mir_title)));
+        addRow(new Row(R.drawable.ic_share, true, getString(R.string.mir_url),
+                MirrorDialog.summary(this), false, true),
+                v -> MirrorDialog.show(this, this::render));
+
         // ---- account
         content.addView(Ui.sectionTitle(this, getString(R.string.set_account)));
-        addRow(new Row(R.drawable.ic_logout, true, getString(R.string.logout), null, false, false).tint(Ui.color(this, R.color.bad)),
-                v -> confirm(getString(R.string.logout), getString(R.string.set_logout_msg), R.string.logout, () -> {
-                    Store.clear(this);
-                    Intent i = new Intent(this, LoginActivity.class);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(i);
-                    finish();
-                }));
+        Accounts.Acc cur = Accounts.active(this);
+        addRow(new Row(R.drawable.ic_user, true, cur == null ? getString(R.string.acc_title) : cur.title(),
+                getString(R.string.acc_manage_sub), false, true),
+                v -> startActivity(new Intent(this, AccountActivity.class)));
+        addRow(new Row(R.drawable.ic_add, true, getString(R.string.acc_add), null, false, true), v -> {
+            Intent i = new Intent(this, LoginActivity.class);
+            i.putExtra("add", true);
+            startActivity(i);
+        });
+        if (cur != null) {
+            final String id = cur.id;
+            addRow(new Row(R.drawable.ic_logout, true, getString(R.string.acc_signout), null, false, false)
+                            .tint(Ui.color(this, R.color.bad)),
+                    v -> confirm(getString(R.string.acc_signout), getString(R.string.acc_signout_msg),
+                            R.string.logout, () -> Accounts.signOut(this, id)));
+        }
 
         // ---- about
         content.addView(Ui.sectionTitle(this, getString(R.string.set_about)));
