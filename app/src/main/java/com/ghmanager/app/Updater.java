@@ -21,7 +21,10 @@ public final class Updater {
     }
 
     /** Repository the app updates itself from unless the user chooses another one. */
-    public static final String DEFAULT_REPO = "slman14422003/create-GITHUB-MANGER-";
+    public static final String DEFAULT_REPO = "slman14422003-create/GITHUB-MANGER";
+
+    /** Wrong slug shipped in earlier builds; it made the update check answer "Not Found". */
+    public static final String OLD_BROKEN_REPO = "slman14422003/create-GITHUB-MANGER-";
 
     private static final long AUTO_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
 

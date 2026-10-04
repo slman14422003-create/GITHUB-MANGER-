@@ -67,12 +67,15 @@ public class UpdateActivity extends BaseRepoActivity {
                     post(this::relogin);
                     return;
                 }
-                final String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+                final String raw = e.getMessage() == null ? e.toString() : e.getMessage();
+                final boolean notFound = e instanceof GitHubApi.ApiException
+                        && ((GitHubApi.ApiException) e).code == 404;
                 post(() -> {
                     loading(false);
                     checked = true;
                     info = null;
-                    errorText = getString(R.string.upd_error, msg);
+                    errorText = notFound ? getString(R.string.upd_repo_404, owner + "/" + repo)
+                            : getString(R.string.upd_error, raw);
                     render();
                 });
             }
@@ -91,6 +94,9 @@ public class UpdateActivity extends BaseRepoActivity {
                     getString(R.string.upd_checking), false, false), null);
         } else if (errorText != null) {
             content.addView(Ui.noteCard(this, errorText, R.color.bad));
+            Button change = Ui.block(this, Ui.button(this, R.string.upd_change_source, false));
+            change.setOnClickListener(v -> editSource());
+            content.addView(change);
         } else if (info == null) {
             content.addView(Ui.noteCard(this, getString(R.string.upd_none_found), R.color.text_secondary));
         } else {

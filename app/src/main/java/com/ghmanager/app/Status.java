@@ -23,34 +23,34 @@ public final class Status {
     public static String label(String status, String conclusion) {
         switch (state(status, conclusion)) {
             case "success":
-                return "نجاح";
+                return Lang.isAr() ? "نجاح" : "Success";
             case "failure":
-                return "فشل";
+                return Lang.isAr() ? "فشل" : "Failed";
             case "cancelled":
-                return "أُلغي";
+                return Lang.isAr() ? "أُلغي" : "Cancelled";
             case "skipped":
-                return "تم التخطي";
+                return Lang.isAr() ? "تم التخطي" : "Skipped";
             case "timed_out":
-                return "انتهت المهلة";
+                return Lang.isAr() ? "انتهت المهلة" : "Timed out";
             case "neutral":
-                return "محايد";
+                return Lang.isAr() ? "محايد" : "Neutral";
             case "action_required":
-                return "يتطلب إجراء";
+                return Lang.isAr() ? "يتطلب إجراء" : "Action required";
             case "stale":
-                return "قديم";
+                return Lang.isAr() ? "قديم" : "Stale";
             case "startup_failure":
-                return "فشل البدء";
+                return Lang.isAr() ? "فشل البدء" : "Startup failure";
             case "in_progress":
-                return "قيد التشغيل";
+                return Lang.isAr() ? "قيد التشغيل" : "In progress";
             case "queued":
-                return "في الانتظار";
+                return Lang.isAr() ? "في الانتظار" : "Queued";
             case "waiting":
-                return "بانتظار الموافقة";
+                return Lang.isAr() ? "بانتظار الموافقة" : "Waiting";
             case "pending":
             case "requested":
-                return "معلّق";
+                return Lang.isAr() ? "معلّق" : "Pending";
             case "completed":
-                return "مكتمل";
+                return Lang.isAr() ? "مكتمل" : "Completed";
             default:
                 return status == null ? "" : status;
         }

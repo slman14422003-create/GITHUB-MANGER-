@@ -31,7 +31,10 @@ public class Store {
     /** "owner/repo" the app downloads its own new versions from. */
     public static String getUpdateRepo(Context c) {
         String v = sp(c).getString("upd_repo", "");
-        return v == null || v.trim().isEmpty() ? Updater.DEFAULT_REPO : v.trim();
+        if (v == null || v.trim().isEmpty() || Updater.OLD_BROKEN_REPO.equals(v.trim())) {
+            return Updater.DEFAULT_REPO;
+        }
+        return v.trim();
     }
 
     public static void setUpdateRepo(Context c, String v) {
@@ -68,5 +71,16 @@ public class Store {
 
     public static void setSkippedVersion(Context c, String tag) {
         sp(c).edit().putString("upd_skip", tag == null ? "" : tag).apply();
+    }
+
+    // ------------------------------------------------------------------ app settings
+
+    /** "system", "ar" or "en". */
+    public static String language(Context c) {
+        return sp(c).getString("upd_lang", "system");
+    }
+
+    public static void setLanguage(Context c, String v) {
+        sp(c).edit().putString("upd_lang", v == null ? "system" : v).apply();
     }
 }

@@ -18,6 +18,7 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        Lang.init(this);
         if (Build.VERSION.SDK_INT < 35) return;
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override

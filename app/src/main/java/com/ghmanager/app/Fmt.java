@@ -46,33 +46,42 @@ public final class Fmt {
         return n + " " + many;
     }
 
+    private static String en(long n, String word) {
+        return n + " " + word + (n == 1 ? "" : "s") + " ago";
+    }
+
     public static String ago(String iso) {
         long t = parse(iso);
         if (t == 0) return "";
         long s = Math.max(0, (System.currentTimeMillis() - t) / 1000);
-        if (s < 45) return "الآن";
+        boolean ar = Lang.isAr();
+        if (s < 45) return ar ? "الآن" : "just now";
         long m = s / 60;
-        if (m < 60) return "منذ " + unit(Math.max(1, m), "دقيقة", "دقيقتين", "دقائق", "دقيقة");
+        if (m < 60) {
+            m = Math.max(1, m);
+            return ar ? "منذ " + unit(m, "دقيقة", "دقيقتين", "دقائق", "دقيقة") : en(m, "minute");
+        }
         long h = m / 60;
-        if (h < 24) return "منذ " + unit(h, "ساعة", "ساعتين", "ساعات", "ساعة");
+        if (h < 24) return ar ? "منذ " + unit(h, "ساعة", "ساعتين", "ساعات", "ساعة") : en(h, "hour");
         long d = h / 24;
-        if (d < 30) return "منذ " + unit(d, "يوم", "يومين", "أيام", "يومًا");
+        if (d < 30) return ar ? "منذ " + unit(d, "يوم", "يومين", "أيام", "يومًا") : en(d, "day");
         long mo = d / 30;
-        if (mo < 12) return "منذ " + unit(mo, "شهر", "شهرين", "أشهر", "شهرًا");
-        long y = d / 365;
-        return "منذ " + unit(Math.max(1, y), "سنة", "سنتين", "سنوات", "سنة");
+        if (mo < 12) return ar ? "منذ " + unit(mo, "شهر", "شهرين", "أشهر", "شهرًا") : en(mo, "month");
+        long y = Math.max(1, d / 365);
+        return ar ? "منذ " + unit(y, "سنة", "سنتين", "سنوات", "سنة") : en(y, "year");
     }
 
     public static String duration(long ms) {
         if (ms < 0) ms = 0;
+        boolean ar = Lang.isAr();
         long s = ms / 1000;
-        if (s < 60) return s + "ث";
+        if (s < 60) return s + (ar ? "ث" : "s");
         long m = s / 60;
         s = s % 60;
-        if (m < 60) return m + "د " + s + "ث";
+        if (m < 60) return ar ? m + "د " + s + "ث" : m + "m " + s + "s";
         long h = m / 60;
         m = m % 60;
-        return h + "س " + m + "د";
+        return ar ? h + "س " + m + "د" : h + "h " + m + "m";
     }
 
     /** Safe string getter: returns "" for missing keys and JSON null. */

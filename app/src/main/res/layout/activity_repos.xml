@@ -116,9 +116,11 @@
             android:paddingBottom="12dp">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_circle_neutral"
                 android:importantForAccessibility="no"
+                android:padding="9dp"
                 android:src="@drawable/ic_folder"
                 android:tint="@color/accent_text" />
 
@@ -153,9 +155,11 @@
             android:paddingBottom="12dp">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_circle_neutral"
                 android:importantForAccessibility="no"
+                android:padding="9dp"
                 android:src="@drawable/ic_shield"
                 android:tint="@color/ok" />
 
@@ -172,7 +176,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/btnUpdate"
+            android:id="@+id/btnSettings"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="5dp"
@@ -190,11 +194,13 @@
             android:paddingBottom="12dp">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_circle_neutral"
                 android:importantForAccessibility="no"
-                android:src="@drawable/ic_download"
-                android:tint="@color/info" />
+                android:padding="9dp"
+                android:src="@drawable/ic_settings"
+                android:tint="@color/warn" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -203,7 +209,7 @@
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="2"
-                android:text="@string/upd_title"
+                android:text="@string/set_title"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
         </LinearLayout>

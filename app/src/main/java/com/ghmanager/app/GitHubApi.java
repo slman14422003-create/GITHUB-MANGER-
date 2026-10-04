@@ -547,12 +547,20 @@ public class GitHubApi {
 
     public JSONObject listRuns(String o, String r, long workflowId, String status, String branch,
                                int page, int perPage) throws Exception {
+        return listRuns(o, r, workflowId, status, branch, null, null, page, perPage);
+    }
+
+    /** Same as above with GitHub's own "event" and "actor" filters. */
+    public JSONObject listRuns(String o, String r, long workflowId, String status, String branch,
+                               String event, String actor, int page, int perPage) throws Exception {
         StringBuilder p = new StringBuilder(repo(o, r));
         if (workflowId > 0) p.append("/actions/workflows/").append(workflowId).append("/runs");
         else p.append("/actions/runs");
         p.append("?per_page=").append(perPage).append("&page=").append(page);
         if (status != null && !status.isEmpty()) p.append("&status=").append(qe(status));
         if (branch != null && !branch.isEmpty()) p.append("&branch=").append(qe(branch));
+        if (event != null && !event.isEmpty()) p.append("&event=").append(qe(event));
+        if (actor != null && !actor.isEmpty()) p.append("&actor=").append(qe(actor));
         return obj(p.toString());
     }
 
