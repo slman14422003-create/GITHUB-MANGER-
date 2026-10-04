@@ -345,28 +345,35 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void dispatchDialog(final long workflowId, final String workflowName, final Runnable after) {
-        LinearLayout box = Ui.box(this);
-        final EditText ref = Ui.edit(this, getString(R.string.ref_hint), branch);
-        final EditText inputs = Ui.editMulti(this, getString(R.string.inputs_hint), null, 3);
-        box.addView(ref);
-        box.addView(inputs);
-        new Dlg(this)
-                .setTitle(getString(R.string.run_workflow) + ": " + workflowName)
-                .setView(box)
-                .setPositiveButton(R.string.run, (d, w) -> {
-                    String r = ref.getText().toString().trim();
-                    final String useRef = r.isEmpty() ? branch : r;
-                    final JSONObject in = parseInputs(inputs.getText().toString());
-                    bg(() -> {
-                        api.dispatchWorkflow(owner, repo, workflowId, useRef, in);
-                        post(() -> {
-                            toast(R.string.workflow_dispatched);
-                            if (after != null) after.run();
-                        });
-                    });
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
+        loading(true);
+        // read the workflow file first: the dialog then shows its real inputs (tag, version, options...)
+        io.execute(() -> {
+            String yaml = "";
+            String suggested = "";
+            try {
+                JSONObject wf = api.getWorkflow(owner, repo, workflowId);
+                byte[] raw = api.getFileBytes(owner, repo, wf.optString("path"), branch, 512 * 1024);
+                if (raw != null) yaml = new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception ignored) {
+            }
+            try {
+                suggested = Versions.nextAfter(api.listReleases(owner, repo, 1, 10));
+            } catch (Exception ignored) {
+            }
+            final String fy = yaml;
+            final String fs = suggested;
+            post(() -> {
+                loading(false);
+                DispatchDialog.show(this, getString(R.string.run_workflow) + ": " + workflowName, branch, fy, fs,
+                        (useRef, in) -> bg(() -> {
+                            api.dispatchWorkflow(owner, repo, workflowId, useRef, in);
+                            post(() -> {
+                                toast(R.string.workflow_dispatched);
+                                if (after != null) after.run();
+                            });
+                        }), null);
+            });
+        });
     }
 
     // ------------------------------------------------------------------ progress

@@ -36,6 +36,14 @@ public class App extends Application {
                 View root = a.getWindow().getDecorView();
                 // ignore touches while another window (an overlay) covers the app: tapjacking protection
                 root.setFilterTouchesWhenObscured(true);
+                // Android 12+: system alert windows of other apps are hidden while this app is on screen
+                if (Build.VERSION.SDK_INT >= 31) {
+                    try {
+                        a.getWindow().setHideOverlayWindows(true);
+                    } catch (Exception ignored) {
+                    }
+                }
+                AppLock.onStarted(a);
                 if (Build.VERSION.SDK_INT < 35) return;
                 View content = a.findViewById(android.R.id.content);
                 if (content == null || content.getTag(R.id.tag_insets) != null) return;
@@ -51,7 +59,10 @@ public class App extends Application {
 
             @Override public void onActivityResumed(Activity a) { }
             @Override public void onActivityPaused(Activity a) { }
-            @Override public void onActivityStopped(Activity a) { }
+            @Override
+            public void onActivityStopped(Activity a) {
+                AppLock.onStopped();
+            }
             @Override public void onActivitySaveInstanceState(Activity a, Bundle b) { }
             @Override public void onActivityDestroyed(Activity a) { }
         });

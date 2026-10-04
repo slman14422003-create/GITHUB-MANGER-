@@ -63,6 +63,37 @@ public class SettingsActivity extends BaseRepoActivity {
         addRow(new Row(R.drawable.ic_shield, true, getString(R.string.perm_title), null, false, true),
                 v -> startActivity(new Intent(this, PermissionsActivity.class)));
 
+        addRow(new Row(R.drawable.ic_clipboard, true, getString(R.string.pr_title), getString(R.string.pr_sub),
+                false, true), v -> startActivity(new Intent(this, PromptsActivity.class)));
+
+        // ---- security
+        content.addView(Ui.sectionTitle(this, getString(R.string.sec_title)));
+        final Ui.Toggle lock = Ui.toggle(this, content, R.string.lock_enable, R.string.lock_enable_sub,
+                AppLock.enabled(this));
+        lock.onChange((b, on) -> {
+            if (on && !AppLock.available(this)) {
+                toast(R.string.lock_need_screen_lock);
+                lock.setChecked(false);
+                return;
+            }
+            AppLock.setEnabled(this, on);
+            render();
+        });
+        content.addView(lock.view);
+        if (AppLock.enabled(this)) {
+            final int[] secs = {0, 30, 120, 300};
+            final String[] names = {getString(R.string.lock_now), getString(R.string.lock_30s),
+                    getString(R.string.lock_2m), getString(R.string.lock_5m)};
+            int cur = AppLock.delaySeconds(this);
+            String curName = names[1];
+            for (int i = 0; i < secs.length; i++) if (secs[i] == cur) curName = names[i];
+            addRow(new Row(R.drawable.ic_timer, true, getString(R.string.lock_delay), curName, false, true),
+                    v -> choose(getString(R.string.lock_delay), names, (d, which) -> {
+                        AppLock.setDelaySeconds(this, secs[which]);
+                        render();
+                    }));
+        }
+
         // ---- proxy mirror (for places where github.com is blocked)
         content.addView(Ui.sectionTitle(this, getString(R.string.mir_title)));
         addRow(new Row(R.drawable.ic_share, true, getString(R.string.mir_url),

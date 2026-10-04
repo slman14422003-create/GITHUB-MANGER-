@@ -148,6 +148,9 @@ public class RepoHomeActivity extends BaseRepoActivity {
 
         content.addView(Ui.sectionTitle(this, getString(R.string.more)));
 
+        addRow(new Row(R.drawable.ic_clipboard, true, getString(R.string.pr_title), getString(R.string.pr_sub),
+                false, true), v -> startActivity(repoIntent(PromptsActivity.class)));
+
         addRow(new Row(R.drawable.ic_download, false, getString(R.string.download_zip),
                 getString(R.string.download_zip_sub, branch), false, false),
                 v -> saveAs(repo + "-" + branch.replace('/', '-') + ".zip",

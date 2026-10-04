@@ -107,6 +107,14 @@ public class GitHubApi {
     private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
         // never talk plain HTTP (a redirect to http:// must not downgrade a download)
         if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
+        if (api && !Mirror.isMirrored(url)) {
+            // the token may only ever be sent to GitHub's own API hosts (a crafted path such as
+            // "@evil.com" must never be able to redirect it somewhere else)
+            String host = new URL(url).getHost().toLowerCase(java.util.Locale.ROOT);
+            if (!host.equals("api.github.com") && !host.equals("uploads.github.com")) {
+                throw new IOException("Blocked host");
+            }
+        }
         final String real = Mirror.map(url);
         HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
         c.setRequestMethod(method);
@@ -143,7 +151,7 @@ public class GitHubApi {
             if (msg.length() > 300) msg = msg.substring(0, 300);
         }
         if (msg.isEmpty()) msg = "HTTP " + code;
-        return new ApiException(code, msg);
+        return new ApiException(code, Redact.text(msg));
     }
 
     private String request(String method, String path, JSONObject body) throws IOException, ApiException {

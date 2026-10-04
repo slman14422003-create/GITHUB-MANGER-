@@ -293,13 +293,22 @@ public class ReleasesActivity extends BaseRepoActivity {
             }
             JSONObject in = new JSONObject();
             if (r.has("build_type")) in.put("build_type", buildType);
-            if (r.has("version") && !version.isEmpty()) in.put("version", version);
+            final String tagKey = r.tagInput();
+            if (tagKey != null && !version.isEmpty()) {
+                if (!Versions.validTag(version)) {
+                    post(() -> toast(R.string.tag_invalid));
+                    return;
+                }
+                in.put(tagKey, version);
+            }
+            final boolean tagIgnored = tagKey == null && !version.isEmpty();
             if (r.has("publish_release")) in.put("publish_release", String.valueOf(publish));
             if (r.has("prerelease")) in.put("prerelease", String.valueOf(prerelease));
             final boolean noReleaseInputs = publish && !r.has("publish_release");
             api.dispatchWorkflow(owner, repo, wf.optLong("id"), useRef, in);
             post(() -> {
-                if (noReleaseInputs) info(getString(R.string.br_title), getString(R.string.br_no_release_inputs));
+                if (tagIgnored) info(getString(R.string.br_title), getString(R.string.tag_none_declared));
+                else if (noReleaseInputs) info(getString(R.string.br_title), getString(R.string.br_no_release_inputs));
                 else toast(R.string.br_started);
                 Intent i = repoIntent(ActionsActivity.class);
                 i.putExtra("workflowId", wf.optLong("id"));

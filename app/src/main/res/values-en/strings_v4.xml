@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="enabled">Enabled</string>
+    <string name="tag_name_short">Release number (Tag)</string>
+    <string name="tag_use_next">Use the next number</string>
+    <string name="tag_invalid">Invalid tag: use only letters, digits, dot and dash (e.g. v1.2.0)</string>
+    <string name="tag_none_declared">This workflow declares no tag or version input (such as tag or version) under workflow_dispatch, so the number cannot be passed to it. Use Ready prompts → Workflow that asks for the Tag to get it added.</string>
+
+    <string name="sec_title">Security</string>
+    <string name="lock_enable">App lock</string>
+    <string name="lock_enable_sub">Asks for your phone\'s fingerprint, pattern or PIN when the app opens</string>
+    <string name="lock_need_screen_lock">Turn on a screen lock on your phone first (fingerprint, pattern or PIN)</string>
+    <string name="lock_delay">Lock after leaving</string>
+    <string name="lock_now">Immediately</string>
+    <string name="lock_30s">After 30 seconds</string>
+    <string name="lock_2m">After 2 minutes</string>
+    <string name="lock_5m">After 5 minutes</string>
+    <string name="lock_title">App locked</string>
+    <string name="lock_unlock">Unlock</string>
+
+    <string name="pr_title">Ready prompts</string>
+    <string name="pr_sub">Uploading files and folders, fixing upload problems</string>
+    <string name="pr_hint">Tap a prompt to copy or share it; the repository and branch are filled in for you. Fill the [brackets] yourself.</string>
+    <string name="pr_g_files">Uploading files</string>
+    <string name="pr_g_folders">Uploading folders</string>
+    <string name="pr_g_fix">Fixing upload problems</string>
+    <string name="pr_g_release">Releases and workflows</string>
+    <string name="copy_text">Copy text</string>
+</resources>

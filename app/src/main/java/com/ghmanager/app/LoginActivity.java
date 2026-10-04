@@ -221,7 +221,11 @@ public class LoginActivity extends AppCompatActivity {
     private void copyCode(String code) {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText("code", code));
+            ClipData clip = ClipData.newPlainText("code", code);
+            android.os.PersistableBundle extras = new android.os.PersistableBundle();
+            extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
+            clip.getDescription().setExtras(extras);
+            cm.setPrimaryClip(clip);
             Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show();
         }
     }

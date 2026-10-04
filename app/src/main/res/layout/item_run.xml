@@ -67,11 +67,12 @@
 
             <ImageView
                 android:id="@+id/act3"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="-6dp"
                 android:background="@drawable/bg_icon_btn"
                 android:contentDescription="@string/more"
-                android:padding="9dp"
+                android:padding="11dp"
                 android:src="@drawable/ic_more"
                 android:tint="@color/text_secondary" />
         </LinearLayout>
@@ -195,7 +196,8 @@
             <TextView
                 android:id="@+id/act1"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+        android:minHeight="34dp"
                 android:background="@drawable/bg_pill_small"
                 android:drawablePadding="6dp"
                 android:drawableTint="@color/text_primary"
@@ -208,7 +210,8 @@
             <TextView
                 android:id="@+id/act2"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+        android:minHeight="34dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_pill_small"
                 android:drawablePadding="6dp"
