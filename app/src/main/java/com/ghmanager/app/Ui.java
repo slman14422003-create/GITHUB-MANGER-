@@ -29,6 +29,25 @@ public final class Ui {
     private Ui() {
     }
 
+    /** Gives a view a soft "press in, spring back" scale animation. */
+    public static void press(Context c, View v) {
+        if (v == null) return;
+        v.setStateListAnimator(android.animation.AnimatorInflater.loadStateListAnimator(c, R.animator.press_scale));
+    }
+
+    /** Fades and slides a freshly shown item up into place; index staggers neighbouring items. */
+    public static void enter(View v, int index) {
+        if (v == null) return;
+        v.animate().cancel();
+        v.setAlpha(0f);
+        v.setTranslationY(dp(v.getContext(), 14));
+        v.animate().alpha(1f).translationY(0f)
+                .setStartDelay(Math.min(Math.max(index, 0), 9) * 28L)
+                .setDuration(300)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
+                .start();
+    }
+
     public static int dp(Context c, int v) {
         return (int) (v * c.getResources().getDisplayMetrics().density);
     }
@@ -137,6 +156,7 @@ public final class Ui {
         lp.setMarginEnd(dp(c, 8));
         t.setLayoutParams(lp);
         setChip(c, t, selected);
+        press(c, t);
         return t;
     }
 
@@ -182,7 +202,7 @@ public final class Ui {
         b.setTextSize(15);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setMinHeight(dp(c, 50));
-        b.setStateListAnimator(null);
+        press(c, b);
         return b;
     }
 
@@ -255,6 +275,8 @@ public final class Ui {
         g.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) {
+                int idx = g.indexOfChild(child);
+                if (idx >= 0 && idx < 14 && child.getVisibility() == View.VISIBLE) enter(child, idx);
                 g.removeCallbacks(r);
                 g.post(r);
             }

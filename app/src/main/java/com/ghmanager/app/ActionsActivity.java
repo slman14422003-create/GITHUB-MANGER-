@@ -602,6 +602,8 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private final class RunAdapter extends BaseAdapter {
+        private int animatedUpTo = -1;
+
         @Override
         public int getCount() {
             return shown.size() + (hasMore ? 1 : 0);
@@ -640,6 +642,14 @@ public class ActionsActivity extends BaseRepoActivity {
             View v = convertView != null ? convertView
                     : LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_run, parent, false);
             bindRun(v, shown.get(position));
+            if (position > animatedUpTo) {
+                animatedUpTo = position;
+                Ui.enter(v, position);
+            } else {
+                v.animate().cancel();
+                v.setAlpha(1f);
+                v.setTranslationY(0f);
+            }
             return v;
         }
     }
@@ -674,6 +684,7 @@ public class ActionsActivity extends BaseRepoActivity {
 
         // card with a status-tinted outline for failed / running runs
         View card = v.findViewById(R.id.card);
+        Ui.press(this, card);
         GradientDrawable fill = new GradientDrawable();
         fill.setColor(Ui.color(this, R.color.surface));
         fill.setCornerRadius(Ui.dp(this, 24));

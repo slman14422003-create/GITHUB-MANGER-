@@ -31,7 +31,7 @@ public class Store {
     /** "owner/repo" the app downloads its own new versions from. */
     public static String getUpdateRepo(Context c) {
         String v = sp(c).getString("upd_repo", "");
-        if (v == null || v.trim().isEmpty() || Updater.OLD_BROKEN_REPO.equals(v.trim())) {
+        if (v == null || v.trim().isEmpty() || Updater.isBrokenSlug(v.trim())) {
             return Updater.DEFAULT_REPO;
         }
         return v.trim();

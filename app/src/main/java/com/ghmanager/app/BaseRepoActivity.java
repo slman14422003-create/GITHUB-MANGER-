@@ -107,6 +107,10 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         btnA1 = findViewById(R.id.btnA1);
         btnA2 = findViewById(R.id.btnA2);
         btnRefresh = findViewById(R.id.btnRefresh);
+        Ui.press(this, findViewById(R.id.btnBack));
+        Ui.press(this, btnA1);
+        Ui.press(this, btnA2);
+        Ui.press(this, btnRefresh);
         loadingBar = findViewById(R.id.loading);
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);
         View rows = findViewById(R.id.content);

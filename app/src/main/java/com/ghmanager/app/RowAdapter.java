@@ -20,12 +20,15 @@ public class RowAdapter extends BaseAdapter {
     private final LayoutInflater inflater;
     private final List<Row> rows = new ArrayList<>();
 
+    private int animatedUpTo = -1;
+
     public RowAdapter(Context ctx) {
         this.ctx = ctx;
         this.inflater = LayoutInflater.from(ctx);
     }
 
     public void setRows(List<Row> newRows) {
+        if (rows.isEmpty()) animatedUpTo = -1;
         rows.clear();
         rows.addAll(newRows);
         notifyDataSetChanged();
@@ -51,11 +54,20 @@ public class RowAdapter extends BaseAdapter {
         View v = convertView != null ? convertView : inflater.inflate(R.layout.item_row, parent, false);
         bind(ctx, v, rows.get(position));
         Ui.shapeRow(ctx, v, position == 0, position == rows.size() - 1);
+        if (position > animatedUpTo) {
+            animatedUpTo = position;
+            Ui.enter(v, position);
+        } else {
+            v.animate().cancel();
+            v.setAlpha(1f);
+            v.setTranslationY(0f);
+        }
         return v;
     }
 
     /** Fills an inflated item_row view. Shared by lists and by programmatic screens. */
     public static void bind(Context ctx, View v, Row r) {
+        Ui.press(ctx, v.findViewById(R.id.card));
         ImageView icon = v.findViewById(R.id.icon);
         icon.setImageResource(r.icon);
         boolean colored = r.iconColor != 0;

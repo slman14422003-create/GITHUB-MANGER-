@@ -17,6 +17,14 @@
         <item name="colorControlNormal">@color/text_secondary</item>
         <item name="colorControlActivated">@color/accent_text</item>
         <item name="android:textColorLink">@color/accent_text</item>
+        <item name="android:windowAnimationStyle">@style/ActivityAnim</item>
+    </style>
+
+    <style name="ActivityAnim" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/act_open_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/act_open_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/act_close_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/act_close_exit</item>
     </style>
 
     <style name="AppDialog" parent="Theme.AppCompat.Dialog.Alert">
@@ -51,7 +59,7 @@
         <item name="android:textSize">16sp</item>
         <item name="android:textStyle">normal</item>
         <item name="android:minHeight">52dp</item>
-        <item name="android:stateListAnimator">@null</item>
+        <item name="android:stateListAnimator">@animator/press_scale</item>
     </style>
 
     <style name="BtnSecondary" parent="Widget.AppCompat.Button">
@@ -61,7 +69,7 @@
         <item name="android:textSize">16sp</item>
         <item name="android:textStyle">normal</item>
         <item name="android:minHeight">52dp</item>
-        <item name="android:stateListAnimator">@null</item>
+        <item name="android:stateListAnimator">@animator/press_scale</item>
     </style>
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">

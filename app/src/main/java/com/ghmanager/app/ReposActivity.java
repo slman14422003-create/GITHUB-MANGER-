@@ -60,6 +60,10 @@ public class ReposActivity extends AppCompatActivity {
             startActivity(i);
         });
 
+        for (int id : new int[]{R.id.btnFiles, R.id.btnPerms, R.id.btnSettings, R.id.btnNew,
+                R.id.btnRefresh, R.id.btnLogout}) {
+            Ui.press(this, findViewById(id));
+        }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
         findViewById(R.id.btnLogout).setOnClickListener(v -> logout());
