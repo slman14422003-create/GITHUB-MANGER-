@@ -219,7 +219,7 @@ public class FileManagerActivity extends AppCompatActivity {
         listView.setAdapter(adapter);
         listView.setOnItemClickListener((p, v, pos, id) -> onItemClick(pos));
         listView.setOnItemLongClickListener((p, v, pos, id) -> {
-            if ("folder".equals(pickMode)) return true;
+            if ("folder".equals(pickMode) || "save".equals(pickMode)) return true;
             toggleSelect(pos);
             return true;
         });
@@ -292,6 +292,10 @@ public class FileManagerActivity extends AppCompatActivity {
         String last = prefs.getString("last", null);
         if (start == null && lastGranted && last != null && new File(last).isDirectory()) {
             start = new File(last);
+        }
+        if (start == null && "save".equals(pickMode) && lastGranted) {
+            File dl = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (dl != null && dl.isDirectory()) start = dl;
         }
         if (start == null) start = defaultRoot();
         cur = start;
@@ -644,6 +648,7 @@ public class FileManagerActivity extends AppCompatActivity {
         }
         if (pickMode != null) {
             titleView.setText("files".equals(pickMode) ? getString(R.string.pk_title_files)
+                    : "save".equals(pickMode) ? getString(R.string.pk_title_save)
                     : getString(R.string.pk_title_folder));
             updatePickBar();
         }
@@ -1010,8 +1015,14 @@ public class FileManagerActivity extends AppCompatActivity {
             boolean ok = mode == M_DIR;
             pickGo.setEnabled(ok);
             pickGo.setAlpha(ok ? 1f : 0.4f);
-            pickGo.setText(R.string.pk_upload_folder);
-            pickText.setText(cur.getAbsolutePath());
+            if ("save".equals(pickMode)) {
+                pickGo.setText(R.string.pk_save_here);
+                pickText.setText(getString(R.string.pk_save_name,
+                        getIntent().getStringExtra("fileName"), cur.getAbsolutePath()));
+            } else {
+                pickGo.setText(R.string.pk_upload_folder);
+                pickText.setText(cur.getAbsolutePath());
+            }
         }
     }
 
@@ -1028,7 +1039,7 @@ public class FileManagerActivity extends AppCompatActivity {
         }
         Intent r = new Intent();
         r.putStringArrayListExtra("paths", paths);
-        r.putExtra("folder", "folder".equals(pickMode));
+        r.putExtra("folder", !"files".equals(pickMode));
         setResult(RESULT_OK, r);
         finish();
     }

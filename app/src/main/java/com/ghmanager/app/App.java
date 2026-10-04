@@ -5,6 +5,7 @@ import android.app.Application;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -19,10 +20,22 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         Lang.init(this);
-        if (Build.VERSION.SDK_INT < 35) return;
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
+            public void onActivityCreated(Activity a, Bundle b) {
+                // sensitive app: no screenshots, no screen recording, no content in the recent-apps thumbnail
+                if (!BuildConfig.DEBUG) {
+                    a.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,
+                            WindowManager.LayoutParams.FLAG_SECURE);
+                }
+            }
+
+            @Override
             public void onActivityStarted(Activity a) {
+                View root = a.getWindow().getDecorView();
+                // ignore touches while another window (an overlay) covers the app: tapjacking protection
+                root.setFilterTouchesWhenObscured(true);
+                if (Build.VERSION.SDK_INT < 35) return;
                 View content = a.findViewById(android.R.id.content);
                 if (content == null || content.getTag(R.id.tag_insets) != null) return;
                 content.setTag(R.id.tag_insets, Boolean.TRUE);
@@ -35,7 +48,6 @@ public class App extends Application {
                 ViewCompat.requestApplyInsets(content);
             }
 
-            @Override public void onActivityCreated(Activity a, Bundle b) { }
             @Override public void onActivityResumed(Activity a) { }
             @Override public void onActivityPaused(Activity a) { }
             @Override public void onActivityStopped(Activity a) { }

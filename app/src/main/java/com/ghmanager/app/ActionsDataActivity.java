@@ -1,5 +1,6 @@
 package com.ghmanager.app;
 
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
@@ -27,14 +28,17 @@ import java.util.Locale;
 public class ActionsDataActivity extends BaseRepoActivity {
     private String mode = "artifacts";
     private final List<JSONObject> items = new ArrayList<>();
-    private ActivityResultLauncher<String[]> keyPicker;
+    private ActivityResultLauncher<Intent> keyPicker;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
-        keyPicker = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
-            if (uri != null) keystoreDialog(uri);
+        keyPicker = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
+            Intent d = res.getData();
+            if (res.getResultCode() != RESULT_OK || d == null) return;
+            java.util.ArrayList<String> paths = d.getStringArrayListExtra("paths");
+            if (paths != null && !paths.isEmpty()) keystoreDialog(Uri.fromFile(new java.io.File(paths.get(0))));
         });
         String m = getIntent().getStringExtra("mode");
         if (m != null) mode = m;
@@ -284,7 +288,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
                 .setMessage(R.string.sec_key_intro)
                 .setPositiveButton(R.string.sec_choose_file, (d, w) -> {
                     try {
-                        keyPicker.launch(new String[]{"*/*"});
+                        keyPicker.launch(new Intent(this, FileManagerActivity.class).putExtra("pick", "files"));
                     } catch (Exception e) {
                         toast(R.string.cannot_save);
                     }

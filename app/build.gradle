@@ -15,19 +15,43 @@ def signStorePass = System.getenv('SIGNING_STORE_PASSWORD') ?: keystoreProps.get
 def signAlias = System.getenv('SIGNING_KEY_ALIAS') ?: keystoreProps.getProperty('keyAlias')
 def signKeyPass = System.getenv('SIGNING_KEY_PASSWORD') ?: keystoreProps.getProperty('keyPassword')
 def hasSigning = signStore && signStorePass && signAlias && signKeyPass
+// SHA-256 of the signing certificate (hex, no colons). CI computes it from the keystore and the app
+// compares it with the certificate it is really installed with (tamper / repackaging detection).
+def expectedCert = (System.getenv('EXPECTED_CERT_SHA256') ?: '').replace(':', '').toLowerCase()
+
+// A release build must ALWAYS use the same permanent key. A random temporary key changes the
+// certificate fingerprint on every build, so the fingerprint could never be registered with
+// Google (Play Console / developer verification) and updates would refuse to install.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasSigning && graph.allTasks.any { it.name.toLowerCase().contains('release') && it.path.startsWith(':app:assemble') }) {
+        throw new GradleException('Release signing is not configured. Provide KEYSTORE_BASE64, KEYSTORE_PASSWORD, ' +
+                'KEY_ALIAS (and KEY_PASSWORD) as GitHub secrets, or a local keystore.properties. See SIGNING.md.')
+    }
+}
 
 android {
     namespace = 'com.ghmanager.app'
     compileSdk = 36   // Android 16
 
     defaultConfig {
-        applicationId = "com.ghmanager.app"
+        applicationId = "app.ghconsole.mgr26"   // namespace (com.ghmanager.app) stays for the source code; this is the public package name
         minSdk = 24
         targetSdk = 36   // Android 16
         // CI run number keeps versionCode increasing so a new build always installs over the old one
         versionCode = (System.getenv('VERSION_CODE_OVERRIDE') ?: (10 + (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()).toString()).toInteger()
         // CI passes the release tag (without the leading v) so the installed version matches the Release tag
         versionName = System.getenv('APP_VERSION_NAME') ?: "2.2"
+        buildConfigField 'String', 'CERT_SHA256', "\"${expectedCert}\""
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    // No build-time metadata that identifies the toolchain inside the APK
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     signingConfigs {
@@ -46,6 +70,7 @@ android {
 
     buildTypes {
         release {
+            debuggable = false
             minifyEnabled = true
             shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

@@ -245,6 +245,11 @@ public class UpdateActivity extends BaseRepoActivity {
                     throw new java.io.IOException(getString(R.string.upd_hash_bad));
                 }
             }
+            // the update must be signed by the same key as the installed app
+            if (!Integrity.sameSigner(UpdateActivity.this, apk)) {
+                apk.delete();
+                throw new java.io.IOException(getString(R.string.upd_sig_bad));
+            }
             post(() -> {
                 hideProgress();
                 Perms.installApk(UpdateActivity.this, apk);

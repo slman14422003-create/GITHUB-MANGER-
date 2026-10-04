@@ -47,6 +47,7 @@ public class FileScanner {
     }
 
     public static String displayName(ContentResolver cr, Uri uri) {
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) return new java.io.File(uri.getPath()).getName();
         Cursor c = null;
         try {
             c = cr.query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null);
@@ -60,6 +61,7 @@ public class FileScanner {
 
     /** Size in bytes, or -1 when the provider does not report it. */
     public static long size(ContentResolver cr, Uri uri) {
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) return new java.io.File(uri.getPath()).length();
         Cursor c = null;
         try {
             c = cr.query(uri, new String[]{OpenableColumns.SIZE}, null, null, null);
@@ -69,6 +71,24 @@ public class FileScanner {
             if (c != null) c.close();
         }
         return -1;
+    }
+
+    /** MIME type for a content:// or file:// uri; never null. */
+    public static String mime(ContentResolver cr, Uri uri) {
+        String t = null;
+        try {
+            t = cr.getType(uri);
+        } catch (Exception ignored) {
+        }
+        if (t == null) {
+            String n = displayName(cr, uri);
+            int dot = n == null ? -1 : n.lastIndexOf('.');
+            if (dot >= 0) {
+                t = android.webkit.MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(n.substring(dot + 1).toLowerCase(java.util.Locale.US));
+            }
+        }
+        return t == null ? "application/octet-stream" : t;
     }
 
     private static String docName(ContentResolver cr, Uri docUri) {

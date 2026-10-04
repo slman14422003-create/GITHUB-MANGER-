@@ -105,6 +105,8 @@ public class GitHubApi {
     }
 
     private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
+        // never talk plain HTTP (a redirect to http:// must not downgrade a download)
+        if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setRequestMethod(method);
         c.setConnectTimeout(20000);

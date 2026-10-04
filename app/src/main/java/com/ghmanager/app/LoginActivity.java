@@ -25,6 +25,15 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen splash = SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
+        if (!Integrity.verify(this)) {
+            new Dlg(this)
+                    .setTitle(R.string.integrity_title)
+                    .setMessage(R.string.integrity_msg)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok, (d, w) -> finishAffinity())
+                    .show();
+            return;
+        }
         final long start = SystemClock.uptimeMillis();
         splash.setKeepOnScreenCondition(() -> SystemClock.uptimeMillis() - start < SPLASH_MS);
         splash.setOnExitAnimationListener(provider -> provider.getView().animate()
@@ -34,7 +43,7 @@ public class LoginActivity extends AppCompatActivity {
                 .setDuration(220)
                 .withEndAction(provider::remove)
                 .start());
-        if (!Store.getToken(this).isEmpty()) {
+        if (!getIntent().getBooleanExtra("reauth", false) && !Store.getToken(this).isEmpty()) {
             ui.postDelayed(() -> {
                 if (isFinishing()) return;
                 startActivity(new Intent(LoginActivity.this, ReposActivity.class));

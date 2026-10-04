@@ -1,6 +1,7 @@
 package com.ghmanager.app;
 
 import android.content.ContentResolver;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
@@ -27,7 +28,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     private long releaseId;
     private JSONObject rel;
     private LinearLayout content;
-    private ActivityResultLauncher<String[]> pickFiles;
+    private ActivityResultLauncher<Intent> pickFiles;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,8 +37,15 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         releaseId = getIntent().getLongExtra("releaseId", 0);
         bindHeader(getString(R.string.release), repo);
         content = findViewById(R.id.content);
-        pickFiles = registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
-            if (uris != null && !uris.isEmpty()) uploadFiles(uris);
+        // files are chosen in the app's own file manager
+        pickFiles = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
+            Intent d = res.getData();
+            if (res.getResultCode() != RESULT_OK || d == null) return;
+            ArrayList<String> paths = d.getStringArrayListExtra("paths");
+            if (paths == null || paths.isEmpty()) return;
+            List<Uri> uris = new ArrayList<>();
+            for (String p : paths) uris.add(Uri.fromFile(new java.io.File(p)));
+            uploadFiles(uris);
         });
         btnRefresh.setOnClickListener(v -> load());
         action(btnA1, R.drawable.ic_open, R.string.open_in_github, v -> {
@@ -119,7 +127,8 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         up.setOrientation(LinearLayout.HORIZONTAL);
         up.setPadding(Ui.dp(this, 16), Ui.dp(this, 6), Ui.dp(this, 16), 0);
         Button upload = Ui.button(this, R.string.upload_assets, true);
-        upload.setOnClickListener(v -> pickFiles.launch(new String[]{"*/*"}));
+        upload.setOnClickListener(v -> pickFiles.launch(
+                new Intent(this, FileManagerActivity.class).putExtra("pick", "files")));
         up.addView(upload, weighted());
         content.addView(up);
 
@@ -273,7 +282,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
                 if (n == null) n = "file_" + System.currentTimeMillis();
                 final String name = n;
                 long size = FileScanner.size(cr, u);
-                String type = cr.getType(u);
+                String type = FileScanner.mime(cr, u);
                 post(() -> updateProgress(cur, total, name));
                 InputStream in = cr.openInputStream(u);
                 if (in == null) {

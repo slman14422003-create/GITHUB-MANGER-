@@ -66,7 +66,12 @@ public class ReposActivity extends AppCompatActivity {
         }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
-        findViewById(R.id.btnLogout).setOnClickListener(v -> logout());
+        findViewById(R.id.btnLogout).setOnClickListener(v -> new Dlg(this)
+                .setTitle(R.string.logout)
+                .setMessage(R.string.set_logout_msg)
+                .setPositiveButton(R.string.logout, (d, w) -> logout())
+                .setNegativeButton(R.string.cancel, null)
+                .show());
         findViewById(R.id.btnSettings).setOnClickListener(v ->
                 startActivity(new Intent(ReposActivity.this, SettingsActivity.class)));
         findViewById(R.id.btnFiles).setOnClickListener(v ->
@@ -183,7 +188,11 @@ public class ReposActivity extends AppCompatActivity {
                 });
             } catch (GitHubApi.ApiException e) {
                 if (e.code == 401) {
-                    ui.post(this::logout);
+                    // keep the session: the user decides whether to sign in again
+                    ui.post(() -> {
+                        status.setVisibility(View.VISIBLE);
+                        status.setText(R.string.token_rejected_msg);
+                    });
                 } else {
                     ui.post(() -> status.setText(e.getMessage()));
                 }

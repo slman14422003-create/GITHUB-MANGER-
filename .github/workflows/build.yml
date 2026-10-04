@@ -122,32 +122,41 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ADI_SNIPPET: ${{ secrets.ADI_REGISTRATION_SNIPPET }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            {
-              echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks"
-              echo "SIGNING_STORE_PASSWORD=$KEYSTORE_PASSWORD"
-              echo "SIGNING_KEY_ALIAS=$KEY_ALIAS"
-              echo "SIGNING_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
-            } >> "$GITHUB_ENV"
-            echo "SIGNING_MODE=مفتاح المستودع (الأسرار)" >> "$GITHUB_ENV"
-            echo "signing_mode=repo-key" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning title=لا توجد أسرار توقيع::لم يتم ضبط KEYSTORE_BASE64. سيُوقَّع التطبيق بمفتاح مؤقت ولن يتحدّث فوق نسخة موقعة بمفتاح آخر. أضف الأسرار من إعدادات المستودع داخل التطبيق أو من Settings > Secrets and variables > Actions."
-            PASS="$(openssl rand -hex 16)"
-            echo "::add-mask::$PASS"
-            keytool -genkeypair -keystore "$RUNNER_TEMP/temp.jks" -storetype PKCS12 \
-              -alias temp -keyalg RSA -keysize 2048 -validity 3650 \
-              -storepass "$PASS" -keypass "$PASS" -dname "CN=Temporary CI Key"
-            {
-              echo "SIGNING_STORE_FILE=$RUNNER_TEMP/temp.jks"
-              echo "SIGNING_STORE_PASSWORD=$PASS"
-              echo "SIGNING_KEY_ALIAS=temp"
-              echo "SIGNING_KEY_PASSWORD=$PASS"
-            } >> "$GITHUB_ENV"
-            echo "SIGNING_MODE=مفتاح مؤقت (غير ثابت)" >> "$GITHUB_ENV"
-            echo "signing_mode=temporary" >> "$GITHUB_OUTPUT"
+          # A release must always be signed with the SAME permanent key. A random temporary key gives a
+          # different certificate fingerprint every build, so it can never be registered with Google
+          # and the app can never update itself. Stop here instead of silently producing such a build.
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error title=مفتاح التوقيع غير مضبوط::أضف الأسرار KEYSTORE_BASE64 و KEYSTORE_PASSWORD و KEY_ALIAS (و KEY_PASSWORD إن وُجدت). شغّل سير العمل Generate signing key مرة واحدة أو راجع SIGNING.md."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "::add-mask::$KEYSTORE_PASSWORD"
+          [ -n "$KEY_PASSWORD" ] && echo "::add-mask::$KEY_PASSWORD"
+          {
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "SIGNING_KEY_ALIAS=$KEY_ALIAS"
+            echo "SIGNING_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+          # SHA-256 of the signing certificate (this is what Google asks for, not the hash of the APK file)
+          CERT="$(keytool -list -v -keystore "$RUNNER_TEMP/release.jks" -alias "$KEY_ALIAS" \
+                    -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256:[[:space:]]*//')"
+          if [ -z "$CERT" ]; then
+            echo "::error title=تعذّر قراءة المفتاح::تأكد من كلمة مرور الملف واسم المفتاح (Alias)."
+            exit 1
+          fi
+          echo "EXPECTED_CERT_SHA256=${CERT//:/}" >> "$GITHUB_ENV"
+          echo "SIGNING_MODE=مفتاح المستودع الدائم" >> "$GITHUB_ENV"
+          echo "signing_mode=repo-key" >> "$GITHUB_OUTPUT"
+
+          # Optional proof-of-ownership snippet from Play Console (developer verification)
+          if [ -n "$ADI_SNIPPET" ]; then
+            mkdir -p app/src/main/assets
+            printf '%s\n' "$ADI_SNIPPET" > app/src/main/assets/adi-registration.properties
+            echo "تمت إضافة adi-registration.properties إلى الـ APK"
           fi
 
       - name: Build APK
@@ -169,7 +178,15 @@ jobs:
           APK="dist/GitHubManager-${TAG}-${BUILD_TYPE}.apk"
           cp "$APK_SRC" "$APK"
           APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/verify.txt" || true
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/verify.txt"
+          CERT_HEX="$(grep -m1 'certificate SHA-256 digest' "$RUNNER_TEMP/verify.txt" | awk '{print $NF}')"
+          if [ "$BUILD_TYPE" = "release" ]; then
+            if [ -z "$CERT_HEX" ]; then echo "::error::لم يُوقَّع الـ APK"; exit 1; fi
+            if [ -n "$EXPECTED_CERT_SHA256" ] && [ "${CERT_HEX,,}" != "${EXPECTED_CERT_SHA256,,}" ]; then
+              echo "::error::بصمة شهادة الـ APK لا تطابق بصمة المفتاح المضبوط"; exit 1
+            fi
+          fi
+          CERT_COLON="$(echo "$CERT_HEX" | tr a-f A-F | sed 's/../&:/g; s/:$//')"
           {
             echo "## ✅ GitHub Manager — $BUILD_TYPE"
             echo ""
@@ -178,7 +195,8 @@ jobs:
             echo "| الإصدار | \`$TAG\` |"
             echo "| الملف | \`$(basename "$APK")\` |"
             echo "| الحجم | $(du -h "$APK" | cut -f1) |"
-            echo "| SHA-256 | \`$(sha256sum "$APK" | cut -d' ' -f1)\` |"
+            echo "| SHA-256 لملف الـ APK | \`$(sha256sum "$APK" | cut -d' ' -f1)\` |"
+            [ "$BUILD_TYPE" = "release" ] && echo "| **SHA-256 لشهادة التوقيع** (سجّلها في Play Console) | \`$CERT_COLON\` |" || true
             echo "| التوقيع | ${SIGNING_MODE:-debug} |"
             echo "| Android | compileSdk 36 / targetSdk 36 |"
             echo ""
@@ -188,7 +206,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           {
             echo "- **التوقيع:** ${SIGNING_MODE:-debug}"
-            echo "- **SHA-256:** \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+            echo "- **SHA-256 (APK):** \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+            [ "$BUILD_TYPE" = "release" ] && echo "- **SHA-256 (شهادة التوقيع):** \`$CERT_COLON\`" || true
             echo "- versionCode: ${{ steps.meta.outputs.version_code }}"
           } > dist/notes-footer.md
 

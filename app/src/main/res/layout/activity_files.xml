@@ -343,8 +343,8 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:ellipsize="middle"
-            android:singleLine="true"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:textColor="@color/text_primary"
             android:textSize="14sp" />
 

@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
-import android.provider.DocumentsContract;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -73,21 +72,30 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected LinearLayout chipRow;
     protected View filterScroll;
 
-    private ActivityResultLauncher<String> saveLauncher;
+    private ActivityResultLauncher<Intent> saveLauncher;
     private Source pendingSource;
     private boolean pendingExtractApk;
+    private String pendingName;
+    private boolean tokenDialogShown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        saveLauncher = registerForActivityResult(
-                new ActivityResultContracts.CreateDocument("application/octet-stream"), uri -> {
-                    Source s = pendingSource;
-                    boolean extract = pendingExtractApk;
-                    pendingSource = null;
-                    pendingExtractApk = false;
-                    if (uri != null && s != null) runDownload(uri, s, extract);
-                });
+        // The save location is chosen in the app's OWN file manager (never the system picker).
+        saveLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
+            Source s = pendingSource;
+            boolean extract = pendingExtractApk;
+            String name = pendingName;
+            pendingSource = null;
+            pendingExtractApk = false;
+            pendingName = null;
+            Intent d = res.getData();
+            if (res.getResultCode() != RESULT_OK || d == null || s == null || name == null) return;
+            java.util.ArrayList<String> paths = d.getStringArrayListExtra("paths");
+            if (paths == null || paths.isEmpty()) return;
+            java.io.File dir = new java.io.File(paths.get(0));
+            runDownload(uniqueFile(dir, name), s, extract);
+        });
         Intent i = getIntent();
         owner = i.getStringExtra("owner");
         repo = i.getStringExtra("repo");
@@ -214,12 +222,26 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * GitHub answered 401. The app NEVER signs the user out on its own: the token stays stored and
+     * the user decides (the logout button is the only thing that clears it).
+     */
     protected void relogin() {
-        Store.clear(this);
-        Intent i = new Intent(this, LoginActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(i);
-        finish();
+        hideProgress();
+        loading(false);
+        if (isFinishing() || tokenDialogShown) return;
+        tokenDialogShown = true;
+        new Dlg(this)
+                .setTitle(R.string.token_rejected_title)
+                .setMessage(R.string.token_rejected_msg)
+                .setPositiveButton(R.string.token_new, (d, w) -> {
+                    Intent i = new Intent(this, LoginActivity.class);
+                    i.putExtra("reauth", true);
+                    startActivity(i);
+                })
+                .setNegativeButton(R.string.close, null)
+                .setOnDismissListener(d -> tokenDialogShown = false)
+                .show();
     }
 
     // ------------------------------------------------------------------ dialogs / helpers
@@ -414,16 +436,41 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected void saveAs(String fileName, Source src, boolean extractApk) {
         pendingSource = src;
         pendingExtractApk = extractApk;
+        pendingName = safeName(fileName);
         try {
-            saveLauncher.launch(fileName);
+            saveLauncher.launch(new Intent(this, FileManagerActivity.class)
+                    .putExtra("pick", "save")
+                    .putExtra("fileName", pendingName));
         } catch (Exception e) {
             pendingSource = null;
             pendingExtractApk = false;
+            pendingName = null;
             toast(R.string.cannot_save);
         }
     }
 
-    private void runDownload(final Uri uri, final Source src, final boolean extractApk) {
+    /** Strips path separators and control characters so a remote name can never escape the chosen folder. */
+    private static String safeName(String n) {
+        String s = n == null ? "" : n.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
+        while (s.startsWith(".")) s = s.substring(1);
+        return s.isEmpty() ? "download" : s;
+    }
+
+    /** name, name (1).ext, name (2).ext … so an existing file is never overwritten. */
+    private static java.io.File uniqueFile(java.io.File dir, String name) {
+        java.io.File f = new java.io.File(dir, name);
+        if (!f.exists()) return f;
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 1; i < 1000; i++) {
+            f = new java.io.File(dir, base + " (" + i + ")" + ext);
+            if (!f.exists()) return f;
+        }
+        return new java.io.File(dir, base + "-" + System.currentTimeMillis() + ext);
+    }
+
+    private void runDownload(final java.io.File dest, final Source src, final boolean extractApk) {
         if (busy) return;
         busy = true;
         showProgress(getString(R.string.downloading));
@@ -432,8 +479,13 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             try {
                 long total = c.getContentLengthLong();
                 InputStream in = c.getInputStream();
-                OutputStream out = getContentResolver().openOutputStream(uri);
-                if (out == null) throw new IOException("Cannot open destination");
+                OutputStream out;
+                try {
+                    out = new java.io.FileOutputStream(dest);
+                } catch (java.io.IOException openFail) {
+                    in.close();
+                    throw new IOException(getString(R.string.save_failed, dest.getParent()), openFail);
+                }
                 try {
                     GitHubApi.Progress prog = (done, tot) -> post(() -> updateBytes(done, tot));
                     if (extractApk) {
@@ -452,12 +504,13 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
                         GitHubApi.copy(in, out, total, prog);
                     }
                 } catch (Exception ex) {
-                    if (extractApk) {
-                        try {
-                            DocumentsContract.deleteDocument(getContentResolver(), uri);
-                        } catch (Exception ignored) {
-                        }
+                    // never leave a half-written or empty file behind
+                    try {
+                        out.close();
+                    } catch (Exception ignored) {
                     }
+                    //noinspection ResultOfMethodCallIgnored
+                    dest.delete();
                     throw ex;
                 } finally {
                     out.close();
@@ -468,17 +521,17 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             }
             post(() -> {
                 hideProgress();
-                if (extractApk) offerInstall(uri);
-                else toast(R.string.saved);
+                if (extractApk) offerInstall(dest);
+                else toast(getString(R.string.saved_to, dest.getAbsolutePath()));
             });
         });
     }
 
-    private void offerInstall(final Uri uri) {
+    private void offerInstall(final java.io.File apkFile) {
         new Dlg(this)
                 .setTitle(R.string.saved)
                 .setMessage(R.string.install_apk_msg)
-                .setPositiveButton(R.string.install_now, (d, w) -> installApk(uri))
+                .setPositiveButton(R.string.install_now, (d, w) -> installApk(apkFile))
                 .setNegativeButton(R.string.install_later, null)
                 .show();
     }
@@ -488,7 +541,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
      * straight from a Storage-Access-Framework URI fails on many devices ("parse error"), and the
      * "install unknown apps" permission is checked first so the user is sent to the right screen.
      */
-    private void installApk(final Uri uri) {
+    private void installApk(final java.io.File saved) {
         if (!Perms.canInstall(this)) {
             new Dlg(this)
                     .setTitle(R.string.perm_install_title)
@@ -505,9 +558,8 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             java.io.File[] old = dir.listFiles();
             if (old != null) for (java.io.File o : old) o.delete();
             final java.io.File apk = new java.io.File(dir, "install.apk");
-            try (InputStream in = getContentResolver().openInputStream(uri);
+            try (InputStream in = new java.io.FileInputStream(saved);
                  OutputStream out = new java.io.FileOutputStream(apk)) {
-                if (in == null) throw new IOException("Cannot open " + uri);
                 byte[] buf = new byte[64 * 1024];
                 int n;
                 while ((n = in.read(buf)) != -1) out.write(buf, 0, n);

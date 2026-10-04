@@ -44,8 +44,6 @@ public class BrowserActivity extends BaseRepoActivity {
     private List<String> branches = new ArrayList<>();
     private boolean needsReload = false;
 
-    private ActivityResultLauncher<Uri> treeLauncher;
-    private ActivityResultLauncher<String[]> filesLauncher;
     private ActivityResultLauncher<Intent> pickLauncher;
     private List<java.io.File> pickedRoots;
     private boolean pickedFolder;
@@ -85,12 +83,6 @@ public class BrowserActivity extends BaseRepoActivity {
             return true;
         });
 
-        treeLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocumentTree(), uri -> {
-            if (uri != null) askUploadOptions(uri, null);
-        });
-        filesLauncher = registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
-            if (uris != null && !uris.isEmpty()) askUploadOptions(null, uris);
-        });
         pickLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
             Intent d = res.getData();
             if (res.getResultCode() != RESULT_OK || d == null) return;
@@ -103,7 +95,6 @@ public class BrowserActivity extends BaseRepoActivity {
             askUploadOptions(null, null);
         });
         // Both buttons open the app's own file manager in "pick" mode.
-        // (The system pickers above stay registered as a fallback.)
         btnFolder.setOnClickListener(v -> pickLauncher.launch(
                 new Intent(this, FileManagerActivity.class).putExtra("pick", "folder")));
         btnFiles.setOnClickListener(v -> pickLauncher.launch(
