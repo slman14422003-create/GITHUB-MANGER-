@@ -350,6 +350,10 @@ public final class Ui {
             sub.setVisibility(View.VISIBLE);
         }
         final SwitchCompat sw = v.findViewById(R.id.sw);
+        // set in code: SwitchCompat's thumb/track attributes are not reliably exposed to XML
+        sw.setThumbDrawable(ContextCompat.getDrawable(c, R.drawable.switch_thumb));
+        sw.setTrackDrawable(ContextCompat.getDrawable(c, R.drawable.switch_track));
+        sw.setShowText(false);
         sw.setChecked(checked);
         v.setOnClickListener(x -> sw.toggle());
         return new Toggle(v, sw);
