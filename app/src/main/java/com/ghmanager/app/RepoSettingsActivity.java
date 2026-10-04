@@ -124,6 +124,26 @@ public class RepoSettingsActivity extends BaseRepoActivity {
         form.addView(save);
         content.addView(form);
 
+        content.addView(Ui.sectionTitle(this, getString(R.string.set_tools)));
+        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_lock, true,
+                getString(R.string.secrets), getString(R.string.set_secrets_sub), false, true), v -> {
+            Intent si = repoIntent(ActionsDataActivity.class);
+            si.putExtra("mode", "secrets");
+            startActivity(si);
+        }));
+        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_edit, true,
+                getString(R.string.variables), getString(R.string.set_vars_sub), false, true), v -> {
+            Intent vi = repoIntent(ActionsDataActivity.class);
+            vi.putExtra("mode", "variables");
+            startActivity(vi);
+        }));
+        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_settings, true,
+                getString(R.string.adv_title), getString(R.string.set_adv_sub), false, true),
+                v -> startActivity(repoIntent(AdvancedSettingsActivity.class))));
+        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_share, true,
+                getString(R.string.col_title), getString(R.string.set_collab_sub), false, true),
+                v -> startActivity(repoIntent(CollaboratorsActivity.class))));
+
         content.addView(Ui.sectionTitle(this, getString(R.string.danger_zone)));
         LinearLayout danger = Ui.box(this);
         Button del = Ui.button(this, R.string.delete_repo, false);

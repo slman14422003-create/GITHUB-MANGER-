@@ -25,8 +25,9 @@ android {
         minSdk = 24
         targetSdk = 36   // Android 16
         // CI run number keeps versionCode increasing so a new build always installs over the old one
-        versionCode = 10 + (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()
-        versionName = "2.2"
+        versionCode = (System.getenv('VERSION_CODE_OVERRIDE') ?: (10 + (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()).toString()).toInteger()
+        // CI passes the release tag (without the leading v) so the installed version matches the Release tag
+        versionName = System.getenv('APP_VERSION_NAME') ?: "2.2"
     }
 
     signingConfigs {

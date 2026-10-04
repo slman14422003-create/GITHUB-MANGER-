@@ -63,6 +63,11 @@ public class ReposActivity extends AppCompatActivity {
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
         findViewById(R.id.btnLogout).setOnClickListener(v -> logout());
+        findViewById(R.id.btnUpdate).setOnClickListener(v -> {
+            Intent ui2 = new Intent(ReposActivity.this, UpdateActivity.class);
+            Updater.splitInto(ui2, Store.getUpdateRepo(ReposActivity.this));
+            startActivity(ui2);
+        });
         findViewById(R.id.btnFiles).setOnClickListener(v ->
                 startActivity(new Intent(ReposActivity.this, FileManagerActivity.class)));
         findViewById(R.id.btnPerms).setOnClickListener(v ->
@@ -85,6 +90,7 @@ public class ReposActivity extends AppCompatActivity {
         });
         buildChips();
         load();
+        Updater.autoCheck(this, io, ui);
     }
 
     private void buildChips() {

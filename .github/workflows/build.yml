@@ -13,15 +13,27 @@ on:
         type: choice
         options: [release, debug]
         default: release
+      version:
+        description: 'رقم الإصدار / الوسم (مثال v2.3) — اتركه فارغًا للترقيم التلقائي'
+        type: string
+        default: ''
+      publish_release:
+        description: 'انشر الناتج كإصدار (Release) على GitHub'
+        type: boolean
+        default: true
+      prerelease:
+        description: 'علّم الإصدار كنسخة تجريبية (Pre-release)'
+        type: boolean
+        default: false
 
-# Least privilege: the build only needs to read the repo
+# Least privilege: the build job only reads the repo, the release job gets write access itself
 permissions:
   contents: read
 
-# A newer push cancels the older run of the same branch
+# A newer push cancels an older run of the same branch, but tag / manual release runs are never cancelled
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
 
 env:
   BUILD_TYPE: ${{ inputs.build_type || 'release' }}
@@ -31,8 +43,61 @@ jobs:
     name: Build ${{ inputs.build_type || 'release' }} APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version_name: ${{ steps.meta.outputs.version_name }}
+      publish: ${{ steps.meta.outputs.publish }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      version_code: ${{ steps.meta.outputs.version_code }}
     steps:
       - uses: actions/checkout@v6
+
+      # Decide the version and whether to publish a Release. Every successful release build
+      # on main / a tag / a manual run is published, so the release step is no longer skipped.
+      - name: Resolve version and release plan
+        id: meta
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_PUBLISH: ${{ inputs.publish_release }}
+          IN_PRE: ${{ inputs.prerelease }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          BASE="$(grep -oP 'versionName\s*=\s*System\.getenv\([^)]*\)\s*\?:\s*"\K[^"]+' app/build.gradle | head -n1)"
+          [ -z "$BASE" ] && BASE="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle | head -n1)"
+          [ -z "$BASE" ] && BASE="1.0"
+          VERSION_CODE=$((10 + GITHUB_RUN_NUMBER))
+          PUBLISH=false
+          PRE=false
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            PUBLISH=true
+          elif [ -n "$IN_VERSION" ]; then
+            TAG="$IN_VERSION"
+            [[ "$TAG" != v* ]] && TAG="v$TAG"
+          else
+            TAG="v${BASE}.${GITHUB_RUN_NUMBER}"
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            PUBLISH="${IN_PUBLISH:-true}"
+            PRE="${IN_PRE:-false}"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            PUBLISH=true
+            # put [skip release] in a commit message to build without publishing a Release
+            case "$COMMIT_MSG" in *"[skip release]"*|*"[no release]"*) PUBLISH=false ;; esac
+          fi
+          if [ "$BUILD_TYPE" != "release" ] || [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            PUBLISH=false
+          fi
+          VERSION_NAME="${TAG#v}"
+          {
+            echo "tag=$TAG"
+            echo "version_name=$VERSION_NAME"
+            echo "version_code=$VERSION_CODE"
+            echo "publish=$PUBLISH"
+            echo "prerelease=$PRE"
+          } >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "Version: $TAG (code $VERSION_CODE) — publish release: $PUBLISH"
 
       - uses: actions/setup-java@v5
         with:
@@ -50,6 +115,7 @@ jobs:
           cache-cleanup: on-success
 
       - name: Prepare release signing
+        id: sign
         if: env.BUILD_TYPE == 'release'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -66,8 +132,9 @@ jobs:
               echo "SIGNING_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
             } >> "$GITHUB_ENV"
             echo "SIGNING_MODE=مفتاح المستودع (الأسرار)" >> "$GITHUB_ENV"
+            echo "signing_mode=repo-key" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning title=لا توجد أسرار توقيع::لم يتم ضبط KEYSTORE_BASE64. سيُوقَّع التطبيق بمفتاح مؤقت ولن يتحدّث فوق نسخة موقعة بمفتاح آخر. أضف الأسرار من Settings > Secrets and variables > Actions."
+            echo "::warning title=لا توجد أسرار توقيع::لم يتم ضبط KEYSTORE_BASE64. سيُوقَّع التطبيق بمفتاح مؤقت ولن يتحدّث فوق نسخة موقعة بمفتاح آخر. أضف الأسرار من إعدادات المستودع داخل التطبيق أو من Settings > Secrets and variables > Actions."
             PASS="$(openssl rand -hex 16)"
             echo "::add-mask::$PASS"
             keytool -genkeypair -keystore "$RUNNER_TEMP/temp.jks" -storetype PKCS12 \
@@ -80,9 +147,12 @@ jobs:
               echo "SIGNING_KEY_PASSWORD=$PASS"
             } >> "$GITHUB_ENV"
             echo "SIGNING_MODE=مفتاح مؤقت (غير ثابت)" >> "$GITHUB_ENV"
+            echo "signing_mode=temporary" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build APK
+        env:
+          VERSION_CODE_OVERRIDE: ${{ steps.meta.outputs.version_code }}
         run: |
           if [ "$BUILD_TYPE" = "release" ]; then
             gradle assembleRelease --stacktrace --warning-mode all
@@ -91,9 +161,13 @@ jobs:
           fi
 
       - name: Verify and summarize
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
         run: |
-          APK="$(ls app/build/outputs/apk/${BUILD_TYPE}/*.apk | head -n1)"
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          APK_SRC="$(ls app/build/outputs/apk/${BUILD_TYPE}/*.apk | head -n1)"
+          mkdir -p dist
+          APK="dist/GitHubManager-${TAG}-${BUILD_TYPE}.apk"
+          cp "$APK_SRC" "$APK"
           APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/verify.txt" || true
           {
@@ -101,6 +175,7 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
+            echo "| الإصدار | \`$TAG\` |"
             echo "| الملف | \`$(basename "$APK")\` |"
             echo "| الحجم | $(du -h "$APK" | cut -f1) |"
             echo "| SHA-256 | \`$(sha256sum "$APK" | cut -d' ' -f1)\` |"
@@ -111,11 +186,18 @@ jobs:
             grep -E "Verified|certificate" "$RUNNER_TEMP/verify.txt" || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "- **التوقيع:** ${SIGNING_MODE:-debug}"
+            echo "- **SHA-256:** \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+            echo "- versionCode: ${{ steps.meta.outputs.version_code }}"
+          } > dist/notes-footer.md
 
       - uses: actions/upload-artifact@v4
         with:
           name: GitHubManager-${{ env.BUILD_TYPE }}-apk
-          path: app/build/outputs/apk/${{ env.BUILD_TYPE }}/*.apk
+          path: |
+            dist/*.apk
+            dist/notes-footer.md
           if-no-files-found: error
           retention-days: 30
 
@@ -128,20 +210,37 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
-  # Publishes the APK as a GitHub Release when you push a tag such as v2.2
+  # Publishes the APK as a GitHub Release (new tag, or the existing release when the tag already exists)
   release:
     name: Publish GitHub Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.build.outputs.tag }}
+      PRE: ${{ needs.build.outputs.prerelease }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: GitHubManager-release-apk
           path: dist
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.apk --repo "$GITHUB_REPOSITORY" --generate-notes
+
+      - name: Create or update release
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # The release already exists (e.g. created from the app): attach the APK and make sure
+            # the versionCode footer used by the in-app updater is present.
+            gh release upload "$TAG" dist/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+            BODY="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
+            if ! printf '%s' "$BODY" | grep -q 'versionCode:'; then
+              { printf '%s\n\n' "$BODY"; cat dist/notes-footer.md; } > dist/notes-final.md
+              gh release edit "$TAG" --notes-file dist/notes-final.md --repo "$GITHUB_REPOSITORY"
+            fi
+          else
+            ARGS=(--repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --notes-file dist/notes-footer.md)
+            [ "$PRE" = "true" ] && ARGS+=(--prerelease)
+            gh release create "$TAG" dist/*.apk "${ARGS[@]}"
+          fi

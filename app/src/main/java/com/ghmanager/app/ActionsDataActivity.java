@@ -1,16 +1,24 @@
 package com.ghmanager.app;
 
+import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
+import android.util.Base64;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Repository-level Actions data, selected by the "mode" extra:
@@ -19,11 +27,15 @@ import java.util.List;
 public class ActionsDataActivity extends BaseRepoActivity {
     private String mode = "artifacts";
     private final List<JSONObject> items = new ArrayList<>();
+    private ActivityResultLauncher<String[]> keyPicker;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
+        keyPicker = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+            if (uri != null) keystoreDialog(uri);
+        });
         String m = getIntent().getStringExtra("mode");
         if (m != null) mode = m;
         int titleRes;
@@ -49,7 +61,11 @@ public class ActionsDataActivity extends BaseRepoActivity {
         } else if ("caches".equals(mode)) {
             action(btnA1, R.drawable.ic_delete, R.string.delete_all_caches, v -> deleteAllCaches());
         }
-        if ("secrets".equals(mode)) showStatus(getString(R.string.secrets_note));
+        if ("secrets".equals(mode)) {
+            action(btnA1, R.drawable.ic_add, R.string.sec_add, v -> secretDialog(null));
+            action(btnA2, R.drawable.ic_lock, R.string.sec_key_setup, v -> keyIntro());
+            showStatus(getString(R.string.secrets_note));
+        }
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos >= 0 && pos < items.size()) itemMenu(items.get(pos));
         });
@@ -157,7 +173,11 @@ public class ActionsDataActivity extends BaseRepoActivity {
             }
             default: {
                 final String name = o.optString("name");
-                deleteWithConfirm(name, () -> api.deleteSecret(owner, repo, name));
+                String[] opts = {getString(R.string.sec_update), getString(R.string.delete)};
+                choose(name, opts, (d, which) -> {
+                    if (which == 0) secretDialog(name);
+                    else deleteWithConfirm(name, () -> api.deleteSecret(owner, repo, name));
+                });
                 break;
             }
         }
@@ -219,5 +239,128 @@ public class ActionsDataActivity extends BaseRepoActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    // ------------------------------------------------------------------ secrets (encrypted writes)
+
+    private void secretDialog(final String existing) {
+        LinearLayout box = Ui.box(this);
+        final EditText name = Ui.edit(this, getString(R.string.sec_name), existing);
+        final EditText value = Ui.editMulti(this, getString(R.string.sec_value), null, 3);
+        if (existing != null) name.setEnabled(false);
+        box.addView(name);
+        box.addView(value);
+        new Dlg(this)
+                .setTitle(existing == null ? R.string.sec_add : R.string.sec_update)
+                .setView(box)
+                .setPositiveButton(R.string.save, (d, w) -> {
+                    final String n = name.getText().toString().trim();
+                    final String v = value.getText().toString();
+                    if (!n.matches("[A-Za-z_][A-Za-z0-9_]*") || n.toUpperCase(Locale.ROOT).startsWith("GITHUB_")) {
+                        toast(R.string.sec_bad_name);
+                        return;
+                    }
+                    if (v.isEmpty()) {
+                        toast(R.string.sec_empty_value);
+                        return;
+                    }
+                    bg(() -> {
+                        api.putSecret(owner, repo, n, v);
+                        post(() -> {
+                            toast(R.string.sec_saved);
+                            load();
+                        });
+                    });
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void keyIntro() {
+        new Dlg(this)
+                .setTitle(R.string.sec_key_setup)
+                .setMessage(R.string.sec_key_intro)
+                .setPositiveButton(R.string.sec_choose_file, (d, w) -> {
+                    try {
+                        keyPicker.launch(new String[]{"*/*"});
+                    } catch (Exception e) {
+                        toast(R.string.cannot_save);
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private static EditText passwordField(EditText e) {
+        e.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        return e;
+    }
+
+    private void keystoreDialog(final Uri uri) {
+        LinearLayout box = Ui.box(this);
+        final EditText storePass = passwordField(Ui.edit(this, getString(R.string.sec_store_pass), null));
+        final EditText alias = Ui.edit(this, getString(R.string.sec_alias), null);
+        final EditText keyPass = passwordField(Ui.edit(this, getString(R.string.sec_key_pass), null));
+        box.addView(storePass);
+        box.addView(alias);
+        box.addView(keyPass);
+        new Dlg(this)
+                .setTitle(R.string.sec_key_setup)
+                .setView(box)
+                .setPositiveButton(R.string.save, (d, w) -> {
+                    final String sp = storePass.getText().toString();
+                    final String al = alias.getText().toString().trim();
+                    final String kp = keyPass.getText().toString();
+                    if (sp.isEmpty() || al.isEmpty()) {
+                        toast(R.string.sec_key_missing);
+                        return;
+                    }
+                    saveKeystore(uri, sp, al, kp);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void saveKeystore(final Uri uri, final String storePass, final String alias, final String keyPass) {
+        if (busy) return;
+        busy = true;
+        showProgress(getString(R.string.sec_encrypting));
+        bg(() -> {
+            final int max = 1024 * 1024;
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                if (in == null) throw new java.io.IOException("Cannot open " + uri);
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    bos.write(buf, 0, n);
+                    if (bos.size() > max) {
+                        post(() -> {
+                            hideProgress();
+                            toast(R.string.sec_file_big);
+                        });
+                        return;
+                    }
+                }
+            }
+            String b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
+            api.putSecret(owner, repo, "KEYSTORE_BASE64", b64);
+            api.putSecret(owner, repo, "KEYSTORE_PASSWORD", storePass);
+            api.putSecret(owner, repo, "KEY_ALIAS", alias);
+            if (!keyPass.isEmpty()) {
+                api.putSecret(owner, repo, "KEY_PASSWORD", keyPass);
+            } else {
+                try {
+                    api.deleteSecret(owner, repo, "KEY_PASSWORD");
+                } catch (GitHubApi.ApiException ignored) {
+                    // not set: nothing to clear
+                }
+            }
+            post(() -> {
+                hideProgress();
+                info(getString(R.string.sec_key_setup), getString(R.string.sec_key_done));
+                load();
+            });
+        });
     }
 }

@@ -187,7 +187,7 @@
     <string name="saved">تم الحفظ</string>
     <string name="search_repos">ابحث في المستودعات…</string>
     <string name="secrets">الأسرار (Secrets)</string>
-    <string name="secrets_note">تظهر أسماء الأسرار فقط (القيم مخفية). اضغط على سر لحذفه. إضافة سر جديد يتطلب تشفيرًا خاصًا غير مدعوم هنا بعد.</string>
+    <string name="secrets_note">تظهر أسماء الأسرار فقط (القيم مخفية ولا يمكن قراءتها). اضغط على سر لتحديث قيمته أو حذفه، أو أضف سرًا جديدًا من الزر العلوي.</string>
     <string name="sections">الأقسام</string>
     <string name="send">إرسال</string>
     <string name="set_default">تعيين كفرع افتراضي</string>

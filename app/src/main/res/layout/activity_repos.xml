@@ -50,6 +50,13 @@
         </LinearLayout>
 
         <ImageButton
+            android:id="@+id/btnUpdate"
+            style="@style/IconButton"
+            android:layout_marginEnd="6dp"
+            android:contentDescription="@string/upd_title"
+            android:src="@drawable/ic_download" />
+
+        <ImageButton
             android:id="@+id/btnNew"
             style="@style/IconButton"
             android:layout_marginEnd="6dp"

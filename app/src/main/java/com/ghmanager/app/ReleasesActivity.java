@@ -8,14 +8,20 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 
 import androidx.appcompat.app.AlertDialog;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Releases of a repository: list and create (with auto-generated notes). */
 public class ReleasesActivity extends BaseRepoActivity {
@@ -34,6 +40,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         initList();
         btnRefresh.setOnClickListener(v -> load(true));
         action(btnA1, R.drawable.ic_add, R.string.new_release, v -> createDialog());
+        action(btnA2, R.drawable.ic_package, R.string.br_title, v -> buildReleaseDialog());
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == items.size()) {
                 page++;
@@ -171,5 +178,134 @@ public class ReleasesActivity extends BaseRepoActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    // ------------------------------------------------------------------ build + publish a release
+
+    /** Suggests the next tag by incrementing the last number of the newest published tag. */
+    private String nextVersion() {
+        for (JSONObject o : items) {
+            if (o.optBoolean("draft")) continue;
+            String tag = Fmt.s(o, "tag_name");
+            if (tag.isEmpty()) continue;
+            Matcher m = Pattern.compile("(\\d+)(?!.*\\d)").matcher(tag);
+            if (m.find()) {
+                try {
+                    long n = Long.parseLong(m.group(1)) + 1;
+                    return tag.substring(0, m.start(1)) + n + tag.substring(m.end(1));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return "v1.0.0";
+    }
+
+    private void buildReleaseDialog() {
+        if (busy) return;
+        busy = true;
+        showProgress(getString(R.string.br_loading));
+        bg(() -> {
+            final List<JSONObject> list = new ArrayList<>();
+            JSONArray wfs = api.listWorkflows(owner, repo);
+            for (int i = 0; wfs != null && i < wfs.length(); i++) {
+                JSONObject w = wfs.getJSONObject(i);
+                if ("active".equals(w.optString("state"))) list.add(w);
+            }
+            boolean hasKey = true;
+            try {
+                JSONArray sec = api.listSecrets(owner, repo);
+                hasKey = false;
+                for (int i = 0; sec != null && i < sec.length(); i++) {
+                    if ("KEYSTORE_BASE64".equals(sec.getJSONObject(i).optString("name"))) hasKey = true;
+                }
+            } catch (Exception ignored) {
+                hasKey = true; // secrets not readable: do not warn
+            }
+            final boolean fKey = hasKey;
+            post(() -> {
+                hideProgress();
+                if (list.isEmpty()) {
+                    info(getString(R.string.br_title), getString(R.string.br_no_workflow));
+                } else {
+                    showBuildDialog(list, fKey);
+                }
+            });
+        });
+    }
+
+    private void showBuildDialog(final List<JSONObject> list, boolean hasKey) {
+        List<String> names = new ArrayList<>();
+        int def = 0;
+        for (int i = 0; i < list.size(); i++) {
+            JSONObject w = list.get(i);
+            names.add(w.optString("name"));
+            String key = (w.optString("name") + " " + w.optString("path")).toLowerCase(Locale.ROOT);
+            if (def == 0 && (key.contains("build") || key.contains("apk") || key.contains("release"))) def = i;
+        }
+        final List<String> types = Arrays.asList("release", "debug");
+        LinearLayout box = Ui.box(this);
+        final Spinner wfSpinner = Ui.spinner(this, names, def);
+        final EditText ref = Ui.edit(this, getString(R.string.br_branch), branch);
+        final EditText ver = Ui.edit(this, getString(R.string.br_version), nextVersion());
+        final Spinner typeSpinner = Ui.spinner(this, types, 0);
+        final CheckBox pub = Ui.check(this, R.string.br_publish, true);
+        final CheckBox pre = Ui.check(this, R.string.prerelease, false);
+        box.addView(Ui.label(this, getString(R.string.br_workflow)));
+        box.addView(wfSpinner);
+        box.addView(Ui.label(this, getString(R.string.br_branch)));
+        box.addView(ref);
+        box.addView(Ui.label(this, getString(R.string.tag_name)));
+        box.addView(ver);
+        box.addView(Ui.label(this, getString(R.string.br_type)));
+        box.addView(typeSpinner);
+        box.addView(pub);
+        box.addView(pre);
+        if (!hasKey) box.addView(Ui.body(this, getString(R.string.br_no_key_warn), 12, R.color.warn));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+        new Dlg(this)
+                .setTitle(R.string.br_title)
+                .setView(sv)
+                .setPositiveButton(R.string.br_start, (d, w) -> {
+                    final JSONObject wf = list.get(wfSpinner.getSelectedItemPosition());
+                    String r = ref.getText().toString().trim();
+                    final String useRef = r.isEmpty() ? branch : r;
+                    final String v = ver.getText().toString().trim();
+                    final String bt = types.get(typeSpinner.getSelectedItemPosition());
+                    final boolean doPub = pub.isChecked();
+                    final boolean isPre = pre.isChecked();
+                    startBuild(wf, useRef, v, bt, doPub, isPre);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void startBuild(final JSONObject wf, final String useRef, final String version,
+                            final String buildType, final boolean publish, final boolean prerelease) {
+        bg(() -> {
+            String yaml = "";
+            byte[] raw = api.getFileBytes(owner, repo, wf.optString("path"), useRef, 512 * 1024);
+            if (raw != null) yaml = new String(raw, StandardCharsets.UTF_8);
+            WorkflowInputs.Result r = WorkflowInputs.parse(yaml);
+            if (!r.dispatch) {
+                post(() -> info(getString(R.string.br_title), getString(R.string.br_no_dispatch)));
+                return;
+            }
+            JSONObject in = new JSONObject();
+            if (r.has("build_type")) in.put("build_type", buildType);
+            if (r.has("version") && !version.isEmpty()) in.put("version", version);
+            if (r.has("publish_release")) in.put("publish_release", String.valueOf(publish));
+            if (r.has("prerelease")) in.put("prerelease", String.valueOf(prerelease));
+            final boolean noReleaseInputs = publish && !r.has("publish_release");
+            api.dispatchWorkflow(owner, repo, wf.optLong("id"), useRef, in);
+            post(() -> {
+                if (noReleaseInputs) info(getString(R.string.br_title), getString(R.string.br_no_release_inputs));
+                else toast(R.string.br_started);
+                Intent i = repoIntent(ActionsActivity.class);
+                i.putExtra("workflowId", wf.optLong("id"));
+                i.putExtra("workflowName", wf.optString("name"));
+                startActivity(i);
+            });
+        });
     }
 }

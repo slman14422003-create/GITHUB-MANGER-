@@ -772,4 +772,123 @@ public class GitHubApi {
         b.put("merge_method", method);
         request("PUT", repo(o, r) + "/pulls/" + number + "/merge", b);
     }
+
+    // ------------------------------------------------------------------ secrets (encrypted writes)
+
+    public JSONObject secretsPublicKey(String o, String r) throws Exception {
+        return obj(repo(o, r) + "/actions/secrets/public-key");
+    }
+
+    /** Creates or updates an Actions secret: the value is sealed with the repository public key first. */
+    public void putSecret(String o, String r, String name, String value) throws Exception {
+        JSONObject pk = secretsPublicKey(o, r);
+        byte[] key = Base64.decode(pk.getString("key"), Base64.DEFAULT);
+        byte[] sealed = SealedBox.seal(value.getBytes(StandardCharsets.UTF_8), key);
+        JSONObject b = new JSONObject();
+        b.put("encrypted_value", Base64.encodeToString(sealed, Base64.NO_WRAP));
+        b.put("key_id", pk.getString("key_id"));
+        request("PUT", repo(o, r) + "/actions/secrets/" + enc(name), b);
+    }
+
+    // ------------------------------------------------------------------ Actions permissions
+
+    public JSONObject actionsPermissions(String o, String r) throws Exception {
+        return obj(repo(o, r) + "/actions/permissions");
+    }
+
+    public void setActionsPermissions(String o, String r, boolean enabled, String allowedActions) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("enabled", enabled);
+        if (enabled && allowedActions != null && !allowedActions.isEmpty()) b.put("allowed_actions", allowedActions);
+        request("PUT", repo(o, r) + "/actions/permissions", b);
+    }
+
+    public JSONObject workflowPermissions(String o, String r) throws Exception {
+        return obj(repo(o, r) + "/actions/permissions/workflow");
+    }
+
+    public void setWorkflowPermissions(String o, String r, String defaultPerm, boolean canApprove) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("default_workflow_permissions", defaultPerm);
+        b.put("can_approve_pull_request_reviews", canApprove);
+        request("PUT", repo(o, r) + "/actions/permissions/workflow", b);
+    }
+
+    public JSONObject getWorkflow(String o, String r, long workflowId) throws Exception {
+        return obj(repo(o, r) + "/actions/workflows/" + workflowId);
+    }
+
+    // ------------------------------------------------------------------ security
+
+    /** True when Dependabot alerts are enabled (the API answers 204 when on and 404 when off). */
+    public boolean vulnerabilityAlerts(String o, String r) throws Exception {
+        try {
+            request("GET", repo(o, r) + "/vulnerability-alerts", null);
+            return true;
+        } catch (ApiException e) {
+            if (e.code == 404) return false;
+            throw e;
+        }
+    }
+
+    public void setVulnerabilityAlerts(String o, String r, boolean on) throws Exception {
+        request(on ? "PUT" : "DELETE", repo(o, r) + "/vulnerability-alerts", null);
+    }
+
+    public boolean automatedSecurityFixes(String o, String r) throws Exception {
+        try {
+            return obj(repo(o, r) + "/automated-security-fixes").optBoolean("enabled");
+        } catch (ApiException e) {
+            if (e.code == 404) return false;
+            throw e;
+        }
+    }
+
+    public void setAutomatedSecurityFixes(String o, String r, boolean on) throws Exception {
+        request(on ? "PUT" : "DELETE", repo(o, r) + "/automated-security-fixes", null);
+    }
+
+    // ------------------------------------------------------------------ branch protection
+
+    /** Returns null when the branch has no protection rule. */
+    public JSONObject getBranchProtection(String o, String r, String branch) throws Exception {
+        try {
+            return new JSONObject(request("GET", repo(o, r) + "/branches/" + enc(branch) + "/protection", null));
+        } catch (ApiException e) {
+            if (e.code == 404) return null;
+            throw e;
+        }
+    }
+
+    public void putBranchProtection(String o, String r, String branch, JSONObject body) throws Exception {
+        request("PUT", repo(o, r) + "/branches/" + enc(branch) + "/protection", body);
+    }
+
+    public void deleteBranchProtection(String o, String r, String branch) throws Exception {
+        request("DELETE", repo(o, r) + "/branches/" + enc(branch) + "/protection", null);
+    }
+
+    // ------------------------------------------------------------------ collaborators
+
+    public JSONArray collaborators(String o, String r) throws Exception {
+        return arr(repo(o, r) + "/collaborators?per_page=100&affiliation=all");
+    }
+
+    public JSONArray invitations(String o, String r) throws Exception {
+        return arr(repo(o, r) + "/invitations?per_page=100");
+    }
+
+    public void addCollaborator(String o, String r, String user, String permission) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("permission", permission);
+        request("PUT", repo(o, r) + "/collaborators/" + enc(user), b);
+    }
+
+    public void removeCollaborator(String o, String r, String user) throws Exception {
+        request("DELETE", repo(o, r) + "/collaborators/" + enc(user), null);
+    }
+
+    public void deleteInvitation(String o, String r, long id) throws Exception {
+        request("DELETE", repo(o, r) + "/invitations/" + id, null);
+    }
 }
