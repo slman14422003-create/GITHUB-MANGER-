@@ -245,10 +245,12 @@ public class ActionsDataActivity extends BaseRepoActivity {
 
     private void secretDialog(final String existing) {
         LinearLayout box = Ui.box(this);
-        final EditText name = Ui.edit(this, getString(R.string.sec_name), existing);
-        final EditText value = Ui.editMulti(this, getString(R.string.sec_value), null, 3);
+        final EditText name = Ui.edit(this, getString(R.string.sec_name_hint), existing);
+        final EditText value = Ui.editMulti(this, getString(R.string.sec_value_hint), null, 3);
         if (existing != null) name.setEnabled(false);
+        box.addView(Ui.label(this, getString(R.string.sec_name_label)));
         box.addView(name);
+        box.addView(Ui.label(this, getString(R.string.sec_value_label)));
         box.addView(value);
         new Dlg(this)
                 .setTitle(existing == null ? R.string.sec_add : R.string.sec_update)
@@ -298,11 +300,14 @@ public class ActionsDataActivity extends BaseRepoActivity {
 
     private void keystoreDialog(final Uri uri) {
         LinearLayout box = Ui.box(this);
-        final EditText storePass = passwordField(Ui.edit(this, getString(R.string.sec_store_pass), null));
-        final EditText alias = Ui.edit(this, getString(R.string.sec_alias), null);
-        final EditText keyPass = passwordField(Ui.edit(this, getString(R.string.sec_key_pass), null));
+        final EditText storePass = passwordField(Ui.edit(this, "", null));
+        final EditText alias = Ui.edit(this, "", null);
+        final EditText keyPass = passwordField(Ui.edit(this, getString(R.string.sec_key_pass_hint), null));
+        box.addView(Ui.label(this, getString(R.string.sec_store_pass)));
         box.addView(storePass);
+        box.addView(Ui.label(this, getString(R.string.sec_alias)));
         box.addView(alias);
+        box.addView(Ui.label(this, getString(R.string.sec_key_pass)));
         box.addView(keyPass);
         new Dlg(this)
                 .setTitle(R.string.sec_key_setup)

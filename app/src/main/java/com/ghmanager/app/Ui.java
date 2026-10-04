@@ -13,12 +13,14 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
 
 import java.util.List;
@@ -43,8 +45,10 @@ public final class Ui {
         e.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
         e.setHintTextColor(ContextCompat.getColor(c, R.color.text_hint));
         e.setTextSize(15);
+        e.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        e.setMinHeight(dp(c, 52));
         int p = dp(c, 14);
-        e.setPadding(dp(c, 18), p, dp(c, 18), p);
+        e.setPaddingRelative(dp(c, 18), p, dp(c, 18), p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(c, 10);
@@ -68,6 +72,15 @@ public final class Ui {
         cb.setText(textRes);
         cb.setChecked(checked);
         cb.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
+        cb.setTextSize(15);
+        cb.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        cb.setButtonTintList(ContextCompat.getColorStateList(c, R.color.check_tint));
+        cb.setMinHeight(dp(c, 48));
+        cb.setPaddingRelative(dp(c, 10), 0, 0, 0);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(c, 2);
+        cb.setLayoutParams(lp);
         return cb;
     }
 
@@ -89,7 +102,8 @@ public final class Ui {
         t.setText(text);
         t.setTextColor(ContextCompat.getColor(c, R.color.text_secondary));
         t.setTextSize(13);
-        t.setPadding(0, dp(c, 4), 0, dp(c, 4));
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setPaddingRelative(dp(c, 6), dp(c, 6), dp(c, 6), dp(c, 4));
         return t;
     }
 
@@ -99,9 +113,8 @@ public final class Ui {
         a.setDropDownViewResource(R.layout.spinner_dropdown_item);
         sp.setAdapter(a);
         if (selected >= 0 && selected < items.size()) sp.setSelection(selected);
-        sp.setBackgroundResource(R.drawable.bg_input);
-        int p = dp(c, 12);
-        sp.setPadding(p, p / 2, p, p / 2);
+        sp.setBackgroundResource(R.drawable.bg_spinner);
+        sp.setPaddingRelative(dp(c, 16), dp(c, 6), dp(c, 44), dp(c, 6));
         sp.setPopupBackgroundResource(R.drawable.bg_popup);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(c, 52));
@@ -141,7 +154,9 @@ public final class Ui {
         t.setText(text);
         t.setTextColor(color(c, R.color.text_secondary));
         t.setTextSize(14);
-        t.setPadding(dp(c, 26), dp(c, 22), dp(c, 26), dp(c, 8));
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setPaddingRelative(dp(c, 26), dp(c, 22), dp(c, 26), dp(c, 8));
         return t;
     }
 
@@ -152,7 +167,8 @@ public final class Ui {
         t.setTextColor(color(c, colorRes));
         t.setTextSize(sizeSp);
         t.setLineSpacing(0, 1.15f);
-        t.setPadding(dp(c, 26), dp(c, 6), dp(c, 26), dp(c, 6));
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setPaddingRelative(dp(c, 26), dp(c, 6), dp(c, 26), dp(c, 6));
         t.setTextIsSelectable(true);
         return t;
     }
@@ -163,9 +179,9 @@ public final class Ui {
         b.setAllCaps(false);
         b.setBackgroundResource(primary ? R.drawable.btn_primary : R.drawable.btn_secondary);
         b.setTextColor(color(c, primary ? R.color.on_accent : R.color.text_primary));
-        b.setTextSize(14);
+        b.setTextSize(15);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setMinHeight(dp(c, 46));
+        b.setMinHeight(dp(c, 50));
         b.setStateListAnimator(null);
         return b;
     }
@@ -257,5 +273,85 @@ public final class Ui {
         RowAdapter.bind(c, v, row);
         if (click != null) v.setOnClickListener(click);
         return v;
+    }
+
+    // ------------------------------------------------------------------ settings building blocks
+
+    /** Gives a view full-width layout params with the page margins used by every row card. */
+    public static <T extends View> T block(Context c, T v) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(c, 14), dp(c, 10), dp(c, 14), dp(c, 6));
+        v.setLayoutParams(lp);
+        return v;
+    }
+
+    /** Rounded surface that holds a label + input (or spinner) so form fields sit on a card. */
+    public static LinearLayout formCard(Context c) {
+        LinearLayout l = new LinearLayout(c);
+        l.setOrientation(LinearLayout.VERTICAL);
+        l.setBackgroundResource(R.drawable.bg_card);
+        l.setPaddingRelative(dp(c, 16), dp(c, 12), dp(c, 16), dp(c, 6));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(c, 14), dp(c, 2), dp(c, 14), dp(c, 6));
+        l.setLayoutParams(lp);
+        return l;
+    }
+
+    /** A rounded note / status card with wrapped text (release notes, hints, errors). */
+    public static TextView noteCard(Context c, CharSequence text, int colorRes) {
+        TextView t = new TextView(c);
+        t.setText(text);
+        t.setTextColor(color(c, colorRes));
+        t.setTextSize(14);
+        t.setLineSpacing(0, 1.2f);
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setBackgroundResource(R.drawable.bg_note);
+        t.setPaddingRelative(dp(c, 18), dp(c, 14), dp(c, 18), dp(c, 14));
+        t.setTextIsSelectable(true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(c, 14), dp(c, 4), dp(c, 14), dp(c, 6));
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    /** A settings row with a title, optional description and an on/off switch. */
+    public static final class Toggle {
+        public final View view;
+        private final SwitchCompat sw;
+
+        Toggle(View view, SwitchCompat sw) {
+            this.view = view;
+            this.sw = sw;
+        }
+
+        public boolean isChecked() {
+            return sw.isChecked();
+        }
+
+        public void setChecked(boolean on) {
+            sw.setChecked(on);
+        }
+
+        public void onChange(CompoundButton.OnCheckedChangeListener l) {
+            sw.setOnCheckedChangeListener(l);
+        }
+    }
+
+    /** Inflates a switch row. Add {@code result.view} to a container; consecutive rows group into one card. */
+    public static Toggle toggle(Context c, ViewGroup parent, int titleRes, int subRes, boolean checked) {
+        View v = LayoutInflater.from(c).inflate(R.layout.item_toggle, parent, false);
+        ((TextView) v.findViewById(R.id.title)).setText(titleRes);
+        TextView sub = v.findViewById(R.id.sub);
+        if (subRes != 0) {
+            sub.setText(subRes);
+            sub.setVisibility(View.VISIBLE);
+        }
+        final SwitchCompat sw = v.findViewById(R.id.sw);
+        sw.setChecked(checked);
+        v.setOnClickListener(x -> sw.toggle());
+        return new Toggle(v, sw);
     }
 }

@@ -30,4 +30,7 @@
     <string name="upd_error">تعذّر التحقق من التحديثات: %s</string>
     <string name="upd_skipped">سيتم تخطي %s</string>
     <string name="upd_debug_note">هذا الملف نسخة تجريبية (debug)</string>
+    <string name="upd_badge_new">جديد</string>
+    <string name="upd_badge_current">محدّث</string>
+    <string name="upd_version_section">الإصدارات</string>
 </resources>

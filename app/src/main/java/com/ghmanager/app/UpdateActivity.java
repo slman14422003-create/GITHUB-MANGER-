@@ -2,7 +2,6 @@ package com.ghmanager.app;
 
 import android.os.Bundle;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
@@ -83,65 +82,61 @@ public class UpdateActivity extends BaseRepoActivity {
     private void render() {
         content.removeAllViews();
 
-        content.addView(Ui.sectionTitle(this, getString(R.string.upd_current)));
-        String cur = Updater.installedName(this) + " (" + Updater.installedCode(this) + ")";
-        content.addView(Ui.body(this, cur, 16, R.color.text_primary));
+        content.addView(Ui.sectionTitle(this, getString(R.string.upd_version_section)));
+        addRow(new Row(R.drawable.ic_package, true, getString(R.string.upd_current),
+                Updater.installedName(this) + " (" + Updater.installedCode(this) + ")", false, false), null);
 
         if (!checked) {
-            content.addView(Ui.body(this, getString(R.string.upd_checking), 14, R.color.text_secondary));
+            addRow(new Row(R.drawable.ic_refresh, true, getString(R.string.upd_latest),
+                    getString(R.string.upd_checking), false, false), null);
         } else if (errorText != null) {
-            content.addView(Ui.body(this, errorText, 14, R.color.bad));
+            content.addView(Ui.noteCard(this, errorText, R.color.bad));
         } else if (info == null) {
-            content.addView(Ui.body(this, getString(R.string.upd_none_found), 14, R.color.text_secondary));
+            content.addView(Ui.noteCard(this, getString(R.string.upd_none_found), R.color.text_secondary));
         } else {
             renderRelease();
         }
 
         content.addView(Ui.sectionTitle(this, getString(R.string.upd_settings)));
-        addRow(new Row(R.drawable.ic_repo, false, getString(R.string.upd_source),
+        addRow(new Row(R.drawable.ic_repo, true, getString(R.string.upd_source),
                 owner + "/" + repo, false, true), v -> editSource());
 
-        final CheckBox auto = Ui.check(this, R.string.upd_auto, Store.autoUpdate(this));
-        auto.setOnCheckedChangeListener((b, on) -> Store.setAutoUpdate(this, on));
-        content.addView(auto);
+        final Ui.Toggle auto = Ui.toggle(this, content, R.string.upd_auto, 0, Store.autoUpdate(this));
+        auto.onChange((b, on) -> Store.setAutoUpdate(this, on));
+        content.addView(auto.view);
 
-        final CheckBox pre = Ui.check(this, R.string.upd_pre, Store.updatePre(this));
-        pre.setOnCheckedChangeListener((b, on) -> {
+        final Ui.Toggle pre = Ui.toggle(this, content, R.string.upd_pre, 0, Store.updatePre(this));
+        pre.onChange((b, on) -> {
             Store.setUpdatePre(this, on);
             check();
         });
-        content.addView(pre);
+        content.addView(pre.view);
 
-        content.addView(Ui.body(this, getString(R.string.upd_sign_note), 12, R.color.text_secondary));
+        content.addView(Ui.noteCard(this, getString(R.string.upd_sign_note), R.color.text_secondary));
     }
 
     private void renderRelease() {
-        content.addView(Ui.sectionTitle(this, getString(R.string.upd_latest)));
         String title = info.name.isEmpty() ? info.tag : info.name;
-        content.addView(Ui.body(this, title + (info.name.isEmpty() || info.name.equals(info.tag) ? "" : "  (" + info.tag + ")"),
-                16, R.color.text_primary));
+        if (!info.name.isEmpty() && !info.name.equals(info.tag)) title = title + "  (" + info.tag + ")";
 
-        String meta = Fmt.size(info.assetSize);
+        StringBuilder sub = new StringBuilder(Fmt.size(info.assetSize));
         String ago = Fmt.ago(info.publishedAt);
-        if (!ago.isEmpty()) meta = getString(R.string.upd_file_size, meta, getString(R.string.upd_published, ago));
-        content.addView(Ui.body(this, meta, 13, R.color.text_secondary));
+        if (!ago.isEmpty()) sub.append(" · ").append(getString(R.string.upd_published, ago));
         if (info.assetName.toLowerCase(Locale.US).contains("debug")) {
-            content.addView(Ui.body(this, getString(R.string.upd_debug_note), 13, R.color.warn));
+            sub.append(" · ").append(getString(R.string.upd_debug_note));
         }
-        content.addView(Ui.body(this, getString(info.newer ? R.string.upd_available : R.string.upd_up_to_date),
-                15, info.newer ? R.color.ok : R.color.text_secondary));
+        Row latest = new Row(R.drawable.ic_tag, true, title, sub.toString(), false, false);
+        if (info.newer) latest.badge(getString(R.string.upd_badge_new), Ui.color(this, R.color.accent_text));
+        else latest.badge(getString(R.string.upd_badge_current), Ui.color(this, R.color.ok));
+        addRow(latest, null);
 
-        Button install = Ui.button(this, info.newer ? R.string.upd_download_install : R.string.upd_reinstall, info.newer);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = Ui.dp(this, 12);
-        lp.bottomMargin = Ui.dp(this, 6);
-        install.setLayoutParams(lp);
+        Button install = Ui.block(this, Ui.button(this, info.newer ? R.string.upd_download_install : R.string.upd_reinstall, info.newer));
+        ((LinearLayout.LayoutParams) install.getLayoutParams()).topMargin = Ui.dp(this, 16);
         install.setOnClickListener(v -> download());
         content.addView(install);
 
         if (!info.htmlUrl.isEmpty()) {
-            addRow(new Row(R.drawable.ic_open, false, getString(R.string.upd_view_release), null, false, false),
+            addRow(new Row(R.drawable.ic_open, false, getString(R.string.upd_view_release), null, false, true),
                     v -> openUrl(info.htmlUrl));
         }
         if (info.newer) {
@@ -154,7 +149,7 @@ public class UpdateActivity extends BaseRepoActivity {
         String notes = Updater.cleanNotes(info.body);
         if (!notes.isEmpty()) {
             content.addView(Ui.sectionTitle(this, getString(R.string.upd_notes)));
-            content.addView(Ui.body(this, notes, 14, R.color.text_primary));
+            content.addView(Ui.noteCard(this, notes, R.color.text_primary));
         }
     }
 
@@ -165,6 +160,7 @@ public class UpdateActivity extends BaseRepoActivity {
     private void editSource() {
         LinearLayout box = Ui.box(this);
         final EditText src = Ui.edit(this, getString(R.string.upd_source_hint), owner + "/" + repo);
+        box.addView(Ui.label(this, getString(R.string.upd_source_hint)));
         box.addView(src);
         new Dlg(this)
                 .setTitle(R.string.upd_source)

@@ -246,7 +246,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         LinearLayout box = Ui.box(this);
         final Spinner wfSpinner = Ui.spinner(this, names, def);
         final EditText ref = Ui.edit(this, getString(R.string.br_branch), branch);
-        final EditText ver = Ui.edit(this, getString(R.string.br_version), nextVersion());
+        final EditText ver = Ui.edit(this, getString(R.string.br_version_hint), nextVersion());
         final Spinner typeSpinner = Ui.spinner(this, types, 0);
         final CheckBox pub = Ui.check(this, R.string.br_publish, true);
         final CheckBox pre = Ui.check(this, R.string.prerelease, false);
@@ -254,7 +254,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         box.addView(wfSpinner);
         box.addView(Ui.label(this, getString(R.string.br_branch)));
         box.addView(ref);
-        box.addView(Ui.label(this, getString(R.string.tag_name)));
+        box.addView(Ui.label(this, getString(R.string.br_version)));
         box.addView(ver);
         box.addView(Ui.label(this, getString(R.string.br_type)));
         box.addView(typeSpinner);

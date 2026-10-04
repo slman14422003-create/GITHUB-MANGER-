@@ -33,24 +33,24 @@ public class AdvancedSettingsActivity extends BaseRepoActivity {
     private boolean protectionKnown;
     private String defBranch = "main";
 
-    private CheckBox cSquash;
-    private CheckBox cMergeCommit;
-    private CheckBox cRebase;
-    private CheckBox cAuto;
-    private CheckBox cDelBranch;
-    private CheckBox cUpdateBranch;
-    private CheckBox cSignoff;
-    private CheckBox cProjects;
-    private CheckBox cDiscussions;
-    private CheckBox cTemplate;
-    private CheckBox cActions;
-    private CheckBox cApprove;
+    private Ui.Toggle cSquash;
+    private Ui.Toggle cMergeCommit;
+    private Ui.Toggle cRebase;
+    private Ui.Toggle cAuto;
+    private Ui.Toggle cDelBranch;
+    private Ui.Toggle cUpdateBranch;
+    private Ui.Toggle cSignoff;
+    private Ui.Toggle cProjects;
+    private Ui.Toggle cDiscussions;
+    private Ui.Toggle cTemplate;
+    private Ui.Toggle cActions;
+    private Ui.Toggle cApprove;
     private Spinner spAllowed;
     private Spinner spWfPerm;
-    private CheckBox cAlerts;
-    private CheckBox cFixes;
-    private CheckBox cSecretScan;
-    private CheckBox cPushProtect;
+    private Ui.Toggle cAlerts;
+    private Ui.Toggle cFixes;
+    private Ui.Toggle cSecretScan;
+    private Ui.Toggle cPushProtect;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,10 +124,10 @@ public class AdvancedSettingsActivity extends BaseRepoActivity {
 
     // ------------------------------------------------------------------ render
 
-    private CheckBox add(LinearLayout box, int textRes, boolean checked) {
-        CheckBox c = Ui.check(this, textRes, checked);
-        box.addView(c);
-        return c;
+    private Ui.Toggle add(int textRes, int subRes, boolean checked) {
+        Ui.Toggle t = Ui.toggle(this, content, textRes, subRes, checked);
+        content.addView(t.view);
+        return t;
     }
 
     private void render() {
@@ -143,77 +143,71 @@ public class AdvancedSettingsActivity extends BaseRepoActivity {
 
         // merge options
         content.addView(Ui.sectionTitle(this, getString(R.string.adv_merge)));
-        LinearLayout merge = Ui.box(this);
-        cSquash = add(merge, R.string.adv_squash, data.optBoolean("allow_squash_merge", true));
-        cMergeCommit = add(merge, R.string.adv_mergecommit, data.optBoolean("allow_merge_commit", true));
-        cRebase = add(merge, R.string.adv_rebase, data.optBoolean("allow_rebase_merge", true));
-        cAuto = add(merge, R.string.adv_auto_merge, data.optBoolean("allow_auto_merge", false));
-        cDelBranch = add(merge, R.string.adv_del_branch, data.optBoolean("delete_branch_on_merge", false));
-        cUpdateBranch = add(merge, R.string.adv_update_branch, data.optBoolean("allow_update_branch", false));
-        cSignoff = add(merge, R.string.adv_signoff, data.optBoolean("web_commit_signoff_required", false));
-        content.addView(merge);
+        cSquash = add(R.string.adv_squash, R.string.adv_squash_sub, data.optBoolean("allow_squash_merge", true));
+        cMergeCommit = add(R.string.adv_mergecommit, R.string.adv_mergecommit_sub, data.optBoolean("allow_merge_commit", true));
+        cRebase = add(R.string.adv_rebase, R.string.adv_rebase_sub, data.optBoolean("allow_rebase_merge", true));
+        cAuto = add(R.string.adv_auto_merge, R.string.adv_auto_merge_sub, data.optBoolean("allow_auto_merge", false));
+        cDelBranch = add(R.string.adv_del_branch, R.string.adv_del_branch_sub, data.optBoolean("delete_branch_on_merge", false));
+        cUpdateBranch = add(R.string.adv_update_branch, R.string.adv_update_branch_sub, data.optBoolean("allow_update_branch", false));
+        cSignoff = add(R.string.adv_signoff, R.string.adv_signoff_sub, data.optBoolean("web_commit_signoff_required", false));
 
         // features
         content.addView(Ui.sectionTitle(this, getString(R.string.adv_features)));
-        LinearLayout feat = Ui.box(this);
-        cProjects = add(feat, R.string.adv_projects, data.optBoolean("has_projects", true));
-        cDiscussions = add(feat, R.string.adv_discussions, data.optBoolean("has_discussions", false));
-        cTemplate = add(feat, R.string.adv_template, data.optBoolean("is_template", false));
-        content.addView(feat);
+        cProjects = add(R.string.adv_projects, R.string.adv_projects_sub, data.optBoolean("has_projects", true));
+        cDiscussions = add(R.string.adv_discussions, R.string.adv_discussions_sub, data.optBoolean("has_discussions", false));
+        cTemplate = add(R.string.adv_template, R.string.adv_template_sub, data.optBoolean("is_template", false));
 
         // Actions
         if (actionsPerm != null || workflowPerm != null) {
             content.addView(Ui.sectionTitle(this, getString(R.string.adv_actions)));
-            LinearLayout act = Ui.box(this);
             if (actionsPerm != null) {
-                cActions = add(act, R.string.adv_actions_enabled, actionsPerm.optBoolean("enabled", true));
-                act.addView(Ui.label(this, getString(R.string.adv_allowed)));
+                cActions = add(R.string.adv_actions_enabled, R.string.adv_actions_enabled_sub, actionsPerm.optBoolean("enabled", true));
+                LinearLayout card = Ui.formCard(this);
+                card.addView(Ui.label(this, getString(R.string.adv_allowed)));
                 List<String> labels = Arrays.asList(getString(R.string.adv_allowed_all),
                         getString(R.string.adv_allowed_local), getString(R.string.adv_allowed_selected));
                 int sel = Math.max(0, Arrays.asList(ALLOWED).indexOf(actionsPerm.optString("allowed_actions", "all")));
                 spAllowed = Ui.spinner(this, labels, sel);
-                act.addView(spAllowed);
+                card.addView(spAllowed);
+                content.addView(card);
             }
             if (workflowPerm != null) {
-                act.addView(Ui.label(this, getString(R.string.adv_wf_perm)));
+                LinearLayout card = Ui.formCard(this);
+                card.addView(Ui.label(this, getString(R.string.adv_wf_perm)));
                 List<String> labels = Arrays.asList(getString(R.string.adv_wf_read), getString(R.string.adv_wf_write));
                 int sel = Math.max(0, Arrays.asList(WF_PERM).indexOf(workflowPerm.optString("default_workflow_permissions", "read")));
                 spWfPerm = Ui.spinner(this, labels, sel);
-                act.addView(spWfPerm);
-                cApprove = add(act, R.string.adv_approve_pr, workflowPerm.optBoolean("can_approve_pull_request_reviews", false));
+                card.addView(spWfPerm);
+                content.addView(card);
+                cApprove = add(R.string.adv_approve_pr, R.string.adv_approve_pr_sub,
+                        workflowPerm.optBoolean("can_approve_pull_request_reviews", false));
             }
-            content.addView(act);
         }
 
         // security
         JSONObject sa = data.optJSONObject("security_and_analysis");
         if (alertsOn != null || fixesOn != null || sa != null) {
             content.addView(Ui.sectionTitle(this, getString(R.string.adv_security)));
-            LinearLayout sec = Ui.box(this);
-            if (alertsOn != null) cAlerts = add(sec, R.string.adv_alerts, alertsOn);
-            if (fixesOn != null) cFixes = add(sec, R.string.adv_fixes, fixesOn);
+            if (alertsOn != null) cAlerts = add(R.string.adv_alerts, R.string.adv_alerts_sub, alertsOn);
+            if (fixesOn != null) cFixes = add(R.string.adv_fixes, R.string.adv_fixes_sub, fixesOn);
             if (sa != null && sa.optJSONObject("secret_scanning") != null) {
-                cSecretScan = add(sec, R.string.adv_secret_scan,
+                cSecretScan = add(R.string.adv_secret_scan, R.string.adv_secret_scan_sub,
                         "enabled".equals(sa.optJSONObject("secret_scanning").optString("status")));
             }
             if (sa != null && sa.optJSONObject("secret_scanning_push_protection") != null) {
-                cPushProtect = add(sec, R.string.adv_push_protect,
+                cPushProtect = add(R.string.adv_push_protect, R.string.adv_push_protect_sub,
                         "enabled".equals(sa.optJSONObject("secret_scanning_push_protection").optString("status")));
             }
-            content.addView(sec);
         }
 
-        Button save = Ui.button(this, R.string.save, true);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = Ui.dp(this, 14);
-        save.setLayoutParams(lp);
+        Button save = Ui.block(this, Ui.button(this, R.string.adv_save_all, true));
+        ((LinearLayout.LayoutParams) save.getLayoutParams()).topMargin = Ui.dp(this, 18);
         save.setOnClickListener(v -> save());
         content.addView(save);
 
         // branch protection
         content.addView(Ui.sectionTitle(this, getString(R.string.adv_protection)));
-        Row pr = new Row(R.drawable.ic_shield, false, getString(R.string.adv_protect_row), defBranch, false, true);
+        Row pr = new Row(R.drawable.ic_shield, true, getString(R.string.adv_protect_row), defBranch, false, true);
         if (!protectionKnown) pr.badge(getString(R.string.adv_protect_unknown), Ui.color(this, R.color.text_secondary));
         else if (protection != null) pr.badge(getString(R.string.adv_protect_on), Ui.color(this, R.color.ok));
         else pr.badge(getString(R.string.adv_protect_off), Ui.color(this, R.color.warn));
@@ -221,14 +215,14 @@ public class AdvancedSettingsActivity extends BaseRepoActivity {
         content.addView(Ui.body(this, getString(R.string.adv_prot_hint), 12, R.color.text_secondary));
 
         content.addView(Ui.sectionTitle(this, getString(R.string.adv_tools)));
-        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_share, false,
+        content.addView(Ui.rowView(this, content, new Row(R.drawable.ic_share, true,
                 getString(R.string.col_title), getString(R.string.set_collab_sub), false, true),
                 v -> startActivity(repoIntent(CollaboratorsActivity.class))));
     }
 
     // ------------------------------------------------------------------ save
 
-    private static void diff(JSONObject patch, JSONObject data, String key, CheckBox c, boolean def) throws JSONException {
+    private static void diff(JSONObject patch, JSONObject data, String key, Ui.Toggle c, boolean def) throws JSONException {
         if (c == null) return;
         if (c.isChecked() != data.optBoolean(key, def)) patch.put(key, c.isChecked());
     }
@@ -374,6 +368,7 @@ public class AdvancedSettingsActivity extends BaseRepoActivity {
         final CheckBox cForce = Ui.check(this, R.string.adv_prot_force, !force);
         final CheckBox cDel = Ui.check(this, R.string.adv_prot_delete, !del);
         box.addView(cPr);
+        box.addView(Ui.label(this, getString(R.string.adv_prot_reviews)));
         box.addView(count);
         box.addView(cAdm);
         box.addView(cForce);

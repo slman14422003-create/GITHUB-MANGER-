@@ -4,7 +4,8 @@
     <string name="br_loading">جارٍ تجهيز البناء…</string>
     <string name="br_workflow">ملف البناء (Workflow)</string>
     <string name="br_branch">الفرع أو الوسم المراد بناؤه</string>
-    <string name="br_version">رقم الإصدار (مثال v2.3) — اتركه فارغًا للترقيم التلقائي</string>
+    <string name="br_version">رقم الإصدار (الوسم)</string>
+    <string name="br_version_hint">مثال: v2.3 — فارغ = ترقيم تلقائي</string>
     <string name="br_type">نوع البناء</string>
     <string name="br_publish">نشر الناتج كإصدار (Release) على GitHub</string>
     <string name="br_start">ابدأ البناء</string>

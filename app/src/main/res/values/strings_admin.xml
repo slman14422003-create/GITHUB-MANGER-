@@ -70,4 +70,22 @@
     <string name="set_vars_sub">متغيرات Actions</string>
     <string name="set_adv_sub">الدمج، صلاحيات Actions، الأمان، حماية الفرع</string>
     <string name="set_collab_sub">الدعوات والصلاحيات</string>
+
+    <string name="adv_squash_sub">يدمج كل إيداعات الـ PR في إيداع واحد</string>
+    <string name="adv_mergecommit_sub">يحفظ كل الإيداعات مع إيداع دمج</string>
+    <string name="adv_rebase_sub">يعيد تطبيق الإيداعات فوق الفرع الهدف</string>
+    <string name="adv_auto_merge_sub">يدمج الـ PR تلقائيًا عند نجاح الفحوصات</string>
+    <string name="adv_del_branch_sub">يحذف فرع الـ PR بعد دمجه</string>
+    <string name="adv_update_branch_sub">يعرض زرًا لتحديث فرع الـ PR من الفرع الأساسي</string>
+    <string name="adv_signoff_sub">يطلب Signed-off-by في إيداعات واجهة الويب</string>
+    <string name="adv_projects_sub">لوحات تخطيط المهام داخل المستودع</string>
+    <string name="adv_discussions_sub">منتدى نقاش مفتوح للمشاركين</string>
+    <string name="adv_template_sub">يتيح إنشاء مستودعات جديدة انطلاقًا منه</string>
+    <string name="adv_actions_enabled_sub">إيقافه يمنع تشغيل أي workflow</string>
+    <string name="adv_approve_pr_sub">يسمح للـ workflows بإنشاء الـ PR والموافقة عليه</string>
+    <string name="adv_alerts_sub">تنبيه عند وجود ثغرات في الاعتماديات</string>
+    <string name="adv_fixes_sub">يفتح PR تلقائيًا لإصلاح الثغرات</string>
+    <string name="adv_secret_scan_sub">يكشف الأسرار المكشوفة في الشيفرة</string>
+    <string name="adv_push_protect_sub">يمنع دفع إيداعات تحتوي على أسرار</string>
+    <string name="adv_save_all">حفظ التغييرات</string>
 </resources>
