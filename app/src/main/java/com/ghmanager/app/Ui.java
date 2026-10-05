@@ -39,6 +39,12 @@ public final class Ui {
     public static void enter(View v, int index) {
         if (v == null) return;
         v.animate().cancel();
+        // the system "remove animations" setting is honoured: show the item at once
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            v.setAlpha(1f);
+            v.setTranslationY(0f);
+            return;
+        }
         v.setAlpha(0f);
         v.setTranslationY(dp(v.getContext(), 14));
         v.animate().alpha(1f).translationY(0f)
@@ -276,7 +282,7 @@ public final class Ui {
             @Override
             public void onChildViewAdded(View parent, View child) {
                 int idx = g.indexOfChild(child);
-                if (idx >= 0 && idx < 14 && child.getVisibility() == View.VISIBLE) enter(child, idx);
+                if (idx >= 0 && idx < 14 && child.getVisibility() == View.VISIBLE && g.getTag(R.id.tag_quiet) == null) enter(child, idx);
                 g.removeCallbacks(r);
                 g.post(r);
             }
@@ -287,6 +293,16 @@ public final class Ui {
                 g.post(r);
             }
         });
+    }
+
+    /** Rebuilds a group's children without replaying the "slide in" animation (returning to a screen, refreshes). */
+    public static void quiet(ViewGroup g, Runnable rebuild) {
+        g.setTag(R.id.tag_quiet, Boolean.TRUE);
+        try {
+            rebuild.run();
+        } finally {
+            g.setTag(R.id.tag_quiet, null);
+        }
     }
 
     /** Inflates a row and binds it. */

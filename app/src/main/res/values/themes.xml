@@ -44,6 +44,11 @@
         <item name="android:windowExitAnimation">@anim/dlg_out</item>
     </style>
 
+    <style name="SheetAnim" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/sheet_out</item>
+    </style>
+
     <style name="IconButton">
         <item name="android:layout_width">48dp</item>
         <item name="android:layout_height">48dp</item>

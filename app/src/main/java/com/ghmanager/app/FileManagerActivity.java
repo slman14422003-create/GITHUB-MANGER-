@@ -187,6 +187,7 @@ public class FileManagerActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_files);
+        if (BottomNav.fromTab(this)) BottomNav.attach(this, BottomNav.FILES);
         prefs = getSharedPreferences("fm", MODE_PRIVATE);
         sortMode = prefs.getInt("sort", SORT_NAME);
         sortDesc = prefs.getBoolean("desc", false);

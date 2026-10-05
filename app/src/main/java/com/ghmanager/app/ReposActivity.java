@@ -44,6 +44,7 @@ public class ReposActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_repos);
+        BottomNav.attach(this, BottomNav.REPOS);
         api = new GitHubApi(Store.getToken(this));
         status = findViewById(R.id.status);
         count = findViewById(R.id.count);
@@ -62,8 +63,7 @@ public class ReposActivity extends AppCompatActivity {
             startActivity(i);
         });
 
-        for (int id : new int[]{R.id.btnFiles, R.id.btnPerms, R.id.btnSettings, R.id.btnNew,
-                R.id.btnRefresh, R.id.btnAccount}) {
+        for (int id : new int[]{R.id.btnNew, R.id.btnRefresh, R.id.btnAccount}) {
             Ui.press(this, findViewById(id));
         }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
@@ -72,13 +72,6 @@ public class ReposActivity extends AppCompatActivity {
         accountBtn.setOnClickListener(v -> AccountSheet.show(this));
         refreshAccountIcon();
         fillProfileIfMissing();
-        findViewById(R.id.btnSettings).setOnClickListener(v ->
-                startActivity(new Intent(ReposActivity.this, SettingsActivity.class)));
-        findViewById(R.id.btnFiles).setOnClickListener(v ->
-                startActivity(new Intent(ReposActivity.this, FileManagerActivity.class)));
-        findViewById(R.id.btnPerms).setOnClickListener(v ->
-                startActivity(new Intent(ReposActivity.this, PermissionsActivity.class)));
-
         ((EditText) findViewById(R.id.search)).addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {

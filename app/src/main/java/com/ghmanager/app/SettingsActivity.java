@@ -13,6 +13,7 @@ public class SettingsActivity extends BaseRepoActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_detail);
+        if (BottomNav.fromTab(this)) BottomNav.attach(this, BottomNav.SETTINGS);
         bindHeader(getString(R.string.set_title), null);
         btnRefresh.setVisibility(android.view.View.GONE);
         content = findViewById(R.id.content);
@@ -22,7 +23,9 @@ public class SettingsActivity extends BaseRepoActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (content != null) render();
+        // onCreate already drew the list; later resumes refresh it without replaying the entrance animation
+        if (content != null && resumedOnce) Ui.quiet(content, this::render);
+        resumedOnce = true;
     }
 
     private void addRow(Row row, android.view.View.OnClickListener l) {
@@ -35,6 +38,8 @@ public class SettingsActivity extends BaseRepoActivity {
         if ("en".equals(v)) return getString(R.string.lang_en);
         return getString(R.string.lang_system);
     }
+
+    private boolean resumedOnce = false;
 
     private void render() {
         content.removeAllViews();

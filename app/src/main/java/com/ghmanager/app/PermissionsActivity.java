@@ -15,6 +15,7 @@ public class PermissionsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_detail);
+        if (BottomNav.fromTab(this)) BottomNav.attach(this, BottomNav.PERMS);
         ((android.widget.TextView) findViewById(R.id.title)).setText(R.string.perm_title);
         ((android.widget.TextView) findViewById(R.id.subtitle)).setText(R.string.perm_subtitle);
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
@@ -26,8 +27,13 @@ public class PermissionsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        render();
+        if (content == null) return;
+        if (resumedOnce) Ui.quiet(content, this::render);
+        else render();
+        resumedOnce = true;
     }
+
+    private boolean resumedOnce = false;
 
     private void render() {
         content.removeAllViews();

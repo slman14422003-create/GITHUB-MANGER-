@@ -11,6 +11,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -35,11 +36,51 @@ public class Dlg extends AlertDialog.Builder {
         super(context);
     }
 
+    /** True when the dialog shows a list of options: those open as a bottom sheet instead of a centred box. */
+    private boolean hasList = false;
+
     @Override
     public AlertDialog create() {
         final AlertDialog d = super.create();
-        d.setOnShowListener(dialog -> style(d));
+        final boolean sheet = hasList;
+        Window w = d.getWindow();
+        if (sheet && w != null) {
+            w.setGravity(Gravity.BOTTOM);
+            w.setWindowAnimations(R.style.SheetAnim);
+            w.setBackgroundDrawableResource(R.drawable.bg_sheet);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        d.setOnShowListener(dialog -> {
+            if (sheet && d.getWindow() != null) {
+                d.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+            style(d);
+        });
         return d;
+    }
+
+    @Override
+    public AlertDialog.Builder setAdapter(android.widget.ListAdapter adapter, DialogInterface.OnClickListener listener) {
+        hasList = true;
+        return super.setAdapter(adapter, listener);
+    }
+
+    @Override
+    public AlertDialog.Builder setSingleChoiceItems(CharSequence[] items, int checked, DialogInterface.OnClickListener l) {
+        hasList = true;
+        return super.setSingleChoiceItems(items, checked, l);
+    }
+
+    @Override
+    public AlertDialog.Builder setMultiChoiceItems(CharSequence[] items, boolean[] checked,
+                                                   DialogInterface.OnMultiChoiceClickListener l) {
+        hasList = true;
+        return super.setMultiChoiceItems(items, checked, l);
+    }
+
+    @Override
+    public AlertDialog.Builder setItems(int itemsId, DialogInterface.OnClickListener listener) {
+        return setItems(getContext().getResources().getTextArray(itemsId), listener);
     }
 
     /** Option lists get roomy, rounded, start-aligned rows instead of the stock list item. */
@@ -171,22 +212,41 @@ public class Dlg extends AlertDialog.Builder {
         if (shown(neu)) order.add(neu);
         if (order.isEmpty()) return;
 
-        // Buttons are stacked full-width: the main action on top, then the secondary ones.
+        // Two short buttons sit side by side (cancel, then the main action). Three buttons, or long
+        // labels, are stacked full-width with the main action on top.
+        boolean row = order.size() == 2 && pos != null && shown(pos) && !shown(neu);
+        if (row) {
+            for (Button b : order) if (b.getText().length() > 14) row = false;
+        }
         ViewParent parent = order.get(0).getParent();
         if (parent instanceof LinearLayout) {
             LinearLayout bar = (LinearLayout) parent;
-            bar.setOrientation(LinearLayout.VERTICAL);
+            bar.setOrientation(row ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+            if (row) {
+                // the stock button bar may flip itself to vertical; with weighted buttons that would
+                // collapse them, so stacking is switched off when it can be (best effort)
+                try {
+                    bar.getClass().getMethod("setAllowStacking", boolean.class).invoke(bar, false);
+                } catch (Exception ignored) {
+                }
+            }
             View spacer = bar.findViewById(androidx.appcompat.R.id.spacer);
             if (spacer != null) spacer.setVisibility(View.GONE);
-            for (Button b : order) {
+            List<Button> placed = new ArrayList<>(order);
+            if (row) {
+                placed.clear();
+                if (shown(neg)) placed.add(neg);
+                placed.add(pos);
+            }
+            for (Button b : placed) {
                 bar.removeView(b);
                 bar.addView(b);
             }
             bar.setPaddingRelative(Ui.dp(c, 18), Ui.dp(c, 6), Ui.dp(c, 18), Ui.dp(c, 16));
         }
         for (Button b : order) {
-            if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0);
-            else pill(c, b, 1);
+            if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0, row);
+            else pill(c, b, 1, row);
         }
     }
 
@@ -195,7 +255,7 @@ public class Dlg extends AlertDialog.Builder {
     }
 
     /** kind: 0 = primary, 1 = secondary, 2 = destructive primary. */
-    private static void pill(Context c, Button b, int kind) {
+    private static void pill(Context c, Button b, int kind, boolean inRow) {
         b.setAllCaps(false);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
@@ -208,10 +268,16 @@ public class Dlg extends AlertDialog.Builder {
         ViewGroup.LayoutParams lp = b.getLayoutParams();
         if (lp instanceof LinearLayout.LayoutParams) {
             LinearLayout.LayoutParams m = (LinearLayout.LayoutParams) lp;
-            m.width = ViewGroup.LayoutParams.MATCH_PARENT;
             m.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-            m.weight = 0;
-            m.setMargins(0, Ui.dp(c, 4), 0, Ui.dp(c, 4));
+            if (inRow) {
+                m.width = 0;
+                m.weight = 1;
+                m.setMargins(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4));
+            } else {
+                m.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                m.weight = 0;
+                m.setMargins(0, Ui.dp(c, 4), 0, Ui.dp(c, 4));
+            }
             b.setLayoutParams(m);
         }
     }
