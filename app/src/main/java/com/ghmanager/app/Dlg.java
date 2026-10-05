@@ -41,6 +41,14 @@ public class Dlg extends AlertDialog.Builder {
     private boolean hasList = false;
     private boolean forceSheet = false;
 
+    private View customView;
+
+    @Override
+    public AlertDialog.Builder setView(View view) {
+        customView = view;
+        return super.setView(view);
+    }
+
     /** Shows this dialog as a bottom sheet even though it has no option list (details, long forms). */
     public Dlg sheet() {
         forceSheet = true;
@@ -86,7 +94,7 @@ public class Dlg extends AlertDialog.Builder {
         }
         d.setOnShowListener(dialog -> {
             size(d, sheet);
-            style(d);
+            style(d, customView);
         });
         return d;
     }
@@ -208,7 +216,7 @@ public class Dlg extends AlertDialog.Builder {
         return new Dlg(c).setView(box).setPositiveButton(android.R.string.ok, null).show();
     }
 
-    private static void style(AlertDialog d) {
+    private static void style(AlertDialog d, View customView) {
         Context c = d.getContext();
         if (d.getWindow() != null) {
             d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -228,7 +236,9 @@ public class Dlg extends AlertDialog.Builder {
             msg.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         }
         // custom content (forms, details): same side padding everywhere, whatever the caller built
-        android.widget.FrameLayout custom = d.findViewById(androidx.appcompat.R.id.custom);
+        // the dialog's own container of the custom view (found through the view, not through an id)
+        ViewParent cp = customView == null ? null : customView.getParent();
+        android.widget.FrameLayout custom = cp instanceof android.widget.FrameLayout ? (android.widget.FrameLayout) cp : null;
         if (custom != null && custom.getChildCount() > 0) {
             View child = custom.getChildAt(0);
             View inner = child instanceof ViewGroup && ((ViewGroup) child).getChildCount() == 1
