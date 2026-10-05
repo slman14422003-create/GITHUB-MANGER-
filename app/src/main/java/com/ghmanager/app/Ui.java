@@ -100,13 +100,27 @@ public final class Ui {
         cb.setTextSize(15);
         cb.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         cb.setButtonTintList(ContextCompat.getColorStateList(c, R.color.check_tint));
-        cb.setMinHeight(dp(c, 48));
-        cb.setPaddingRelative(dp(c, 10), 0, 0, 0);
+        // an option row: its own rounded card, so it reads as a choice and not as loose text
+        cb.setBackgroundResource(R.drawable.bg_option);
+        cb.setMinHeight(dp(c, 52));
+        cb.setPaddingRelative(dp(c, 10), dp(c, 8), dp(c, 14), dp(c, 8));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(c, 2);
+        lp.topMargin = dp(c, 2);
+        lp.bottomMargin = dp(c, 10);
         cb.setLayoutParams(lp);
         return cb;
+    }
+
+    /** A text input with its label above it (long hints wrap badly inside the field itself). */
+    public static LinearLayout field(Context c, CharSequence label, EditText e) {
+        LinearLayout col = new LinearLayout(c);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        col.addView(label(c, label));
+        col.addView(e);
+        return col;
     }
 
     public static LinearLayout box(Context c) {

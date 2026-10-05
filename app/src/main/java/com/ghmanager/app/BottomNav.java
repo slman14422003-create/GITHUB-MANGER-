@@ -46,8 +46,11 @@ public final class BottomNav {
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.addView(root, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         final View bar = build(a, selected);
-        wrap.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        // same side margin as the cards on every screen, floating a little above the bottom edge
+        bl.setMargins(Ui.dp(a, 14), Ui.dp(a, 4), Ui.dp(a, 14), Ui.dp(a, 10));
+        wrap.addView(bar, bl);
         content.addView(wrap, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -63,8 +66,8 @@ public final class BottomNav {
     private static View build(final Activity a, final int selected) {
         LinearLayout bar = new LinearLayout(a);
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setBackgroundResource(R.drawable.bg_bottom_bar);
-        bar.setPadding(Ui.dp(a, 6), Ui.dp(a, 6), Ui.dp(a, 6), Ui.dp(a, 6));
+        bar.setBackgroundResource(R.drawable.bg_nav);
+        bar.setPadding(Ui.dp(a, 8), Ui.dp(a, 6), Ui.dp(a, 8), Ui.dp(a, 6));
         bar.setBaselineAligned(false);
         for (int i = 0; i < LABELS.length; i++) {
             final int idx = i;

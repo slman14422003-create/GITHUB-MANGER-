@@ -193,17 +193,59 @@ jobs:
             echo "تمت إضافة adi-registration.properties إلى الـ APK"
           fi
 
-      - name: Build APK
+      # Builds, and when the build fails tries to repair the cause (R8 missing classes, missing resources,
+      # duplicate files, lint, memory, SDK licences, damaged caches, flaky network) and builds again.
+      # Up to 4 attempts. If the failure is not one it knows how to repair, or the same failure comes back
+      # after its repair, the build FAILS with the original error.
+      - name: Build APK (auto-repair known build errors, then retry)
         env:
           VERSION_CODE_OVERRIDE: ${{ steps.meta.outputs.version_code }}
           GUARD_SEAL: ${{ (env.BUILD_TYPE == 'release' && env.SEAL_APK == 'true') && '1' || '0' }}
         run: |
-          set -o pipefail
-          if [ "$BUILD_TYPE" = "release" ]; then
-            gradle assembleRelease --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/build.log"
-          else
-            gradle assembleDebug --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/build.log"
+          set +e
+          : > "$RUNNER_TEMP/build.log"
+          : > "$RUNNER_TEMP/autofix-build.md"
+          rm -f "$RUNNER_TEMP/autofix-state.json"
+          if [ "$BUILD_TYPE" = "release" ]; then TASK=assembleRelease; else TASK=assembleDebug; fi
+          FLAGS=()
+          rc=1
+          for attempt in 1 2 3 4; do
+            echo "::group::Build attempt $attempt"
+            gradle "$TASK" "${FLAGS[@]}" --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/attempt.log"
+            rc=${PIPESTATUS[0]}
+            cat "$RUNNER_TEMP/attempt.log" >> "$RUNNER_TEMP/build.log"
+            echo "::endgroup::"
+            [ "$rc" -eq 0 ] && break
+            [ "$attempt" -ge 4 ] && break
+            python3 tools/autofix_build.py "$RUNNER_TEMP/attempt.log" \
+              --state "$RUNNER_TEMP/autofix-state.json" --flags-out "$RUNNER_TEMP/gradle.flags" \
+              --report "$RUNNER_TEMP/autofix-build.md" .
+            [ $? -ne 0 ] && break
+            mapfile -t FLAGS < "$RUNNER_TEMP/gradle.flags"
+            echo "::notice title=Build auto-fix::attempt $attempt failed, repaired and retrying"
+          done
+          exit "$rc"
+
+      - name: Auto-fix report and patch
+        if: always()
+        run: |
+          if [ -s "$RUNNER_TEMP/autofix-build.md" ]; then
+            cat "$RUNNER_TEMP/autofix-build.md" >> "$GITHUB_STEP_SUMMARY"
+            echo "_تم تطبيق هذه الإصلاحات داخل نسخة البناء فقط. نزّل artifact باسم autofix وطبّق الـ patch على مستودعك لتثبيتها._" >> "$GITHUB_STEP_SUMMARY"
           fi
+          git add -N . 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/autofix-out"
+          git diff --binary > "$RUNNER_TEMP/autofix-out/autofix.patch" || true
+          [ -s "$RUNNER_TEMP/autofix-out/autofix.patch" ] || rm -f "$RUNNER_TEMP/autofix-out/autofix.patch"
+          [ -s "$RUNNER_TEMP/autofix-build.md" ] && cp "$RUNNER_TEMP/autofix-build.md" "$RUNNER_TEMP/autofix-out/" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autofix
+          path: ${{ runner.temp }}/autofix-out
+          if-no-files-found: ignore
+          retention-days: 14
 
       # Tamper protection: records a signed fingerprint of the code and resources inside the APK, signs the
       # APK again, and checks the result the same way the app will check it. Any mismatch fails the build
@@ -288,6 +330,11 @@ jobs:
             echo "ابحث عن السبب الجذري في السجل أدناه، وأصلحه بأقل تعديل ممكن، وأرسل لي الملفات الجديدة أو المعدّلة فقط بمساراتها."
             echo "إن لم تكن متأكداً من الإصلاح فقل ذلك بوضوح ولا تخمّن، واذكر ما ينقصك لتتأكد."
             echo ""
+            if [ -s "$RUNNER_TEMP/autofix-build.md" ]; then
+              echo "حاول المصحح التلقائي قبل الفشل:"
+              cat "$RUNNER_TEMP/autofix-build.md"
+              echo ""
+            fi
             echo "--- آخر سطور السجل ---"
             [ -s "$SRC" ] && tail -n 80 "$SRC" | sed -E 's/(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/***/g' || echo "(لا يوجد سجل)"
             echo '```'

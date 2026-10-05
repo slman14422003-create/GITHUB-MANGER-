@@ -354,12 +354,13 @@ public class BrowserActivity extends BaseRepoActivity {
 
     private void askUploadOptions(final Uri tree, final List<Uri> files) {
         LinearLayout box = Ui.box(this);
-        final EditText target = Ui.edit(this, getString(R.string.target_folder), path);
-        final EditText msg = Ui.edit(this, getString(R.string.commit_message), getString(R.string.default_commit));
+        final EditText target = Ui.edit(this, getString(R.string.dlg_path_hint), path);
+        target.setTextDirection(View.TEXT_DIRECTION_LTR);
+        final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
         final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
 
-        box.addView(target);
-        box.addView(msg);
+        box.addView(Ui.field(this, getString(R.string.target_folder), target));
+        box.addView(Ui.field(this, getString(R.string.commit_message), msg));
         if (tree != null || (pickedRoots != null && pickedFolder)) box.addView(includeRoot);
 
         new Dlg(this)

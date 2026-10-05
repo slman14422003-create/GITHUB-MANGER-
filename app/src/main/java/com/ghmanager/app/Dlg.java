@@ -264,7 +264,13 @@ public class Dlg extends AlertDialog.Builder {
         b.setStateListAnimator(null);
         b.setBackgroundResource(kind == 1 ? R.drawable.btn_secondary
                 : kind == 2 ? R.drawable.btn_danger : R.drawable.btn_primary);
-        b.setTextColor(Ui.color(c, kind == 1 ? R.color.text_primary : R.color.on_accent));
+        // explicit colour for every state: the label must stay readable on the pill whatever the vendor skin does
+        int txt = Ui.color(c, kind == 1 ? R.color.text_primary : R.color.on_accent);
+        b.setTextColor(new android.content.res.ColorStateList(
+                new int[][]{new int[]{-android.R.attr.state_enabled}, new int[]{}},
+                new int[]{(txt & 0x00FFFFFF) | 0x66000000, txt}));
+        b.setShadowLayer(0, 0, 0, 0);
+        if (android.os.Build.VERSION.SDK_INT >= 29) b.setForceDarkAllowed(false);
         ViewGroup.LayoutParams lp = b.getLayoutParams();
         if (lp instanceof LinearLayout.LayoutParams) {
             LinearLayout.LayoutParams m = (LinearLayout.LayoutParams) lp;
