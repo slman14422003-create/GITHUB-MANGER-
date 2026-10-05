@@ -248,9 +248,19 @@ def check_manifest(main):
                 errors.append("activity %s is not declared in AndroidManifest.xml" % a)
 
 
+LIFECYCLE = ("onCreate", "onStart", "onResume", "onPause", "onStop", "onDestroy", "onBackPressed", "onActivityResult")
+
+
 def check_java(main):
     for f in glob.glob(os.path.join(main, "java", "**", "*.java"), recursive=True):
-        check_balance(os.path.relpath(f, ROOT), rd(f))
+        rel = os.path.relpath(f, ROOT)
+        src = rd(f)
+        check_balance(rel, src)
+        # the same lifecycle method written twice in one class does not compile ("already defined")
+        body = strip_java(src)
+        for m in LIFECYCLE:
+            if len(re.findall(r"\n    (?:public|protected) void %s\(" % m, body)) > 1:
+                errors.append("%s: method %s() is defined more than once in the class" % (rel, m))
 
 
 SECRET = re.compile(r'(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----|AKIA[0-9A-Z]{16})')

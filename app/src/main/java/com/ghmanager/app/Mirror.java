@@ -60,6 +60,7 @@ public final class Mirror {
         int colon = h.indexOf(':');
         if (colon > 0) h = h.substring(0, colon);
         return h.equals("github.com") || h.endsWith(".github.com") || h.endsWith(".githubusercontent.com")
+                || h.equals("githubstatus.com") || h.endsWith(".githubstatus.com")
                 || AZURE.matcher(h).matches();
     }
 

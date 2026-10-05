@@ -5,6 +5,11 @@
     android:viewportWidth="240"
     android:viewportHeight="240">
     <group
+        android:pivotX="120"
+        android:pivotY="120"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+    <group
         android:name="mark"
         android:pivotX="120.0"
         android:pivotY="120.0">
@@ -44,5 +49,6 @@
             android:strokeWidth="6.0"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
+    </group>
     </group>
 </vector>

@@ -31,4 +31,28 @@
     <string name="copy_text">نسخ النص</string>
     <string name="pr_g_debug">البحث عن الأخطاء وإصلاحها</string>
     <string name="dlg_path_hint">مثال: src/images</string>
+    <!-- GitHub status -->
+    <string name="gs_title">حالة خوادم GitHub</string>
+    <string name="gs_ok">GitHub يعمل بشكل طبيعي</string>
+    <string name="gs_minor">مشكلة في بعض خدمات GitHub</string>
+    <string name="gs_major">عطل كبير في GitHub</string>
+    <string name="gs_critical">عطل حرج في GitHub</string>
+    <string name="gs_maint">GitHub قيد الصيانة</string>
+    <string name="gs_unknown">تعذّر جلب حالة GitHub</string>
+    <string name="gs_loading">جارٍ فحص حالة GitHub…</string>
+    <string name="gs_tap">اضغط للمحاولة أو لعرض التفاصيل</string>
+    <string name="gs_all_ok">كل الخدمات تعمل</string>
+    <string name="gs_checked">آخر فحص %1$s</string>
+    <string name="gs_components">الخدمات</string>
+    <string name="gs_incidents">أعطال جارية</string>
+    <string name="gs_no_incidents">لا توجد أعطال جارية الآن</string>
+    <string name="gs_open">فتح githubstatus.com</string>
+    <string name="gs_c_operational">تعمل</string>
+    <string name="gs_c_degraded">أداء منخفض</string>
+    <string name="gs_c_partial">عطل جزئي</string>
+    <string name="gs_c_major">عطل كامل</string>
+    <string name="gs_c_maint">صيانة</string>
+    <string name="gs_i_investigating">قيد التحقيق</string>
+    <string name="gs_i_identified">تم تحديد السبب</string>
+    <string name="gs_i_monitoring">قيد المراقبة</string>
 </resources>

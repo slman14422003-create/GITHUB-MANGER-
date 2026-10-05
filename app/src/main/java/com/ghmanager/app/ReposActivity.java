@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -37,6 +38,10 @@ public class ReposActivity extends AppCompatActivity {
     private int filter = 0;
     private String query = "";
     private ImageView accountBtn;
+    private ListView listView;
+    private View skeleton;
+    private View refreshBtn;
+    private GhStatusCard statusCard;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -50,6 +55,11 @@ public class ReposActivity extends AppCompatActivity {
         count = findViewById(R.id.count);
         chipRow = findViewById(R.id.chipRow);
         ListView list = findViewById(R.id.list);
+        listView = list;
+        refreshBtn = findViewById(R.id.btnRefresh);
+        // GitHub server status, right above the list
+        ViewGroup listParent = (ViewGroup) status.getParent();
+        statusCard = new GhStatusCard(this, listParent, listParent.indexOfChild(status));
         adapter = new RowAdapter(this);
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
@@ -67,7 +77,10 @@ public class ReposActivity extends AppCompatActivity {
             Ui.press(this, findViewById(id));
         }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
-        findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> {
+            load();
+            if (statusCard != null) statusCard.refresh();
+        });
         accountBtn = findViewById(R.id.btnAccount);
         accountBtn.setOnClickListener(v -> AccountSheet.show(this));
         refreshAccountIcon();
@@ -111,8 +124,15 @@ public class ReposActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        if (statusCard != null) statusCard.stop();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        if (statusCard != null) statusCard.start();
         if (accountBtn != null) refreshAccountIcon();
     }
 
@@ -188,32 +208,81 @@ public class ReposActivity extends AppCompatActivity {
         count.setText(getString(R.string.repos_count, rows.size()));
     }
 
+    private void showSkeleton(boolean on) {
+        ViewGroup parent = (ViewGroup) listView.getParent();
+        if (on) {
+            if (skeleton == null) {
+                skeleton = Skeleton.build(this, 6);
+                parent.addView(skeleton, parent.indexOfChild(listView));
+            }
+            skeleton.setVisibility(View.VISIBLE);
+            Skeleton.pulse(skeleton, true);
+            listView.setVisibility(View.GONE);
+        } else if (skeleton != null) {
+            Skeleton.pulse(skeleton, false);
+            skeleton.setVisibility(View.GONE);
+            listView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void fill(JSONArray arr) throws Exception {
+        final List<JSONObject> tmp = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
+        allRepos.clear();
+        allRepos.addAll(tmp);
+        render();
+    }
+
     private void load() {
-        status.setText(R.string.working);
-        status.setVisibility(View.VISIBLE);
+        final boolean hadData = !allRepos.isEmpty();
+        status.setVisibility(View.GONE);
+        Ui.spin(refreshBtn, true);
+        if (!hadData) showSkeleton(true);
         io.execute(() -> {
+            // 1) show the saved list at once (first visit of this session only)
+            if (!hadData) {
+                final JSONArray cached = RepoCache.load(this);
+                if (cached != null) {
+                    ui.post(() -> {
+                        if (isFinishing() || !allRepos.isEmpty()) return;
+                        try {
+                            fill(cached);
+                            showSkeleton(false);
+                        } catch (Exception ignored) {
+                        }
+                    });
+                }
+            }
+            // 2) bring the fresh list; unchanged answers come back instantly (ETag)
             try {
-                JSONArray arr = api.listRepos();
-                final List<JSONObject> tmp = new ArrayList<>();
-                for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
+                final JSONArray arr = api.listRepos();
+                RepoCache.save(this, arr);
                 ui.post(() -> {
-                    allRepos.clear();
-                    allRepos.addAll(tmp);
-                    render();
+                    if (isFinishing()) return;
+                    try {
+                        fill(arr);
+                    } catch (Exception ignored) {
+                    }
+                    showSkeleton(false);
+                    Ui.spin(refreshBtn, false);
                     status.setVisibility(View.GONE);
                 });
-            } catch (GitHubApi.ApiException e) {
-                if (e.code == 401) {
-                    // keep the session: the user decides whether to sign in again
-                    ui.post(() -> {
+            } catch (final Exception e) {
+                ui.post(() -> {
+                    if (isFinishing()) return;
+                    Ui.spin(refreshBtn, false);
+                    showSkeleton(false);
+                    boolean rejected = e instanceof GitHubApi.ApiException && ((GitHubApi.ApiException) e).code == 401;
+                    String msg = rejected ? getString(R.string.token_rejected_msg) : String.valueOf(e.getMessage());
+                    if (allRepos.isEmpty()) {
+                        // keep the session on 401: the user decides whether to sign in again
                         status.setVisibility(View.VISIBLE);
-                        status.setText(R.string.token_rejected_msg);
-                    });
-                } else {
-                    ui.post(() -> status.setText(e.getMessage()));
-                }
-            } catch (Exception e) {
-                ui.post(() -> status.setText(String.valueOf(e.getMessage())));
+                        status.setText(msg);
+                    } else {
+                        // the saved list stays usable; only say that the refresh failed
+                        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
     }
@@ -249,6 +318,7 @@ public class ReposActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (statusCard != null) statusCard.destroy();
         io.shutdown();
     }
 }

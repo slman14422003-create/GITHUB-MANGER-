@@ -28,4 +28,28 @@
     <string name="copy_text">Copy text</string>
     <string name="pr_g_debug">Finding and fixing errors</string>
     <string name="dlg_path_hint">e.g. src/images</string>
+    <!-- GitHub status -->
+    <string name="gs_title">GitHub status</string>
+    <string name="gs_ok">GitHub is operating normally</string>
+    <string name="gs_minor">Some GitHub services have issues</string>
+    <string name="gs_major">Major GitHub outage</string>
+    <string name="gs_critical">Critical GitHub outage</string>
+    <string name="gs_maint">GitHub maintenance in progress</string>
+    <string name="gs_unknown">Could not load GitHub status</string>
+    <string name="gs_loading">Checking GitHub status…</string>
+    <string name="gs_tap">Tap to retry or see details</string>
+    <string name="gs_all_ok">All services operational</string>
+    <string name="gs_checked">checked %1$s</string>
+    <string name="gs_components">Services</string>
+    <string name="gs_incidents">Active incidents</string>
+    <string name="gs_no_incidents">No active incidents right now</string>
+    <string name="gs_open">Open githubstatus.com</string>
+    <string name="gs_c_operational">Operational</string>
+    <string name="gs_c_degraded">Degraded</string>
+    <string name="gs_c_partial">Partial outage</string>
+    <string name="gs_c_major">Major outage</string>
+    <string name="gs_c_maint">Maintenance</string>
+    <string name="gs_i_investigating">Investigating</string>
+    <string name="gs_i_identified">Identified</string>
+    <string name="gs_i_monitoring">Monitoring</string>
 </resources>
