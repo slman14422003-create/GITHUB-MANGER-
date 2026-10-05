@@ -279,29 +279,31 @@ public class Dlg extends AlertDialog.Builder {
         }
         ViewParent parent = order.get(0).getParent();
         if (parent instanceof LinearLayout) {
-            LinearLayout bar = (LinearLayout) parent;
-            bar.setOrientation(row ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-            if (row) {
-                // the stock button bar may flip itself to vertical; with weighted buttons that would
-                // collapse them, so stacking is switched off when it can be (best effort)
-                try {
-                    bar.getClass().getMethod("setAllowStacking", boolean.class).invoke(bar, false);
-                } catch (Exception ignored) {
-                }
-            }
-            View spacer = bar.findViewById(androidx.appcompat.R.id.spacer);
-            if (spacer != null) spacer.setVisibility(View.GONE);
+            // The stock bar (ButtonBarLayout) re-stacks and re-measures its buttons on its own, and the
+            // tricks to switch that off are renamed away in the release build, so the buttons overlapped.
+            // They are moved into a plain bar that this class fully controls.
+            LinearLayout old = (LinearLayout) parent;
             List<Button> placed = new ArrayList<>(order);
             if (row) {
                 placed.clear();
                 if (shown(neg)) placed.add(neg);
                 placed.add(pos);
             }
+            LinearLayout bar = new LinearLayout(c);
+            bar.setOrientation(row ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+            bar.setPaddingRelative(Ui.dp(c, 18), Ui.dp(c, 6), Ui.dp(c, 18), Ui.dp(c, 16));
             for (Button b : placed) {
-                bar.removeView(b);
+                old.removeView(b);
                 bar.addView(b);
             }
-            bar.setPaddingRelative(Ui.dp(c, 18), Ui.dp(c, 6), Ui.dp(c, 18), Ui.dp(c, 16));
+            ViewParent gp = old.getParent();
+            if (gp instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) gp;
+                int idx = g.indexOfChild(old);
+                ViewGroup.LayoutParams lp = old.getLayoutParams();
+                g.removeViewAt(idx);
+                g.addView(bar, idx, lp);
+            }
         }
         for (Button b : order) {
             if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0, row);
@@ -332,6 +334,9 @@ public class Dlg extends AlertDialog.Builder {
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         b.setMinHeight(Ui.dp(c, 50));
         b.setMinWidth(0);
+        b.setMaxLines(2);
+        b.setGravity(Gravity.CENTER);
+        b.setPaddingRelative(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 8));
         b.setStateListAnimator(null);
         b.setBackgroundResource(kind == 1 ? R.drawable.btn_secondary
                 : kind == 2 ? R.drawable.btn_danger : R.drawable.btn_primary);

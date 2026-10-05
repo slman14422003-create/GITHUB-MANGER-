@@ -222,6 +222,10 @@ public final class Ui {
         b.setTextSize(15);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setMinHeight(dp(c, 50));
+        b.setMinWidth(0);
+        b.setMaxLines(2);
+        b.setGravity(Gravity.CENTER);
+        b.setPaddingRelative(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
         press(c, b);
         return b;
     }
