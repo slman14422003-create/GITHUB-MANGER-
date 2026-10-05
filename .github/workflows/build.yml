@@ -25,6 +25,10 @@ on:
         description: 'علّم الإصدار كنسخة تجريبية (Pre-release)'
         type: boolean
         default: false
+      seal_apk:
+        description: 'اختم الـ APK ضد التعديل (يفشل التطبيق إن عُدّل أي ملف بعد البناء)'
+        type: boolean
+        default: true
 
 # Least privilege: the build job only reads the repo, the release job gets write access itself
 permissions:
@@ -52,6 +56,31 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Looks for mistakes (broken XML, missing resources / activities, unbalanced code, leaked secrets),
+      # repairs the safe ones in this build's workspace, and FAILS the run on anything it cannot repair.
+      - name: Project doctor (find errors, repair what is safe, fail otherwise)
+        run: |
+          set -o pipefail
+          python3 tools/doctor.py --fix --report "$RUNNER_TEMP/doctor-report.md" . 2>&1 | tee "$RUNNER_TEMP/doctor.log"
+
+      - name: Doctor report and patch
+        if: always()
+        run: |
+          [ -f "$RUNNER_TEMP/doctor-report.md" ] && cat "$RUNNER_TEMP/doctor-report.md" >> "$GITHUB_STEP_SUMMARY" || true
+          git add -N . 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/doctor-out"
+          git diff --binary > "$RUNNER_TEMP/doctor-out/autofix.patch" || true
+          [ -s "$RUNNER_TEMP/doctor-out/autofix.patch" ] || rm -f "$RUNNER_TEMP/doctor-out/autofix.patch"
+          [ -f "$RUNNER_TEMP/doctor-report.md" ] && cp "$RUNNER_TEMP/doctor-report.md" "$RUNNER_TEMP/doctor-out/" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: doctor
+          path: ${{ runner.temp }}/doctor-out
+          if-no-files-found: ignore
+          retention-days: 14
+
       # Decide the version and whether to publish a Release. Every successful release build
       # on main / a tag / a manual run is published, so the release step is no longer skipped.
       - name: Resolve version and release plan
@@ -60,6 +89,7 @@ jobs:
           IN_VERSION: ${{ inputs.version }}
           IN_PUBLISH: ${{ inputs.publish_release }}
           IN_PRE: ${{ inputs.prerelease }}
+          IN_SEAL: ${{ inputs.seal_apk }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           BASE="$(grep -oP 'versionName\s*=\s*System\.getenv\([^)]*\)\s*\?:\s*"\K[^"]+' app/build.gradle | head -n1)"
@@ -88,6 +118,10 @@ jobs:
           if [ "$BUILD_TYPE" != "release" ] || [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             PUBLISH=false
           fi
+          # sealing is on unless a manual run turns it off (an unset input is empty on push events)
+          SEAL=true
+          [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && SEAL="${IN_SEAL:-true}"
+          echo "SEAL_APK=$SEAL" >> "$GITHUB_ENV"
           VERSION_NAME="${TAG#v}"
           {
             echo "tag=$TAG"
@@ -162,12 +196,38 @@ jobs:
       - name: Build APK
         env:
           VERSION_CODE_OVERRIDE: ${{ steps.meta.outputs.version_code }}
+          GUARD_SEAL: ${{ (env.BUILD_TYPE == 'release' && env.SEAL_APK == 'true') && '1' || '0' }}
         run: |
+          set -o pipefail
           if [ "$BUILD_TYPE" = "release" ]; then
-            gradle assembleRelease --stacktrace --warning-mode all
+            gradle assembleRelease --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/build.log"
           else
-            gradle assembleDebug --stacktrace --warning-mode all
+            gradle assembleDebug --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/build.log"
           fi
+
+      # Tamper protection: records a signed fingerprint of the code and resources inside the APK, signs the
+      # APK again, and checks the result the same way the app will check it. Any mismatch fails the build
+      # here, so a sealed APK that would refuse to start is never published.
+      - name: Seal APK against modification
+        if: env.BUILD_TYPE == 'release' && env.SEAL_APK == 'true'
+        run: |
+          set -euo pipefail
+          APK_SRC="$(ls app/build/outputs/apk/release/*.apk | head -n1)"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
+          python3 tools/seal_apk.py seal "$APK_SRC" "$RUNNER_TEMP/sealed.apk" "$EXPECTED_CERT_SHA256"
+          "$BT/zipalign" -f -p 4 "$RUNNER_TEMP/sealed.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$SIGNING_STORE_FILE" --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass env:SIGNING_STORE_PASSWORD --key-pass env:SIGNING_KEY_PASSWORD \
+            --out "$RUNNER_TEMP/final.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/zipalign" -c -p 4 "$RUNNER_TEMP/final.apk"
+          "$BT/apksigner" verify --print-certs "$RUNNER_TEMP/final.apk" | tee "$RUNNER_TEMP/seal-verify.txt"
+          CERT_HEX="$(grep -m1 'certificate SHA-256 digest' "$RUNNER_TEMP/seal-verify.txt" | awk '{print $NF}')"
+          if [ "${CERT_HEX,,}" != "${EXPECTED_CERT_SHA256,,}" ]; then
+            echo "::error::بصمة الشهادة بعد الختم لا تطابق المفتاح المضبوط"; exit 1
+          fi
+          python3 tools/seal_apk.py verify "$RUNNER_TEMP/final.apk" "$EXPECTED_CERT_SHA256"
+          cp "$RUNNER_TEMP/final.apk" "$APK_SRC"
+          echo "SEALED=ختم ضد التعديل" >> "$GITHUB_ENV"
 
       - name: Verify and summarize
         env:
@@ -198,6 +258,7 @@ jobs:
             echo "| SHA-256 لملف الـ APK | \`$(sha256sum "$APK" | cut -d' ' -f1)\` |"
             [ "$BUILD_TYPE" = "release" ] && echo "| **SHA-256 لشهادة التوقيع** (سجّلها في Play Console) | \`$CERT_COLON\` |" || true
             echo "| التوقيع | ${SIGNING_MODE:-debug} |"
+            echo "| الحماية من التعديل | ${SEALED:-غير مختوم} |"
             echo "| Android | compileSdk 36 / targetSdk 36 |"
             echo ""
             echo '```'
@@ -210,6 +271,27 @@ jobs:
             [ "$BUILD_TYPE" = "release" ] && echo "- **SHA-256 (شهادة التوقيع):** \`$CERT_COLON\`" || true
             echo "- versionCode: ${{ steps.meta.outputs.version_code }}"
           } > dist/notes-footer.md
+
+      # When anything above failed: a ready prompt for an AI assistant (error log included, secrets masked)
+      - name: Failure report with a ready prompt
+        if: failure()
+        run: |
+          SRC="$RUNNER_TEMP/build.log"
+          [ -s "$SRC" ] || SRC="$RUNNER_TEMP/doctor.log"
+          {
+            echo "## ❌ فشل المشروع"
+            echo ""
+            echo "لم يُنشر شيء. انسخ البرومبت التالي إلى مساعدك الذكي (فيه آخر سطور السجل بعد إخفاء الأسرار):"
+            echo ""
+            echo '```text'
+            echo "فشل بناء GitHub Actions في المستودع $GITHUB_REPOSITORY (الفرع $GITHUB_REF_NAME، الـ commit ${GITHUB_SHA:0:7})."
+            echo "ابحث عن السبب الجذري في السجل أدناه، وأصلحه بأقل تعديل ممكن، وأرسل لي الملفات الجديدة أو المعدّلة فقط بمساراتها."
+            echo "إن لم تكن متأكداً من الإصلاح فقل ذلك بوضوح ولا تخمّن، واذكر ما ينقصك لتتأكد."
+            echo ""
+            echo "--- آخر سطور السجل ---"
+            [ -s "$SRC" ] && tail -n 80 "$SRC" | sed -E 's/(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/***/g' || echo "(لا يوجد سجل)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -10,3 +10,8 @@
 }
 -repackageclasses ''
 -allowaccessmodification
+
+# Harder to read after decompiling
+-overloadaggressively
+-optimizationpasses 5
+-mergeinterfacesaggressively

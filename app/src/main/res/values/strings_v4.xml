@@ -29,4 +29,5 @@
     <string name="pr_g_fix">حل مشاكل الرفع</string>
     <string name="pr_g_release">الإصدارات والـ workflow</string>
     <string name="copy_text">نسخ النص</string>
+    <string name="pr_g_debug">البحث عن الأخطاء وإصلاحها</string>
 </resources>

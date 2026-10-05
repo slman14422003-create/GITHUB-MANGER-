@@ -32,11 +32,24 @@ final class Integrity {
             if (expected != null && !expected.isEmpty()) {
                 String actual = signerSha256(c);
                 if (actual == null || !actual.equalsIgnoreCase(expected)) return false;
+                // the code and resources inside the installed APK must be exactly what the build sealed
+                if (BuildConfig.SEALED && !sealIntact(c, expected)) return false;
             }
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private static volatile int sealState = 0; // 0 = not checked, 1 = intact, 2 = broken
+
+    private static boolean sealIntact(Context c, String certHex) {
+        if (sealState == 0) {
+            boolean ok = GuardCore.verify(new java.io.File(c.getApplicationInfo().sourceDir),
+                    certHex.toLowerCase(java.util.Locale.ROOT));
+            sealState = ok ? 1 : 2;
+        }
+        return sealState == 1;
     }
 
     /**

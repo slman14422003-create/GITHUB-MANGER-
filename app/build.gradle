@@ -42,6 +42,8 @@ android {
         // CI passes the release tag (without the leading v) so the installed version matches the Release tag
         versionName = System.getenv('APP_VERSION_NAME') ?: "2.2"
         buildConfigField 'String', 'CERT_SHA256', "\"${expectedCert}\""
+        // true only when the CI sealed this APK (tools/seal_apk.py): the app then verifies the seal at start
+        buildConfigField 'boolean', 'SEALED', "${System.getenv('GUARD_SEAL') == '1'}"
     }
 
     buildFeatures {

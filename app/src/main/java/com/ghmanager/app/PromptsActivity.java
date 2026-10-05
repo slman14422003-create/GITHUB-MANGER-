@@ -25,7 +25,7 @@ public class PromptsActivity extends BaseRepoActivity {
     private void render() {
         boolean ar = Locale.getDefault().getLanguage().equals("ar");
         List<Prompts.Item> items = Prompts.all(ar);
-        int[] titles = {R.string.pr_g_files, R.string.pr_g_folders, R.string.pr_g_fix, R.string.pr_g_release};
+        int[] titles = {R.string.pr_g_files, R.string.pr_g_folders, R.string.pr_g_fix, R.string.pr_g_release, R.string.pr_g_debug};
         content.removeAllViews();
         content.addView(Ui.body(this, getString(R.string.pr_hint), 13, R.color.text_secondary));
         for (int g = 0; g < titles.length; g++) {

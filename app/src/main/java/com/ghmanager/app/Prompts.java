@@ -27,6 +27,7 @@ public final class Prompts {
     public static final int G_FOLDERS = 1;
     public static final int G_FIX = 2;
     public static final int G_RELEASE = 3;
+    public static final int G_DEBUG = 4;
 
     public static List<Item> all(boolean ar) {
         List<Item> l = new ArrayList<>();
@@ -78,6 +79,25 @@ public final class Prompts {
             l.add(new Item(G_RELEASE, "كتابة ملاحظات إصدار (Release notes)",
                     "اكتب ملاحظات إصدار لـ {REPO} بصيغة Markdown منظمة (ميزات جديدة، تحسينات، إصلاحات، ملاحظات التثبيت) "
                             + "اعتماداً على هذه التغييرات:\n[الصق سجل الـ commits]"));
+            l.add(new Item(G_DEBUG, "فحص المشروع بحثاً عن الأخطاء وإصلاحها",
+                    "افحص مشروعي {REPO} (الفرع {BRANCH}) بحثاً عن الأخطاء: أخطاء الصياغة، موارد أو ملفات ناقصة، أقواس غير متوازنة، "
+                            + "تعارض أسماء، واستدعاءات لدوال غير موجودة.\n"
+                            + "لكل خطأ: اذكر الملف والسطر والسبب. أصلح ما تستطيع إصلاحه بثقة، وأرسل الملفات المعدّلة فقط بمساراتها.\n"
+                            + "إن لم تستطع إصلاح خطأ بثقة فاذكره بوضوح كـ «غير قابل للإصلاح» مع السبب ولا تخمّن."));
+            l.add(new Item(G_DEBUG, "تحليل سجل فشل GitHub Actions",
+                    "فشل بناء GitHub Actions في {REPO} (الفرع {BRANCH}). هذا آخر السجل:\n[الصق السجل]\n"
+                            + "حدّد السبب الجذري (لا الأعراض)، ثم أعطني الإصلاح بأقل تعديل ممكن. "
+                            + "إن كان السبب خارج الكود (سر مفقود، صلاحية، مفتاح توقيع) فقل ذلك صراحة وما الذي أفعله."));
+            l.add(new Item(G_DEBUG, "إصلاح أخطاء Gradle وأندرويد",
+                    "يفشل بناء Gradle في {REPO} بهذا الخطأ:\n[الصق الخطأ]\n"
+                            + "اشرح السبب بإيجاز وأعطني التعديل الدقيق (الملف والسطر)، وتحقق أن الإصلاح لا يكسر أجزاء أخرى من المشروع."));
+            l.add(new Item(G_DEBUG, "إصلاح تلقائي أو فشل صريح",
+                    "راجع التعديلات التالية في {REPO} قبل الدمج:\n[الصق التعديلات]\n"
+                            + "إن وجدت خطأً يمكن إصلاحه بأمان فأصلحه واذكر ما غيّرته. إن وجدت خطأً لا يمكن إصلاحه بأمان "
+                            + "فأوقف العملية بوضوح بعبارة «يجب أن يفشل المشروع» واذكر السبب، ولا تدمج شيئاً مشكوكاً فيه."));
+            l.add(new Item(G_DEBUG, "فحص أمني قبل النشر",
+                    "افحص {REPO} قبل النشر: هل توجد أسرار أو توكنات أو مفاتيح مكتوبة في الملفات؟ ملفات keystore أو .env مرفوعة؟ "
+                            + "صلاحيات workflow أوسع من اللازم؟ أعطني قائمة بما وجدت وكيف أصلح كل بند."));
         } else {
             l.add(new Item(G_FILES, "Upload one or several files",
                     "I want to upload files to the GitHub repository {REPO} (branch {BRANCH}).\n"
@@ -120,6 +140,26 @@ public final class Prompts {
             l.add(new Item(G_RELEASE, "Write release notes",
                     "Write release notes for {REPO} in tidy Markdown (new features, improvements, fixes, install notes) from "
                             + "these changes:\n[paste the commit log]"));
+            l.add(new Item(G_DEBUG, "Scan the project for errors and fix them",
+                    "Scan my project {REPO} (branch {BRANCH}) for errors: syntax errors, missing resources or files, unbalanced "
+                            + "brackets, name clashes and calls to functions that do not exist.\n"
+                            + "For each error give the file, line and cause. Fix what you can fix with confidence and send only the "
+                            + "changed files with their paths.\nIf you cannot fix an error with confidence, list it clearly as "
+                            + "\"cannot be fixed\" with the reason and do not guess."));
+            l.add(new Item(G_DEBUG, "Analyse a GitHub Actions failure log",
+                    "A GitHub Actions build failed in {REPO} (branch {BRANCH}). Here is the end of the log:\n[paste the log]\n"
+                            + "Find the root cause (not the symptom) and give the smallest fix. If the cause is outside the code "
+                            + "(missing secret, permission, signing key) say so plainly and what I should do."));
+            l.add(new Item(G_DEBUG, "Fix Gradle and Android errors",
+                    "The Gradle build of {REPO} fails with this error:\n[paste the error]\nExplain the cause briefly and give "
+                            + "the exact change (file and line), and check the fix does not break other parts of the project."));
+            l.add(new Item(G_DEBUG, "Auto-fix or fail clearly",
+                    "Review these changes in {REPO} before merging:\n[paste the changes]\nIf you find an error that can be fixed "
+                            + "safely, fix it and say what you changed. If you find one that cannot be fixed safely, stop clearly "
+                            + "with \"the project must fail\" and the reason, and do not merge anything doubtful."));
+            l.add(new Item(G_DEBUG, "Security check before publishing",
+                    "Check {REPO} before publishing: any secrets, tokens or keys written in files? keystore or .env files "
+                            + "committed? workflow permissions wider than needed? List what you found and how to fix each item."));
         }
         return l;
     }

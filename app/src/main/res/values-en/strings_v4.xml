@@ -26,4 +26,5 @@
     <string name="pr_g_fix">Fixing upload problems</string>
     <string name="pr_g_release">Releases and workflows</string>
     <string name="copy_text">Copy text</string>
+    <string name="pr_g_debug">Finding and fixing errors</string>
 </resources>
