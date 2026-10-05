@@ -57,9 +57,8 @@ public class ReposActivity extends AppCompatActivity {
         ListView list = findViewById(R.id.list);
         listView = list;
         refreshBtn = findViewById(R.id.btnRefresh);
-        // GitHub server status, right above the list
-        ViewGroup listParent = (ViewGroup) status.getParent();
-        statusCard = new GhStatusCard(this, listParent, listParent.indexOfChild(status));
+        // GitHub server status: a button in the top bar (its dot shows the state), details open on tap
+        statusCard = new GhStatusCard(this, findViewById(R.id.btnStatus), findViewById(R.id.statusDot));
         adapter = new RowAdapter(this);
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
@@ -73,7 +72,7 @@ public class ReposActivity extends AppCompatActivity {
             startActivity(i);
         });
 
-        for (int id : new int[]{R.id.btnNew, R.id.btnRefresh, R.id.btnAccount}) {
+        for (int id : new int[]{R.id.btnNew, R.id.btnRefresh, R.id.btnAccount, R.id.btnStatus}) {
             Ui.press(this, findViewById(id));
         }
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
@@ -85,6 +84,16 @@ public class ReposActivity extends AppCompatActivity {
         accountBtn.setOnClickListener(v -> AccountSheet.show(this));
         refreshAccountIcon();
         fillProfileIfMissing();
+        ((EditText) findViewById(R.id.search)).setOnEditorActionListener((v, actionId, ev) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager)
+                        getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null) imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+                v.clearFocus();
+                return true;
+            }
+            return false;
+        });
         ((EditText) findViewById(R.id.search)).addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {

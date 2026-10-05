@@ -51,6 +51,33 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
+        <FrameLayout
+            android:id="@+id/btnStatus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_icon_btn"
+            android:clickable="true"
+            android:contentDescription="@string/gs_title"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_status"
+                android:tint="@color/text_primary" />
+
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="7dp"
+                android:layout_marginEnd="7dp" />
+        </FrameLayout>
+
         <ImageButton
             android:id="@+id/btnNew"
             style="@style/IconButton"
@@ -78,6 +105,7 @@
         android:drawableTint="@color/text_hint"
         android:hint="@string/search_repos"
         android:importantForAutofill="no"
+        android:imeOptions="actionSearch"
         android:inputType="text"
         android:maxLines="1"
         android:paddingStart="18dp"

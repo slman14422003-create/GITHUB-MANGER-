@@ -11,18 +11,18 @@ import android.text.format.DateUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * "GitHub status" card for the home screen: a coloured dot, one line about the state of GitHub's servers and
- * when it was checked. Tap it for every service and the open incidents. Refreshes itself every minute while
- * the screen is visible.
+ * "GitHub status" button for the top bar: a small coloured dot on the button shows the state of GitHub's
+ * servers (green, yellow, blue for maintenance, red). Tap it for a sheet with every service and the open
+ * incidents. Refreshes itself every minute while the screen is visible.
  */
 public final class GhStatusCard {
     private static final long EVERY_MS = 60_000;
@@ -30,13 +30,12 @@ public final class GhStatusCard {
     private final Activity a;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final LinearLayout card;
+    private final View button;
     private final View dot;
-    private final TextView title;
-    private final TextView sub;
     private GhStatus.Result last;
     private boolean running = false;
     private boolean busy = false;
+    private boolean openWhenReady = false;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -47,53 +46,11 @@ public final class GhStatusCard {
         }
     };
 
-    public GhStatusCard(Activity activity, ViewGroup parent, int index) {
-        a = activity;
-        card = new LinearLayout(a);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card_ripple);
-        card.setClickable(true);
-        card.setFocusable(true);
-        card.setPaddingRelative(Ui.dp(a, 16), Ui.dp(a, 12), Ui.dp(a, 12), Ui.dp(a, 12));
-        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cl.setMargins(Ui.dp(a, 14), Ui.dp(a, 8), Ui.dp(a, 14), Ui.dp(a, 4));
-        card.setLayoutParams(cl);
-
-        dot = new View(a);
-        card.addView(dot, new LinearLayout.LayoutParams(Ui.dp(a, 12), Ui.dp(a, 12)));
-
-        LinearLayout col = new LinearLayout(a);
-        col.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        tl.setMarginStart(Ui.dp(a, 12));
-        card.addView(col, tl);
-        title = new TextView(a);
-        title.setTextColor(Ui.color(a, R.color.text_primary));
-        title.setTextSize(14);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-        col.addView(title);
-        sub = new TextView(a);
-        sub.setTextColor(Ui.color(a, R.color.text_secondary));
-        sub.setTextSize(12);
-        sub.setSingleLine(true);
-        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        sub.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-        col.addView(sub);
-
-        ImageView go = new ImageView(a);
-        go.setImageResource(R.drawable.ic_chevron);
-        go.setColorFilter(Ui.color(a, R.color.text_hint));
-        go.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        card.addView(go, new LinearLayout.LayoutParams(Ui.dp(a, 24), Ui.dp(a, 24)));
-
-        card.setOnClickListener(v -> details());
-        Ui.press(a, card);
-        parent.addView(card, Math.min(index, parent.getChildCount()));
+    public GhStatusCard(Activity activity, View button, View dot) {
+        this.a = activity;
+        this.button = button;
+        this.dot = dot;
+        button.setOnClickListener(v -> details());
         paint();
     }
 
@@ -117,15 +74,20 @@ public final class GhStatusCard {
     public void refresh() {
         if (busy) return;
         busy = true;
+        paint();
         io.execute(() -> {
             final GhStatus.Result r = GhStatus.fetch();
             ui.post(() -> {
                 busy = false;
                 if (a.isFinishing() || a.isDestroyed()) return;
-                // a failed check keeps the last good answer on screen (only its age shows)
+                // a failed check keeps the last good answer on screen
                 if (r != null) last = r;
-                else if (last == null) last = null;
                 paint();
+                if (openWhenReady) {
+                    openWhenReady = false;
+                    if (last != null) details();
+                    else Toast.makeText(a, R.string.gs_unknown, Toast.LENGTH_SHORT).show();
+                }
             });
         });
     }
@@ -193,57 +155,37 @@ public final class GhStatusCard {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(color);
+        // a thin ring in the page colour keeps the dot readable on top of the button
+        g.setStroke(Ui.dp(a, 2), Ui.color(a, R.color.bg));
         dot.setBackground(g);
         Skeleton.pulse(dot, pulse);
     }
 
+    private int titleRes(String ind) {
+        switch (ind) {
+            case "none":
+                return R.string.gs_ok;
+            case "minor":
+                return R.string.gs_minor;
+            case "maintenance":
+                return R.string.gs_maint;
+            case "major":
+                return R.string.gs_major;
+            default:
+                return R.string.gs_critical;
+        }
+    }
+
+    /** Colours the dot and keeps the button's spoken description in step with the state. */
     private void paint() {
         if (last == null) {
-            setDot(Ui.color(a, R.color.text_hint), false);
-            title.setText(busy ? R.string.gs_loading : R.string.gs_unknown);
-            sub.setText(R.string.gs_tap);
+            setDot(Ui.color(a, R.color.text_hint), busy);
+            button.setContentDescription(a.getString(busy ? R.string.gs_loading : R.string.gs_unknown));
             return;
         }
         String ind = last.indicator;
         setDot(colorFor(ind), severity(ind) > 0);
-        int t;
-        switch (ind) {
-            case "none":
-                t = R.string.gs_ok;
-                break;
-            case "minor":
-                t = R.string.gs_minor;
-                break;
-            case "maintenance":
-                t = R.string.gs_maint;
-                break;
-            case "major":
-                t = R.string.gs_major;
-                break;
-            default:
-                t = R.string.gs_critical;
-        }
-        title.setText(t);
-        String age = DateUtils.getRelativeTimeSpanString(last.checkedAt, System.currentTimeMillis(),
-                DateUtils.MINUTE_IN_MILLIS).toString();
-        String line;
-        if (severity(ind) == 0) {
-            line = a.getString(R.string.gs_all_ok);
-        } else {
-            StringBuilder sb = new StringBuilder();
-            int n = 0;
-            for (GhStatus.Comp k : last.components) {
-                if ("operational".equals(k.status)) continue;
-                if (n++ > 0) sb.append("، ");
-                if (n > 3) {
-                    sb.append("…");
-                    break;
-                }
-                sb.append(k.name);
-            }
-            line = sb.length() > 0 ? sb.toString() : (last.incidents.isEmpty() ? last.description : last.incidents.get(0).name);
-        }
-        sub.setText(line + " · " + a.getString(R.string.gs_checked, age));
+        button.setContentDescription(a.getString(R.string.gs_title) + ": " + a.getString(titleRes(ind)));
     }
 
     // ------------------------------------------------------------------ details
@@ -258,18 +200,47 @@ public final class GhStatusCard {
         return t;
     }
 
+    private View summary() {
+        String ind = last.indicator;
+        LinearLayout row = new LinearLayout(a);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackgroundResource(R.drawable.bg_option);
+        row.setPaddingRelative(Ui.dp(a, 16), Ui.dp(a, 14), Ui.dp(a, 16), Ui.dp(a, 14));
+        View d = new View(a);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(colorFor(ind));
+        d.setBackground(g);
+        row.addView(d, new LinearLayout.LayoutParams(Ui.dp(a, 14), Ui.dp(a, 14)));
+        LinearLayout col = new LinearLayout(a);
+        col.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        cl.setMarginStart(Ui.dp(a, 12));
+        row.addView(col, cl);
+        col.addView(text(a.getString(titleRes(ind)), 15, R.color.text_primary, true));
+        String age = DateUtils.getRelativeTimeSpanString(last.checkedAt, System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS).toString();
+        col.addView(text(a.getString(R.string.gs_checked, age), 12, R.color.text_secondary, false));
+        return row;
+    }
+
     private void details() {
         if (last == null) {
+            // nothing fetched yet: check now and open the sheet as soon as the answer arrives
+            openWhenReady = true;
+            Toast.makeText(a, R.string.gs_loading, Toast.LENGTH_SHORT).show();
             refresh();
             return;
         }
         LinearLayout box = Ui.box(a);
+        box.addView(summary());
         box.addView(Ui.sectionTitle(a, a.getString(R.string.gs_components)));
         for (GhStatus.Comp k : last.components) {
             LinearLayout row = new LinearLayout(a);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(Ui.dp(a, 6), Ui.dp(a, 7), Ui.dp(a, 6), Ui.dp(a, 7));
+            row.setPadding(Ui.dp(a, 6), Ui.dp(a, 8), Ui.dp(a, 6), Ui.dp(a, 8));
             View d = new View(a);
             GradientDrawable g = new GradientDrawable();
             g.setShape(GradientDrawable.OVAL);
@@ -280,9 +251,8 @@ public final class GhStatusCard {
             LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             nl.setMarginStart(Ui.dp(a, 12));
             row.addView(n, nl);
-            TextView s = text(compLabel(k.status), 12, "operational".equals(k.status) ? R.color.text_secondary
-                    : R.color.text_primary, !"operational".equals(k.status));
-            row.addView(s);
+            boolean ok = "operational".equals(k.status);
+            row.addView(text(compLabel(k.status), 12, ok ? R.color.text_secondary : R.color.text_primary, !ok));
             box.addView(row);
         }
         box.addView(Ui.sectionTitle(a, a.getString(R.string.gs_incidents)));
@@ -310,18 +280,20 @@ public final class GhStatusCard {
         }
         ScrollView sv = new ScrollView(a);
         sv.addView(box);
-        new Dlg(a)
+        new Dlg(a).sheet()
                 .setTitle(R.string.gs_title)
                 .setView(sv)
                 .setPositiveButton(R.string.gs_open, (d, w) -> {
                     try {
                         a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(GhStatus.PAGE)));
                     } catch (Exception e) {
-                        android.widget.Toast.makeText(a, R.string.no_browser, android.widget.Toast.LENGTH_SHORT).show();
+                        Toast.makeText(a, R.string.no_browser, Toast.LENGTH_SHORT).show();
                     }
                 })
                 .setNegativeButton(R.string.close, null)
                 .show();
+        // a fresh check while the sheet is open keeps the next opening up to date
+        refresh();
     }
 
     private String statusName(String s) {

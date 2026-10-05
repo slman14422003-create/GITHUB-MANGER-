@@ -126,7 +126,7 @@ public final class Ui {
     public static LinearLayout box(Context c) {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(c, 22), dp(c, 12), dp(c, 22), 0);
+        box.setPadding(dp(c, 24), dp(c, 12), dp(c, 24), 0);
         return box;
     }
 

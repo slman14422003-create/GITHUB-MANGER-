@@ -15,6 +15,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -38,22 +39,53 @@ public class Dlg extends AlertDialog.Builder {
 
     /** True when the dialog shows a list of options: those open as a bottom sheet instead of a centred box. */
     private boolean hasList = false;
+    private boolean forceSheet = false;
+
+    /** Shows this dialog as a bottom sheet even though it has no option list (details, long forms). */
+    public Dlg sheet() {
+        forceSheet = true;
+        return this;
+    }
+
+    /** Widest a centred dialog or sheet may get (tablets, landscape) so text lines stay readable. */
+    private static final int MAX_WIDTH_DP = 460;
+    private static final int SHEET_MAX_WIDTH_DP = 560;
+
+    private static int windowWidth(Context c, boolean sheet) {
+        android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
+        int cap = Ui.dp(c, sheet ? SHEET_MAX_WIDTH_DP : MAX_WIDTH_DP);
+        int want = (int) (dm.widthPixels * (sheet ? 1f : 0.94f));
+        return Math.min(want, cap);
+    }
+
+    /** One place decides the size of every dialog in the app. */
+    private static void size(AlertDialog d, boolean sheet) {
+        Window w = d.getWindow();
+        if (w == null) return;
+        Context c = d.getContext();
+        int width = windowWidth(c, sheet);
+        w.setGravity(sheet ? (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL) : Gravity.CENTER);
+        w.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // a very tall dialog never runs under the status bar: it stops at 88% of the screen and scrolls
+        final View decor = w.getDecorView();
+        decor.post(() -> {
+            if (!d.isShowing()) return;
+            int max = (int) (c.getResources().getDisplayMetrics().heightPixels * 0.88f);
+            if (decor.getHeight() > max) w.setLayout(width, max);
+        });
+    }
 
     @Override
     public AlertDialog create() {
         final AlertDialog d = super.create();
-        final boolean sheet = hasList;
+        final boolean sheet = hasList || forceSheet;
         Window w = d.getWindow();
         if (sheet && w != null) {
-            w.setGravity(Gravity.BOTTOM);
             w.setWindowAnimations(R.style.SheetAnim);
             w.setBackgroundDrawableResource(R.drawable.bg_sheet);
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         d.setOnShowListener(dialog -> {
-            if (sheet && d.getWindow() != null) {
-                d.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            }
+            size(d, sheet);
             style(d);
         });
         return d;
@@ -195,6 +227,23 @@ public class Dlg extends AlertDialog.Builder {
             msg.setLineSpacing(0, 1.2f);
             msg.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         }
+        // custom content (forms, details): same side padding everywhere, whatever the caller built
+        android.widget.FrameLayout custom = d.findViewById(androidx.appcompat.R.id.custom);
+        if (custom != null && custom.getChildCount() > 0) {
+            View child = custom.getChildAt(0);
+            View inner = child instanceof ViewGroup && ((ViewGroup) child).getChildCount() == 1
+                    && child instanceof android.widget.ScrollView ? ((ViewGroup) child).getChildAt(0) : child;
+            boolean padded = inner.getPaddingStart() + inner.getPaddingEnd() > 0
+                    || child.getPaddingStart() + child.getPaddingEnd() > 0;
+            if (!padded) custom.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, 4), Ui.dp(c, 24), 0);
+            // the keyboard opens on the first empty field, so the user can type straight away
+            EditText first = firstEdit(custom);
+            if (first != null && first.getText().length() == 0 && d.getWindow() != null) {
+                first.requestFocus();
+                d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+                        | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
+        }
         ListView lv = d.getListView();
         if (lv != null) {
             lv.setDivider(null);
@@ -248,6 +297,18 @@ public class Dlg extends AlertDialog.Builder {
             if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0, row);
             else pill(c, b, 1, row);
         }
+    }
+
+    private static EditText firstEdit(View v) {
+        if (v instanceof EditText) return (EditText) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                EditText e = firstEdit(g.getChildAt(i));
+                if (e != null) return e;
+            }
+        }
+        return null;
     }
 
     private static boolean shown(Button b) {
