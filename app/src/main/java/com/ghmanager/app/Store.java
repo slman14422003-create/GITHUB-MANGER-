@@ -117,6 +117,7 @@ public class Store {
             if (!k.startsWith("upd_")) e.remove(k);
         }
         e.apply();
+        RepoCache.clear(c);
         try {
             KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
             ks.load(null);

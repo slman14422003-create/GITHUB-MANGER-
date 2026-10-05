@@ -3,4 +3,5 @@
     <item name="tag_insets" type="id" />
     <item name="tag_nav" type="id" />
     <item name="tag_quiet" type="id" />
+    <item name="skeleton_anim" type="id" />
 </resources>
