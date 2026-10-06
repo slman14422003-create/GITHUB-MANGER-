@@ -50,6 +50,27 @@ public final class Mirror {
         return key;
     }
 
+    /** A mirror address and key are saved (the on/off switch does not matter). */
+    public static boolean configured() {
+        return !base.isEmpty() && !key.isEmpty();
+    }
+
+    /** True when the URL points at the saved mirror, whether the switch is on or not. */
+    public static boolean pointsAtMirror(String url) {
+        return !base.isEmpty() && url != null && url.startsWith(base + "/");
+    }
+
+    /** Like {@link #map} but uses the saved mirror even when the switch is off (for the status page). */
+    public static String mapForced(String url) {
+        if (base.isEmpty() || url == null || !url.startsWith("https://")) return url;
+        if (pointsAtMirror(url)) return url;
+        String rest = url.substring(8);
+        int slash = rest.indexOf('/');
+        String host = slash < 0 ? rest : rest.substring(0, slash);
+        if (!githubHost(host)) return url;
+        return base + "/" + rest;
+    }
+
     /** True when this URL already points at the mirror. */
     public static boolean isMirrored(String url) {
         return active() && url != null && url.startsWith(base + "/");

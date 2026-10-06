@@ -77,7 +77,7 @@
     <string name="mir_ok">المرآة تعمل ✓</string>
     <string name="mir_fail">فشل الاتصال: %1$s</string>
     <string name="mir_bad_url">أدخل رابط https صالحاً للمرآة</string>
-    <string name="mir_help">انشر ملف worker/mirror.js على Cloudflare ثم الصق رابطه هنا. أضف سرّ MIRROR_KEY في الـ Worker (إجباري، وبدونه يرفض الـ Worker كل الطلبات) ثم أدخل نفس القيمة في خانة المفتاح.</string>
+    <string name="mir_help">انشر ملف worker/mirror.js على Cloudflare ثم الصق رابطه هنا. أضف سرّ MIRROR_KEY في الـ Worker (إجباري، وبدونه يرفض الـ Worker كل الطلبات) ثم أدخل نفس القيمة في خانة المفتاح. تُستخدم المرآة المحفوظة أيضاً لفحص حالة GitHub (githubstatus.com) إذا كان محجوباً، حتى لو كان مفتاح التفعيل مطفأ.</string>
     <string name="mir_settings_link">إعدادات المرآة (Proxy)</string>
 
     <!-- live run board -->

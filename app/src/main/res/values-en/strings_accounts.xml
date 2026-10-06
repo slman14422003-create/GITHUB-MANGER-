@@ -77,7 +77,7 @@
     <string name="mir_ok">The mirror works ✓</string>
     <string name="mir_fail">Connection failed: %1$s</string>
     <string name="mir_bad_url">Enter a valid https mirror URL</string>
-    <string name="mir_help">Deploy worker/mirror.js on Cloudflare and paste its URL here. Add the secret MIRROR_KEY to the Worker (mandatory: without it the Worker refuses every request) and enter the same value in the key field.</string>
+    <string name="mir_help">Deploy worker/mirror.js on Cloudflare and paste its URL here. Add the secret MIRROR_KEY to the Worker (mandatory: without it the Worker refuses every request) and enter the same value in the key field. The saved mirror is also used for the GitHub status check (githubstatus.com) when that site is blocked, even if the mirror switch is off.</string>
     <string name="mir_settings_link">Mirror (Proxy) settings</string>
 
     <!-- live run board -->

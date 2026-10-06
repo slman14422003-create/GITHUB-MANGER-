@@ -6,6 +6,7 @@
 //   https://YOUR-WORKER/github.com/OWNER/REPO/archive/main.zip   any github.com page / file
 //   https://YOUR-WORKER/repo/OWNER/REPO[/REF]                    repository as a .zip
 //   https://YOUR-WORKER/release/OWNER/REPO/TAG/ASSET             release asset (TAG may be "latest")
+//   https://YOUR-WORKER/status                                   GitHub status (githubstatus.com summary JSON)
 //
 // Privacy rules enforced here:
 //   1. The secret MIRROR_KEY is REQUIRED. Without it the Worker refuses everything (it never runs open).
@@ -27,6 +28,8 @@ const HOSTS = [
 
 // the token is only forwarded to GitHub itself, never to the storage hosts GitHub redirects to
 const TOKEN_HOSTS = /^(api\.github\.com|uploads\.github\.com|github\.com)$/;
+
+const STATUS_URL = "https://www.githubstatus.com/api/v2/summary.json";
 
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const DROP_REQUEST = /^(host|cf-|x-forwarded-|x-real-ip|x-mirror-key|connection|content-length$|origin$|referer$|cookie$|sec-)/i;
@@ -63,6 +66,8 @@ async function sameSecret(a, b) {
 function shortcut(path) {
   const p = path.split("/").filter(Boolean).map(decodeURIComponent);
   const safe = (s) => encodeURIComponent(s);
+  // githubstatus.com is blocked in some countries: the app asks the Worker for it instead
+  if (p[0] === "status" && p.length === 1) return STATUS_URL;
   if (p[0] === "repo" && p.length >= 3) {
     const ref = p.length > 3 ? p.slice(3).map(safe).join("/") : "HEAD";
     return `https://github.com/${safe(p[1])}/${safe(p[2])}/archive/${ref}.zip`;
@@ -127,6 +132,12 @@ export default {
     }
     if (!TOKEN_HOSTS.test(upstream.hostname)) headers.delete("authorization");
 
+    if (!headers.has("user-agent")) headers.set("user-agent", "GitHubManagerApp");
+
+    // the status page is public and changes slowly: a 30 second edge cache keeps it fast and light
+    const isStatus = upstream.hostname === "www.githubstatus.com" || upstream.hostname === "githubstatus.com";
+    const cache = isStatus && request.method === "GET" ? { cacheTtl: 30, cacheEverything: true } : undefined;
+
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
     let res;
     try {
@@ -136,7 +147,8 @@ export default {
           headers,
           body: hasBody ? request.body : undefined,
           redirect: "manual",
-        })
+        }),
+        cache ? { cf: cache } : undefined
       );
     } catch (_) {
       return reply(502, "Upstream unreachable");

@@ -38,10 +38,37 @@ public final class GhStatus {
         public long checkedAt = 0;
     }
 
+    /** When the direct route is blocked, the mirror is tried first for this long (milliseconds). */
+    private static final long PREFER_MIRROR_MS = 30L * 60L * 1000L;
+    private static volatile long preferMirrorUntil = 0;
+
+    /**
+     * githubstatus.com is blocked in some countries. The page is fetched directly first (short wait); if
+     * that fails and a mirror (address + key) is saved, it is fetched through the mirror, even when the
+     * mirror's switch is off. After a block is detected the mirror goes first for a while, so the check
+     * does not wait for the blocked route every minute.
+     */
+    private static byte[] download() {
+        boolean mirror = Mirror.configured();
+        boolean mirrorFirst = Mirror.active() || (mirror && System.currentTimeMillis() < preferMirrorUntil);
+        if (mirrorFirst) {
+            byte[] b = GitHubApi.fetchBytes(URL, 400 * 1024, mirror, 15000);
+            if (b != null) return b;
+            // the mirror itself failed: the direct route may still work
+            return Mirror.active() ? null : GitHubApi.fetchBytes(URL, 400 * 1024, false, 6000);
+        }
+        byte[] b = GitHubApi.fetchBytes(URL, 400 * 1024, false, mirror ? 6000 : 15000);
+        if (b == null && mirror) {
+            b = GitHubApi.fetchBytes(URL, 400 * 1024, true, 15000);
+            if (b != null) preferMirrorUntil = System.currentTimeMillis() + PREFER_MIRROR_MS;
+        }
+        return b;
+    }
+
     /** Downloads and parses the summary; null when the status site cannot be reached. */
     public static Result fetch() {
         try {
-            byte[] b = GitHubApi.fetchBytes(URL, 400 * 1024);
+            byte[] b = download();
             if (b == null) return null;
             Result r = parse(new String(b, StandardCharsets.UTF_8));
             if (r != null) r.checkedAt = System.currentTimeMillis();

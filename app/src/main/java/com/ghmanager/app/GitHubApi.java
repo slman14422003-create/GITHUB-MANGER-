@@ -376,14 +376,22 @@ public class GitHubApi {
 
     /** Small unauthenticated download (avatars). Returns null on any failure. */
     public static byte[] fetchBytes(String url, int maxBytes) {
+        return fetchBytes(url, maxBytes, false, 15000);
+    }
+
+    /**
+     * @param forceMirror use the saved mirror even when its switch is off
+     * @param connectMs   how long to wait for the connection before giving up
+     */
+    public static byte[] fetchBytes(String url, int maxBytes, boolean forceMirror, int connectMs) {
         try {
             if (!url.startsWith("https://")) return null;
-            String real = Mirror.map(url);
+            String real = forceMirror ? Mirror.mapForced(url) : Mirror.map(url);
             HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
-            c.setConnectTimeout(15000);
+            c.setConnectTimeout(connectMs);
             c.setReadTimeout(20000);
             c.setRequestProperty("User-Agent", "GitHubManagerApp");
-            if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
+            if (Mirror.pointsAtMirror(real) && !Mirror.key().isEmpty()) {
                 c.setRequestProperty("X-Mirror-Key", Mirror.key());
             }
             if (c.getResponseCode() != 200) {
