@@ -74,13 +74,11 @@ public class Dlg extends AlertDialog.Builder {
         int width = windowWidth(c, sheet);
         w.setGravity(sheet ? (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL) : Gravity.CENTER);
         w.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
-        // a very tall dialog never runs under the status bar: it stops at 88% of the screen and scrolls
-        final View decor = w.getDecorView();
-        decor.post(() -> {
-            if (!d.isShowing()) return;
-            int max = (int) (c.getResources().getDisplayMetrics().heightPixels * 0.92f);
-            if (decor.getHeight() > max) w.setLayout(width, max);
-        });
+        // Keep the window WRAP_CONTENT.  Clamping the whole dialog window after it is measured
+        // can clip AlertDialog's bottom button bar (especially on small/old Samsung screens).
+        // Long content must be scrollable inside the dialog instead; the action buttons always stay
+        // outside that scrolling area and remain visible.
+        w.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     @Override
