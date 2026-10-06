@@ -112,6 +112,26 @@ public final class Ui {
         return cb;
     }
 
+    /** Same option row helper for dynamically generated labels. */
+    public static CheckBox check(Context c, CharSequence text, boolean checked) {
+        CheckBox cb = new CheckBox(c);
+        cb.setText(text);
+        cb.setChecked(checked);
+        cb.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
+        cb.setTextSize(15);
+        cb.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        cb.setButtonTintList(ContextCompat.getColorStateList(c, R.color.check_tint));
+        cb.setBackgroundResource(R.drawable.bg_option);
+        cb.setMinHeight(dp(c, 52));
+        cb.setPaddingRelative(dp(c, 10), dp(c, 8), dp(c, 14), dp(c, 8));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(c, 2);
+        lp.bottomMargin = dp(c, 10);
+        cb.setLayoutParams(lp);
+        return cb;
+    }
+
     /** A text input with its label above it (long hints wrap badly inside the field itself). */
     public static LinearLayout field(Context c, CharSequence label, EditText e) {
         LinearLayout col = new LinearLayout(c);
