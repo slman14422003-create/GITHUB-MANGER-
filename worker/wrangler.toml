@@ -1,0 +1,14 @@
+# Deploy:  cd worker && npx wrangler deploy
+# Then set the secret (never put the key in this file):  npx wrangler secret put MIRROR_KEY
+name = "gh-mirror"
+main = "mirror.js"
+compatibility_date = "2025-01-01"
+
+# Keep the Worker off the public *.workers.dev address and serve it only from your own domain/route
+# (uncomment and edit). A private route + MIRROR_KEY makes it unusable for anyone else.
+workers_dev = true
+# routes = [{ pattern = "mirror.example.com/*", zone_name = "example.com" }]
+
+# Do not keep request logs that could contain GitHub paths.
+[observability]
+enabled = false

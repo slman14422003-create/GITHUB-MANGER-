@@ -70,13 +70,14 @@
     <string name="mir_enable_sub">GitHub requests and downloads go through your own Cloudflare Worker</string>
     <string name="mir_url">Mirror URL</string>
     <string name="mir_url_hint">https://yourname.workers.dev</string>
-    <string name="mir_key">Access key (optional)</string>
+    <string name="mir_key">Access key (required)</string>
+    <string name="mir_key_required">Enter the same access key you set in the Worker (MIRROR_KEY)</string>
     <string name="mir_test">Test connection</string>
     <string name="mir_testing">Testing…</string>
     <string name="mir_ok">The mirror works ✓</string>
     <string name="mir_fail">Connection failed: %1$s</string>
     <string name="mir_bad_url">Enter a valid https mirror URL</string>
-    <string name="mir_help">Deploy worker/mirror.js on Cloudflare and paste its URL here. If you set MIRROR_KEY in the Worker, enter it in the key field.</string>
+    <string name="mir_help">Deploy worker/mirror.js on Cloudflare and paste its URL here. Add the secret MIRROR_KEY to the Worker (mandatory: without it the Worker refuses every request) and enter the same value in the key field.</string>
     <string name="mir_settings_link">Mirror (Proxy) settings</string>
 
     <!-- live run board -->

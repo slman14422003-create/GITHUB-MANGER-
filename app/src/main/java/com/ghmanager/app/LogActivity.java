@@ -1,12 +1,18 @@
 package com.ghmanager.app;
 
 import android.os.Bundle;
+import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
 import android.view.View;
-import android.widget.ScrollView;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.ListView;
 import android.widget.TextView;
 
 import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Live viewer for a job's log: follows the output while the job runs, highlights errors and lets the
@@ -26,7 +32,47 @@ public class LogActivity extends BaseRepoActivity {
     private boolean firstLoad = true;
     private String statusLabel = "";
     private TextView text;
-    private ScrollView scroll;
+    private ListView list;
+    private final List<CharSequence> chunks = new ArrayList<>();
+    private static final int LINES_PER_ROW = 10;
+
+    /** Each row holds a handful of lines, so no single view is ever taller than the GPU can draw. */
+    private final BaseAdapter adapter = new BaseAdapter() {
+        @Override
+        public int getCount() {
+            return chunks.size();
+        }
+
+        @Override
+        public Object getItem(int i) {
+            return chunks.get(i);
+        }
+
+        @Override
+        public long getItemId(int i) {
+            return i;
+        }
+
+        @Override
+        public View getView(int i, View v, ViewGroup parent) {
+            TextView t;
+            if (v instanceof TextView) {
+                t = (TextView) v;
+            } else {
+                t = new TextView(LogActivity.this);
+                t.setTypeface(Typeface.MONOSPACE);
+                t.setTextSize(12f);
+                t.setLineSpacing(Ui.dp(LogActivity.this, 2), 1f);
+                t.setTextColor(Ui.color(LogActivity.this, R.color.text_primary));
+                t.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+                t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+                t.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
+                t.setPadding(Ui.dp(LogActivity.this, 14), 0, Ui.dp(LogActivity.this, 14), 0);
+            }
+            t.setText(chunks.get(i));
+            return t;
+        }
+    };
 
     private final Runnable poll = () -> {
         if (resumed && active) load(true);
@@ -41,7 +87,13 @@ public class LogActivity extends BaseRepoActivity {
         String jobName = getIntent().getStringExtra("jobName");
         bindHeader(jobName == null ? getString(R.string.view_log) : jobName, getString(R.string.log_title));
         text = findViewById(R.id.text);
-        scroll = findViewById(R.id.scroll);
+        list = findViewById(R.id.list);
+        list.setAdapter(adapter);
+        // long press on a part of the log copies just that part
+        list.setOnItemLongClickListener((p, v, pos, id) -> {
+            copy("log", chunks.get(pos).toString());
+            return true;
+        });
         chipRow = findViewById(R.id.chipRow);
         filterScroll = findViewById(R.id.filterScroll);
 
@@ -119,7 +171,7 @@ public class LogActivity extends BaseRepoActivity {
                     truncated = fCut;
                     render(firstLoad);
                 } else if (fRaw == null && raw.isEmpty()) {
-                    text.setText(R.string.lg_waiting);
+                    message(getString(R.string.lg_waiting));
                 }
                 firstLoad = false;
                 ui.removeCallbacks(poll);
@@ -128,21 +180,44 @@ public class LogActivity extends BaseRepoActivity {
         });
     }
 
+    /** Shows a short message in place of the log (waiting, nothing to show). */
+    private void message(String m) {
+        chunks.clear();
+        adapter.notifyDataSetChanged();
+        list.setVisibility(View.GONE);
+        text.setVisibility(View.VISIBLE);
+        text.setText(m);
+    }
+
     private void render(boolean forceEnd) {
-        View child = scroll.getChildAt(0);
-        boolean atBottom = forceEnd || child == null
-                || child.getBottom() - (scroll.getHeight() + scroll.getScrollY()) <= Ui.dp(this, 120);
-        SpannableStringBuilder sb = new SpannableStringBuilder();
-        if (truncated && mode == 0) sb.append(getString(R.string.log_truncated)).append("\n\n");
-        SpannableStringBuilder body = LogFmt.format(this, raw, mode, 0);
-        if (body.length() == 0) {
-            sb.append(getString(raw.isEmpty() ? R.string.lg_waiting
+        int count = adapter.getCount();
+        boolean atBottom = forceEnd || count == 0 || list.getLastVisiblePosition() >= count - 2;
+        List<SpannableStringBuilder> lines = LogFmt.lines(this, raw, mode);
+        if (lines.isEmpty()) {
+            message(getString(raw.isEmpty() ? R.string.lg_waiting
                     : mode == 1 ? R.string.log_no_errors : R.string.log_empty));
-        } else {
-            sb.append(body);
+            return;
         }
-        text.setText(sb);
-        if (atBottom) scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+        // keep the reading position while a running job adds lines
+        int first = list.getFirstVisiblePosition();
+        View top = list.getChildAt(0);
+        int offset = top == null ? 0 : top.getTop();
+        chunks.clear();
+        if (truncated && mode == 0) chunks.add(getString(R.string.log_truncated) + "\n");
+        for (int i = 0; i < lines.size(); i += LINES_PER_ROW) {
+            SpannableStringBuilder row = new SpannableStringBuilder();
+            int end = Math.min(lines.size(), i + LINES_PER_ROW);
+            for (int j = i; j < end; j++) {
+                row.append(lines.get(j));
+                if (j < end - 1) row.append('\n');
+            }
+            chunks.add(row);
+        }
+        text.setVisibility(View.GONE);
+        list.setVisibility(View.VISIBLE);
+        adapter.notifyDataSetChanged();
+        if (atBottom) list.post(() -> list.setSelection(adapter.getCount() - 1));
+        else list.setSelectionFromTop(first, offset);
     }
 
     private String plain(int m) {
@@ -169,9 +244,9 @@ public class LogActivity extends BaseRepoActivity {
             } else if (which == 1) {
                 shareText(plain(0));
             } else if (which == 2) {
-                scroll.post(() -> scroll.fullScroll(View.FOCUS_UP));
+                list.post(() -> list.setSelection(0));
             } else {
-                scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+                list.post(() -> list.setSelection(Math.max(0, adapter.getCount() - 1)));
             }
         });
     }

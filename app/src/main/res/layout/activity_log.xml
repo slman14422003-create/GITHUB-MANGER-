@@ -32,8 +32,7 @@
             android:orientation="horizontal" />
     </HorizontalScrollView>
 
-    <ScrollView
-        android:id="@+id/scroll"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginStart="12dp"
@@ -42,19 +41,31 @@
         android:layout_weight="1"
         android:background="@drawable/bg_card">
 
+        <!-- one row = a few lines: a log of 300 KB in a single TextView is taller than the GPU can draw (blank screen) -->
+        <ListView
+            android:id="@+id/list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:cacheColorHint="@android:color/transparent"
+            android:clipToPadding="false"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:fastScrollEnabled="true"
+            android:overScrollMode="ifContentScrolls"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:scrollbarStyle="outsideOverlay"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/text"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:layoutDirection="ltr"
-            android:padding="12dp"
-            android:textAlignment="viewStart"
-            android:textColor="@color/text_primary"
-            android:textDirection="firstStrong"
-            android:textIsSelectable="true"
-            android:textSize="11sp" />
-    </ScrollView>
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="24dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"

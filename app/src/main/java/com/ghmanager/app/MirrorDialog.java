@@ -107,6 +107,11 @@ public final class MirrorDialog {
                 result.setText(R.string.mir_bad_url);
                 return;
             }
+            if (enable && key.getText().toString().trim().isEmpty()) {
+                result.setTextColor(Ui.color(a, R.color.bad));
+                result.setText(R.string.mir_key_required);
+                return;
+            }
             Store.setMirror(a, enable, Mirror.clean(u), key.getText().toString().trim());
             Mirror.load(a);
             Toast.makeText(a, R.string.acc_saved, Toast.LENGTH_SHORT).show();

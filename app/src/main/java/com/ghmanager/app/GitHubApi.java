@@ -74,7 +74,14 @@ public class GitHubApi {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n;
-        while ((n = is.read(buf)) != -1) bos.write(buf, 0, n);
+        final int cap = 32 * 1024 * 1024;   // a hostile mirror must not be able to exhaust memory
+        while ((n = is.read(buf)) != -1) {
+            bos.write(buf, 0, n);
+            if (bos.size() > cap) {
+                is.close();
+                throw new IOException("Response too large");
+            }
+        }
         is.close();
         return new String(bos.toByteArray(), StandardCharsets.UTF_8);
     }
@@ -101,7 +108,16 @@ public class GitHubApi {
     }
 
     public static String repo(String o, String r) {
-        return "/repos/" + o + "/" + r;
+        return "/repos/" + seg(o) + "/" + seg(r);
+    }
+
+    /** One path segment, encoded, so an owner or repo name can never add path parts or a query. */
+    private static String seg(String s) {
+        try {
+            return URLEncoder.encode(s == null ? "" : s, "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
@@ -155,24 +171,39 @@ public class GitHubApi {
     }
 
     private String request(String method, String path, JSONObject body) throws IOException, ApiException {
-        HttpURLConnection c = open(method, BASE + path, JSON, true);
         boolean needsBody = method.equals("POST") || method.equals("PUT") || method.equals("PATCH");
         if (body == null && needsBody) body = new JSONObject();
-        if (body != null) {
-            byte[] data = body.toString().getBytes(StandardCharsets.UTF_8);
-            c.setDoOutput(true);
-            c.setRequestProperty("Content-Type", "application/json");
-            c.setFixedLengthStreamingMode(data.length);
-            OutputStream os = c.getOutputStream();
-            os.write(data);
-            os.close();
+        byte[] data = body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8);
+        String url = BASE + path;
+        // Redirects are followed by hand: every hop is checked against the allowed hosts again, so the
+        // token can never be forwarded to another site by a redirect.
+        for (int hop = 0; ; hop++) {
+            HttpURLConnection c = open(method, url, JSON, true);
+            c.setInstanceFollowRedirects(false);
+            try {
+                if (data != null) {
+                    c.setDoOutput(true);
+                    c.setRequestProperty("Content-Type", "application/json");
+                    c.setFixedLengthStreamingMode(data.length);
+                    OutputStream os = c.getOutputStream();
+                    os.write(data);
+                    os.close();
+                }
+                int code = c.getResponseCode();
+                if (code >= 300 && code < 400 && code != 304 && hop < 3) {
+                    String loc = c.getHeaderField("Location");
+                    if (loc == null) throw new ApiException(code, "Redirect without Location");
+                    url = new URL(new URL(url), loc).toString();
+                    continue;
+                }
+                InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                String resp = is == null ? "" : readAll(is);
+                if (code >= 400) throw toException(code, resp);
+                return resp;
+            } finally {
+                c.disconnect();
+            }
         }
-        int code = c.getResponseCode();
-        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-        String resp = is == null ? "" : readAll(is);
-        c.disconnect();
-        if (code >= 400) throw toException(code, resp);
-        return resp;
     }
 
     /** Generic call, returns the raw response body ("" for 204). */

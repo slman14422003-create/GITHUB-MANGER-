@@ -75,6 +75,7 @@ public final class GhStatusCard {
         if (busy) return;
         busy = true;
         paint();
+        try {
         io.execute(() -> {
             final GhStatus.Result r = GhStatus.fetch();
             ui.post(() -> {
@@ -90,6 +91,9 @@ public final class GhStatusCard {
                 }
             });
         });
+        } catch (java.util.concurrent.RejectedExecutionException gone) {
+            busy = false;
+        }
     }
 
     // ------------------------------------------------------------------ look

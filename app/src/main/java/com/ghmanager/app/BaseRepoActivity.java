@@ -290,7 +290,14 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected void copy(String label, String text) {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText(label, text));
+            ClipData clip = ClipData.newPlainText(label, Redact.text(text));
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                // keeps the copied text out of the clipboard preview that other apps and screenshots can see
+                android.os.PersistableBundle pb = new android.os.PersistableBundle();
+                pb.putBoolean("android.content.extra.IS_SENSITIVE", true);
+                clip.getDescription().setExtras(pb);
+            }
+            cm.setPrimaryClip(clip);
             toast(R.string.copied);
         }
     }
@@ -460,6 +467,11 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     private static String safeName(String n) {
         String s = n == null ? "" : n.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim();
         while (s.startsWith(".")) s = s.substring(1);
+        if (s.length() > 150) {
+            int dot = s.lastIndexOf('.');
+            String ext = dot > 0 && s.length() - dot <= 12 ? s.substring(dot) : "";
+            s = s.substring(0, 150 - ext.length()) + ext;
+        }
         return s.isEmpty() ? "download" : s;
     }
 

@@ -15,6 +15,8 @@ import android.widget.TextView;
 public class LockActivity extends Activity {
     private static final int REQ = 77;
     private boolean asking = false;
+    /** the user dismissed the system prompt: wait for the Unlock button instead of asking again in a loop */
+    private boolean dismissed = false;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -40,10 +42,19 @@ public class LockActivity extends Activity {
         root.addView(t);
 
         Button unlock = Ui.button(this, R.string.lock_unlock, true);
-        unlock.setOnClickListener(v -> ask());
+        unlock.setOnClickListener(v -> {
+            dismissed = false;
+            ask();
+        });
         root.addView(unlock, new LinearLayout.LayoutParams(Ui.dp(this, 220),
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
+        // Android 16 no longer calls onBackPressed(); without this callback Back would close the lock
+        // screen and show the app behind it without any unlock.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> moveTaskToBack(true));
+        }
     }
 
     @Override
@@ -53,7 +64,7 @@ public class LockActivity extends Activity {
             finish();
             return;
         }
-        if (!asking) ask();
+        if (!asking && !dismissed) ask();
     }
 
     private void ask() {
@@ -75,6 +86,7 @@ public class LockActivity extends Activity {
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         asking = false;
+        if (req == REQ && res != RESULT_OK) dismissed = true;
         if (req == REQ && res == RESULT_OK) {
             AppLock.unlocked();
             finish();

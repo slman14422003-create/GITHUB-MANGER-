@@ -1,13 +1,21 @@
-// GitHub mirror for Cloudflare Workers.
+// GitHub mirror for Cloudflare Workers (PRIVATE by default).
 //
-// Used by the GitHub Manager app (Settings > Mirror) and directly from a browser:
+// Used by the GitHub Manager app (Settings > Mirror). It forwards requests to GitHub hosts only.
+//
 //   https://YOUR-WORKER/api.github.com/user                      GitHub API
 //   https://YOUR-WORKER/github.com/OWNER/REPO/archive/main.zip   any github.com page / file
-//   https://YOUR-WORKER/repo/OWNER/REPO[/REF]                    repository as a .zip (default branch if no REF)
-//   https://YOUR-WORKER/release/OWNER/REPO/TAG/ASSET             release asset  (TAG may be "latest")
+//   https://YOUR-WORKER/repo/OWNER/REPO[/REF]                    repository as a .zip
+//   https://YOUR-WORKER/release/OWNER/REPO/TAG/ASSET             release asset (TAG may be "latest")
 //
-// Optional secret MIRROR_KEY: when set, every request must send the header  X-Mirror-Key: <key>
-// (or the query parameter  ?k=<key>  for plain browser links).
+// Privacy rules enforced here:
+//   1. The secret MIRROR_KEY is REQUIRED. Without it the Worker refuses everything (it never runs open).
+//      Every request must send the header  X-Mirror-Key: <key>.
+//   2. Browsers are refused: no CORS, and any request that carries Origin / Sec-Fetch-* headers is
+//      rejected, so a web page or the browser console cannot call the Worker (the app never sends them).
+//      Set the variable ALLOW_BROWSER=1 only if you really want to open links in a browser (then the key
+//      may also be passed as ?k=KEY).
+//   3. Only GitHub hosts are reachable, the token goes only to GitHub itself, and redirects can never
+//      leave the allowed hosts.
 
 const HOSTS = [
   /^github\.com$/,
@@ -20,31 +28,51 @@ const HOSTS = [
 // the token is only forwarded to GitHub itself, never to the storage hosts GitHub redirects to
 const TOKEN_HOSTS = /^(api\.github\.com|uploads\.github\.com|github\.com)$/;
 
-const DROP_REQUEST = /^(host|cf-|x-forwarded-|x-real-ip|x-mirror-key|connection|content-length$)/i;
-const DROP_RESPONSE = /^(set-cookie|content-security-policy|x-frame-options|strict-transport-security)$/i;
+const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
+const DROP_REQUEST = /^(host|cf-|x-forwarded-|x-real-ip|x-mirror-key|connection|content-length$|origin$|referer$|cookie$|sec-)/i;
+const DROP_RESPONSE = /^(set-cookie|strict-transport-security|alt-svc)$/i;
 
 const allowed = (host) => HOSTS.some((re) => re.test(host));
 
+const SAFE_HEADERS = {
+  "content-type": "text/plain; charset=utf-8",
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+};
+
 function reply(status, text) {
-  return new Response(text, {
-    status,
-    headers: { "content-type": "text/plain; charset=utf-8", "access-control-allow-origin": "*" },
-  });
+  return new Response(text, { status, headers: SAFE_HEADERS });
+}
+
+// compares two strings without leaking, through timing, how many leading characters matched
+async function sameSecret(a, b) {
+  const enc = new TextEncoder();
+  const [x, y] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const u = new Uint8Array(x);
+  const v = new Uint8Array(y);
+  let diff = 0;
+  for (let i = 0; i < u.length; i++) diff |= u[i] ^ v[i];
+  return diff === 0;
 }
 
 // friendly shortcuts -> real GitHub URL (or null when the path is not a shortcut)
 function shortcut(path) {
-  const p = path.split("/").filter(Boolean);
+  const p = path.split("/").filter(Boolean).map(decodeURIComponent);
+  const safe = (s) => encodeURIComponent(s);
   if (p[0] === "repo" && p.length >= 3) {
-    const ref = p.length > 3 ? p.slice(3).join("/") : "HEAD";
-    return `https://github.com/${p[1]}/${p[2]}/archive/${ref}.zip`;
+    const ref = p.length > 3 ? p.slice(3).map(safe).join("/") : "HEAD";
+    return `https://github.com/${safe(p[1])}/${safe(p[2])}/archive/${ref}.zip`;
   }
   if (p[0] === "release" && p.length >= 5) {
     const [, owner, repo, tag] = p;
-    const asset = p.slice(4).join("/");
+    const asset = p.slice(4).map(safe).join("/");
     return tag === "latest"
-      ? `https://github.com/${owner}/${repo}/releases/latest/download/${asset}`
-      : `https://github.com/${owner}/${repo}/releases/download/${tag}/${asset}`;
+      ? `https://github.com/${safe(owner)}/${safe(repo)}/releases/latest/download/${asset}`
+      : `https://github.com/${safe(owner)}/${safe(repo)}/releases/download/${safe(tag)}/${asset}`;
   }
   return null;
 }
@@ -52,29 +80,35 @@ function shortcut(path) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const browserMode = env.ALLOW_BROWSER === "1";
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-allow-methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
-          "access-control-allow-headers": "*",
-        },
-      });
+    // The key is mandatory: a Worker without MIRROR_KEY would be an open proxy for anyone on the internet.
+    if (!env.MIRROR_KEY) {
+      return reply(503, "Mirror is not configured: add the secret MIRROR_KEY.");
     }
+
+    // No CORS at all. Pre-flight requests are refused, so no web page can use this Worker.
+    if (request.method === "OPTIONS") return reply(403, "Forbidden");
+
+    // Browser traffic (a page, the console, a link typed in the address bar) always carries these headers.
+    if (!browserMode) {
+      if (request.headers.has("origin") || request.headers.has("sec-fetch-site") ||
+          request.headers.has("sec-fetch-mode") || request.headers.has("sec-fetch-dest")) {
+        return reply(403, "Forbidden");
+      }
+    }
+
+    if (!METHODS.has(request.method)) return reply(405, "Method not allowed");
+
+    const sent = request.headers.get("x-mirror-key") || (browserMode ? url.searchParams.get("k") : "") || "";
+    if (!(await sameSecret(sent, env.MIRROR_KEY))) return reply(403, "Forbidden");
+    url.searchParams.delete("k");
 
     if (url.pathname === "/" || url.pathname === "/__health") {
       return reply(200, "GitHub mirror is running.");
     }
 
-    if (env.MIRROR_KEY) {
-      const sent = request.headers.get("x-mirror-key") || url.searchParams.get("k");
-      if (sent !== env.MIRROR_KEY) return reply(403, "Forbidden");
-    }
-    url.searchParams.delete("k");
-
-    let target = shortcut(url.pathname);
+    const target = shortcut(url.pathname);
     let upstream;
     if (target) {
       upstream = new URL(target);
@@ -82,7 +116,7 @@ export default {
       const m = url.pathname.match(/^\/([^/]+)(\/.*)?$/);
       if (!m) return reply(400, "Bad path");
       const host = m[1].toLowerCase();
-      if (!allowed(host)) return reply(403, "Host not allowed: " + host);
+      if (!allowed(host)) return reply(403, "Host not allowed");
       upstream = new URL("https://" + host + (m[2] || "/"));
       upstream.search = url.search;
     }
@@ -93,32 +127,40 @@ export default {
     }
     if (!TOKEN_HOSTS.test(upstream.hostname)) headers.delete("authorization");
 
-    const hasBody = !["GET", "HEAD"].includes(request.method);
-    const res = await fetch(
-      new Request(upstream.toString(), {
-        method: request.method,
-        headers,
-        body: hasBody ? request.body : undefined,
-        redirect: "manual",
-      })
-    );
+    const hasBody = request.method !== "GET" && request.method !== "HEAD";
+    let res;
+    try {
+      res = await fetch(
+        new Request(upstream.toString(), {
+          method: request.method,
+          headers,
+          body: hasBody ? request.body : undefined,
+          redirect: "manual",
+        })
+      );
+    } catch (_) {
+      return reply(502, "Upstream unreachable");
+    }
 
     const out = new Headers();
     for (const [k, v] of res.headers) {
       if (!DROP_RESPONSE.test(k)) out.set(k, v);
     }
-    out.set("access-control-allow-origin", "*");
+    out.set("cache-control", "no-store");
+    out.set("x-content-type-options", "nosniff");
+    out.set("referrer-policy", "no-referrer");
+    // files from GitHub are never rendered as pages from this origin
+    out.set("content-security-policy", "default-src 'none'; sandbox");
 
     // keep every redirect (release assets, archives, logs, artifacts) inside the mirror
     const loc = res.headers.get("location");
     if (loc) {
       try {
         const next = new URL(loc, upstream);
-        if (allowed(next.hostname)) {
-          out.set("location", `${url.origin}/${next.hostname}${next.pathname}${next.search}`);
-        }
+        if (!allowed(next.hostname)) return reply(502, "Redirect to a host that is not allowed");
+        out.set("location", `${url.origin}/${next.hostname}${next.pathname}${next.search}`);
       } catch (_) {
-        /* leave the header as it is */
+        return reply(502, "Bad redirect");
       }
     }
 

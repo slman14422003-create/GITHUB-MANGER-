@@ -70,13 +70,14 @@
     <string name="mir_enable_sub">تمر طلبات GitHub والتحميلات عبر Cloudflare Worker الخاص بك</string>
     <string name="mir_url">رابط المرآة</string>
     <string name="mir_url_hint">https://اسمك.workers.dev</string>
-    <string name="mir_key">مفتاح الوصول (اختياري)</string>
+    <string name="mir_key">مفتاح الوصول (مطلوب)</string>
+    <string name="mir_key_required">أدخل مفتاح الوصول نفسه الذي ضبطته في الـ Worker (MIRROR_KEY)</string>
     <string name="mir_test">اختبار الاتصال</string>
     <string name="mir_testing">جارٍ الاختبار…</string>
     <string name="mir_ok">المرآة تعمل ✓</string>
     <string name="mir_fail">فشل الاتصال: %1$s</string>
     <string name="mir_bad_url">أدخل رابط https صالحاً للمرآة</string>
-    <string name="mir_help">انشر ملف worker/mirror.js على Cloudflare ثم الصق رابطه هنا. إن ضبطت MIRROR_KEY في الـ Worker فأدخله في خانة المفتاح.</string>
+    <string name="mir_help">انشر ملف worker/mirror.js على Cloudflare ثم الصق رابطه هنا. أضف سرّ MIRROR_KEY في الـ Worker (إجباري، وبدونه يرفض الـ Worker كل الطلبات) ثم أدخل نفس القيمة في خانة المفتاح.</string>
     <string name="mir_settings_link">إعدادات المرآة (Proxy)</string>
 
     <!-- live run board -->

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- Any file the in-app file manager shows (needs all-files access to be readable). -->
-    <root-path name="root" path="." />
-    <cache-path name="cache" path="." />
-    <files-path name="files" path="." />
+    <!-- Files the in-app file manager opens or shares: internal storage and SD cards only.
+         The app's own private folders (/data/...) are never reachable through a shared URI. -->
+    <root-path name="storage" path="storage/" />
+    <external-path name="external" path="." />
+    <cache-path name="cache" path="apk/" />
 </paths>

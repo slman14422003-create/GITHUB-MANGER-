@@ -31,6 +31,18 @@ final class LogFmt {
      * @param lastLines keep only the last N lines (0 = all)
      */
     static SpannableStringBuilder format(Context c, String raw, int mode, int lastLines) {
+        List<SpannableStringBuilder> items = lines(c, raw, mode);
+        int from = lastLines > 0 ? Math.max(0, items.size() - lastLines) : 0;
+        SpannableStringBuilder out = new SpannableStringBuilder();
+        for (int i = from; i < items.size(); i++) {
+            out.append(items.get(i));
+            if (i < items.size() - 1) out.append('\n');
+        }
+        return out;
+    }
+
+    /** The cleaned, coloured log as one entry per line (what the log screen shows, a chunk of lines per row). */
+    static List<SpannableStringBuilder> lines(Context c, String raw, int mode) {
         final int bad = Ui.color(c, R.color.bad);
         final int warn = Ui.color(c, R.color.warn);
         final int info = Ui.color(c, R.color.info);
@@ -70,12 +82,6 @@ final class LogFmt {
             if (bold) sb.setSpan(new StyleSpan(Typeface.BOLD), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             items.add(sb);
         }
-        int from = lastLines > 0 ? Math.max(0, items.size() - lastLines) : 0;
-        SpannableStringBuilder out = new SpannableStringBuilder();
-        for (int i = from; i < items.size(); i++) {
-            out.append(items.get(i));
-            if (i < items.size() - 1) out.append('\n');
-        }
-        return out;
+        return items;
     }
 }
