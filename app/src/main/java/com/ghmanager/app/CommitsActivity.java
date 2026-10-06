@@ -188,7 +188,7 @@ public class CommitsActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
                     final String n = name.getText().toString().trim();
-                    if (n.isEmpty()) return;
+                    if (n.isEmpty()) { Dlg.stay(d); return; }
                     bg(() -> {
                         api.createBranch(owner, repo, n, sha);
                         post(() -> toast(R.string.done_ok));

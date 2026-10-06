@@ -159,7 +159,7 @@ public class IssueDetailActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.send, (d, w) -> {
                     final String b = body.getText().toString().trim();
-                    if (b.isEmpty()) return;
+                    if (b.isEmpty()) { Dlg.stay(d); return; }
                     bg(() -> {
                         api.addComment(owner, repo, number, b);
                         post(this::load);

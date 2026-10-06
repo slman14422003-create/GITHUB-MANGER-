@@ -399,7 +399,7 @@ public class AccountActivity extends BaseRepoActivity {
                 .setPositiveButton(R.string.save, (d, w) -> {
                     final String t = title.getText().toString().trim();
                     final String k = key.getText().toString().trim();
-                    if (t.isEmpty() || k.isEmpty()) return;
+                    if (t.isEmpty() || k.isEmpty()) { Dlg.stay(d); return; }
                     loading(true);
                     bg(() -> {
                         api.addSshKey(t, k);

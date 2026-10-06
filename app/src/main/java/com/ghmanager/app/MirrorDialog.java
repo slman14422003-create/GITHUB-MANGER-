@@ -88,35 +88,36 @@ public final class MirrorDialog {
         AlertDialog d = new Dlg(a)
                 .setTitle(R.string.mir_title)
                 .setView(box)
-                .setPositiveButton(R.string.save, null)
+                .setPositiveButton(R.string.save, (dlg, which) -> {
+                    // validate before closing: the dialog stays open when the address is not usable
+                    String u = url.getText().toString().trim();
+                    boolean enable = on.isChecked();
+                    if (!u.isEmpty() && Mirror.clean(u).isEmpty()) {
+                        result.setTextColor(Ui.color(a, R.color.bad));
+                        result.setText(R.string.mir_bad_url);
+                        Dlg.stay(dlg);
+                        return;
+                    }
+                    if (enable && u.isEmpty()) {
+                        result.setTextColor(Ui.color(a, R.color.bad));
+                        result.setText(R.string.mir_bad_url);
+                        Dlg.stay(dlg);
+                        return;
+                    }
+                    if (enable && key.getText().toString().trim().isEmpty()) {
+                        result.setTextColor(Ui.color(a, R.color.bad));
+                        result.setText(R.string.mir_key_required);
+                        Dlg.stay(dlg);
+                        return;
+                    }
+                    Store.setMirror(a, enable, Mirror.clean(u), key.getText().toString().trim());
+                    Mirror.load(a);
+                    Toast.makeText(a, R.string.acc_saved, Toast.LENGTH_SHORT).show();
+                    if (onSaved != null) onSaved.run();
+                })
                 .setNegativeButton(R.string.cancel, null)
                 .create();
         d.setOnDismissListener(x -> io.shutdown());
         d.show();
-        // validate before closing: the dialog stays open when the address is not usable
-        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String u = url.getText().toString().trim();
-            boolean enable = on.isChecked();
-            if (!u.isEmpty() && Mirror.clean(u).isEmpty()) {
-                result.setTextColor(Ui.color(a, R.color.bad));
-                result.setText(R.string.mir_bad_url);
-                return;
-            }
-            if (enable && u.isEmpty()) {
-                result.setTextColor(Ui.color(a, R.color.bad));
-                result.setText(R.string.mir_bad_url);
-                return;
-            }
-            if (enable && key.getText().toString().trim().isEmpty()) {
-                result.setTextColor(Ui.color(a, R.color.bad));
-                result.setText(R.string.mir_key_required);
-                return;
-            }
-            Store.setMirror(a, enable, Mirror.clean(u), key.getText().toString().trim());
-            Mirror.load(a);
-            Toast.makeText(a, R.string.acc_saved, Toast.LENGTH_SHORT).show();
-            d.dismiss();
-            if (onSaved != null) onSaved.run();
-        });
     }
 }

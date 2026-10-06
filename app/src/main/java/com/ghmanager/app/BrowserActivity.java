@@ -283,7 +283,7 @@ public class BrowserActivity extends BaseRepoActivity {
                     .setView(box)
                     .setPositiveButton(R.string.create, (dd, w) -> {
                         final String n = normalize(name.getText().toString());
-                        if (n.isEmpty()) return;
+                        if (n.isEmpty()) { Dlg.stay(dd); return; }
                         final String full = join(path, n);
                         if (which == 0) {
                             Intent i = repoIntent(EditorActivity.class);
@@ -320,7 +320,7 @@ public class BrowserActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.save, (d, w) -> {
                     final String newPath = normalize(target.getText().toString());
-                    if (newPath.isEmpty() || newPath.equals(oldPath)) return;
+                    if (newPath.isEmpty() || newPath.equals(oldPath)) { Dlg.stay(d); return; }
                     if (busy) return;
                     busy = true;
                     showProgress(getString(R.string.working));

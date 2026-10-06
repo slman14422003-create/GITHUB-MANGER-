@@ -146,7 +146,7 @@ public class IssuesActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
                     final String t = title.getText().toString().trim();
-                    if (t.isEmpty()) return;
+                    if (t.isEmpty()) { Dlg.stay(d); return; }
                     final String b = body.getText().toString();
                     bg(() -> {
                         api.createIssue(owner, repo, t, b);

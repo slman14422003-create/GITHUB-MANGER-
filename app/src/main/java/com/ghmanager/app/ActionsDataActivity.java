@@ -161,20 +161,17 @@ public class ActionsDataActivity extends BaseRepoActivity {
 
     private void selectArtifactsForDelete() {
         if (items.isEmpty()) { toast(R.string.nothing_here); return; }
-        final List<CheckBox> checks = new ArrayList<>();
-        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,8));
-        for (JSONObject o: items) {
-            CheckBox cb = Ui.check(this, o.optString("name"), false); checks.add(cb); box.addView(cb);
+        final List<JSONObject> snap = new ArrayList<>(items);   // the list may reload while the dialog is open
+        List<String> labels = new ArrayList<>();
+        for (JSONObject o : snap) {
+            String sub = Fmt.size(o.optLong("size_in_bytes"));
+            labels.add(o.optString("name") + (o.optLong("size_in_bytes") > 0 ? " · " + sub : ""));
         }
-        ScrollView sv = new ScrollView(this); sv.setFillViewport(true); sv.addView(box);
-        AlertDialog dialog = new Dlg(this).setTitle(R.string.select_items).setView(sv)
-            .setNeutralButton(R.string.select_all,null)
-            .setPositiveButton(R.string.delete_selected,(d,w)->{
-                List<Long> ids=new ArrayList<>(); for(int i=0;i<checks.size();i++) if(checks.get(i).isChecked()) ids.add(items.get(i).optLong("id"));
-                deleteSelectedArtifacts(ids);
-            }).setNegativeButton(R.string.cancel,null).show();
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{boolean all=true;for(CheckBox c:checks)if(!c.isChecked()){all=false;break;}for(CheckBox c:checks)c.setChecked(!all);});
+        Dlg.multiSelect(this, getString(R.string.select_items), labels, R.string.delete_selected, true, idx -> {
+            List<Long> ids = new ArrayList<>();
+            for (int i : idx) ids.add(snap.get(i).optLong("id"));
+            deleteSelectedArtifacts(ids);
+        });
     }
 
     private void deleteSelectedArtifacts(final List<Long> ids) {
@@ -266,7 +263,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
                 .setPositiveButton(R.string.save, (d, w) -> {
                     final String n = name.getText().toString().trim();
                     final String v = value.getText().toString();
-                    if (n.isEmpty()) return;
+                    if (n.isEmpty()) { Dlg.stay(d); return; }
                     bg(() -> {
                         if (existing == null) api.createVariable(owner, repo, n, v);
                         else api.updateVariable(owner, repo, n, v);
@@ -296,10 +293,12 @@ public class ActionsDataActivity extends BaseRepoActivity {
                     final String v = value.getText().toString();
                     if (!n.matches("[A-Za-z_][A-Za-z0-9_]*") || n.toUpperCase(Locale.ROOT).startsWith("GITHUB_")) {
                         toast(R.string.sec_bad_name);
+                        Dlg.stay(d);
                         return;
                     }
                     if (v.isEmpty()) {
                         toast(R.string.sec_empty_value);
+                        Dlg.stay(d);
                         return;
                     }
                     bg(() -> {
@@ -354,6 +353,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
                     final String kp = keyPass.getText().toString();
                     if (sp.isEmpty() || al.isEmpty()) {
                         toast(R.string.sec_key_missing);
+                        Dlg.stay(d);
                         return;
                     }
                     saveKeystore(uri, sp, al, kp);

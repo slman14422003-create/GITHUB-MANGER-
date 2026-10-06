@@ -176,6 +176,7 @@ public class UpdateActivity extends BaseRepoActivity {
                     int slash = v.indexOf('/');
                     if (slash <= 0 || slash >= v.length() - 1 || v.indexOf('/', slash + 1) >= 0) {
                         toast(R.string.upd_source_bad);
+                        Dlg.stay(d);
                         return;
                     }
                     Store.setUpdateRepo(this, v);

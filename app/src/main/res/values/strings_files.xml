@@ -24,6 +24,8 @@
     <string name="fm_items_n">%d عنصر</string>
     <string name="fm_selected_n">%d محدّد</string>
     <string name="fm_select_all">تحديد الكل</string>
+    <string name="fm_open">فتح</string>
+    <string name="fm_select">تحديد</string>
     <string name="fm_storage_line">المستخدم %1$s من %2$s · المتاح %3$s</string>
     <string name="fm_folder">مجلد</string>
 

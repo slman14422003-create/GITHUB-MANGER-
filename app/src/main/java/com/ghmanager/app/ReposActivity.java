@@ -307,7 +307,7 @@ public class ReposActivity extends AppCompatActivity {
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
                     final String n = name.getText().toString().trim();
-                    if (n.isEmpty()) return;
+                    if (n.isEmpty()) { Dlg.stay(d); return; }
                     final boolean isPriv = priv.isChecked();
                     status.setText(R.string.working);
                     status.setVisibility(View.VISIBLE);

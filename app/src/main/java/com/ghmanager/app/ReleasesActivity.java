@@ -112,16 +112,19 @@ public class ReleasesActivity extends BaseRepoActivity {
     }
 
     private void selectReleasesForDelete() {
-        if(items.isEmpty()){toast(R.string.no_releases);return;}
-        final List<CheckBox> checks=new ArrayList<>(); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,8));
-        for(JSONObject o:items){CheckBox cb=Ui.check(this, Fmt.s(o,"name") + " · " + Fmt.s(o,"tag_name"), false);checks.add(cb);box.addView(cb);}
-        ScrollView sv=new ScrollView(this);sv.setFillViewport(true);sv.addView(box);
-        AlertDialog dialog=new Dlg(this).setTitle(R.string.select_items).setView(sv)
-          .setNeutralButton(R.string.select_all,null)
-          .setPositiveButton(R.string.delete_selected,(d,w)->{List<Long> ids=new ArrayList<>();for(int i=0;i<checks.size();i++)if(checks.get(i).isChecked())ids.add(items.get(i).optLong("id"));deleteSelectedReleases(ids);})
-          .setNegativeButton(R.string.cancel,null).show();
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{boolean all=true;for(CheckBox c:checks)if(!c.isChecked()){all=false;break;}for(CheckBox c:checks)c.setChecked(!all);});
+        if (items.isEmpty()) { toast(R.string.no_releases); return; }
+        final List<JSONObject> snap = new ArrayList<>(items);   // the list may reload while the dialog is open
+        List<String> labels = new ArrayList<>();
+        for (JSONObject o : snap) {
+            String n = Fmt.s(o, "name");
+            String t = Fmt.s(o, "tag_name");
+            labels.add(n.isEmpty() ? t : (t.isEmpty() || n.equals(t) ? n : n + " · " + t));
+        }
+        Dlg.multiSelect(this, getString(R.string.select_items), labels, R.string.delete_selected, true, idx -> {
+            List<Long> ids = new ArrayList<>();
+            for (int i : idx) ids.add(snap.get(i).optLong("id"));
+            deleteSelectedReleases(ids);
+        });
     }
 
     private void deleteSelectedReleases(final List<Long> ids){
@@ -176,6 +179,7 @@ public class ReleasesActivity extends BaseRepoActivity {
                     final String t = tag.getText().toString().trim();
                     if (t.isEmpty()) {
                         toast(R.string.tag_required);
+                        Dlg.stay(d);
                         return;
                     }
                     final String tg = target.getText().toString().trim();

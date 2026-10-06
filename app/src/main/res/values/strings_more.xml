@@ -236,6 +236,8 @@
     <string name="ok">موافق</string>
     <string name="select_items">تحديد العناصر</string>
     <string name="select_all">تحديد الكل</string>
+    <string name="deselect_all">إلغاء التحديد</string>
+    <string name="sel_count">%1$d من %2$d محدد</string>
     <string name="delete_selected">حذف المحدد</string>
     <string name="nothing_selected">لم تحدد أي عنصر</string>
     <string name="delete_selected_msg">سيتم حذف %d عنصرًا نهائيًا.</string>

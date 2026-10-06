@@ -136,7 +136,7 @@ public class CollaboratorsActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.send, (d, w) -> {
                     final String u = user.getText().toString().trim();
-                    if (u.isEmpty()) return;
+                    if (u.isEmpty()) { Dlg.stay(d); return; }
                     final String p = PERMS[perm.getSelectedItemPosition()];
                     bg(() -> {
                         api.addCollaborator(owner, repo, u, p);

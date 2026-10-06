@@ -161,6 +161,11 @@ public class FileManagerActivity extends AppCompatActivity {
     private AlertDialog busy;
     private TextView busyText;
 
+    /** First visible row of folders we left, so going back lands where the user was. */
+    private final java.util.Map<String, Integer> scrollPos = new java.util.HashMap<>();
+    private boolean resetScroll = false;
+    private View pickAll;
+
     /** "files" / "folder" when opened by the repo browser to choose what to upload, else null. */
     private String pickMode;
     private View pickBar;
@@ -219,8 +224,11 @@ public class FileManagerActivity extends AppCompatActivity {
         adapter = new FileAdapter();
         listView.setAdapter(adapter);
         listView.setOnItemClickListener((p, v, pos, id) -> onItemClick(pos));
+        listView.setFastScrollEnabled(true);
         listView.setOnItemLongClickListener((p, v, pos, id) -> {
             if ("folder".equals(pickMode) || "save".equals(pickMode)) return true;
+            // while choosing files to upload only files can be ticked, not folders
+            if ("files".equals(pickMode) && pos >= 0 && pos < shown.size() && shown.get(pos).dir) return true;
             toggleSelect(pos);
             return true;
         });
@@ -230,6 +238,13 @@ public class FileManagerActivity extends AppCompatActivity {
         pickGo = findViewById(R.id.pickGo);
         pickText = findViewById(R.id.pickText);
         pickGo.setOnClickListener(v -> finishPick());
+        pickAll = findViewById(R.id.pickAll);
+        pickAll.setOnClickListener(v -> selectAll());
+        pickAll.setOnLongClickListener(v -> {
+            selected.clear();
+            updateChrome();
+            return true;
+        });
 
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         action(btnA1, R.drawable.ic_sort, R.string.fm_sort, v -> sortMenu());
@@ -391,7 +406,12 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void navigate(File dir) {
-        clearSelectionQuiet();
+        if (mode == M_DIR && cur != null && listView != null && !cur.equals(dir)) {
+            scrollPos.put(cur.getAbsolutePath(), listView.getFirstVisiblePosition());
+        }
+        resetScroll = !dir.equals(cur);
+        // choosing files to upload keeps the ticks while moving between folders
+        if (!"files".equals(pickMode)) clearSelectionQuiet();
         ui.removeCallbacks(searchRun);
         suppressSearch = true;
         searchView.setText("");
@@ -404,7 +424,7 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void onBack() {
-        if (!selected.isEmpty()) {
+        if (!selected.isEmpty() && pickMode == null) {
             clearSelection();
             return;
         }
@@ -596,10 +616,20 @@ public class FileManagerActivity extends AppCompatActivity {
         shown.clear();
         shown.addAll(list);
         // drop selections that no longer exist
-        Set<String> alive = new LinkedHashSet<>();
-        for (Entry e : shown) alive.add(e.f.getAbsolutePath());
-        selected.retainAll(alive);
+        if (!"files".equals(pickMode)) {
+            Set<String> alive = new LinkedHashSet<>();
+            for (Entry e : shown) alive.add(e.f.getAbsolutePath());
+            selected.retainAll(alive);
+        }
         adapter.notifyDataSetChanged();
+        if (resetScroll) {
+            listView.setSelection(0);
+            resetScroll = false;
+        }
+        if (mode == M_DIR && cur != null) {
+            Integer sp = scrollPos.remove(cur.getAbsolutePath());
+            if (sp != null && !shown.isEmpty()) listView.setSelection(Math.min(sp, shown.size() - 1));
+        }
         updateChrome();
         boolean empty = shown.isEmpty();
         emptyView.setVisibility(empty ? View.VISIBLE : View.GONE);
@@ -656,7 +686,12 @@ public class FileManagerActivity extends AppCompatActivity {
         boolean sel = !selected.isEmpty() && pickMode == null;
         selBar.setVisibility(sel ? View.VISIBLE : View.GONE);
         searchView.setVisibility(sel ? View.GONE : View.VISIBLE);
-        if (sel) selCount.setText(getString(R.string.fm_selected_n, selected.size()));
+        if (sel) {
+            long total = 0;
+            for (Entry e : shown) if (!e.dir && selected.contains(e.f.getAbsolutePath())) total += e.size;
+            String t = getString(R.string.fm_selected_n, selected.size());
+            selCount.setText(total > 0 ? t + " · " + Fmt.size(total) : t);
+        }
         updatePermBanner();
         updatePasteBar();
         adapter.notifyDataSetChanged();
@@ -930,8 +965,20 @@ public class FileManagerActivity extends AppCompatActivity {
             ((TextView) v.findViewById(R.id.sub)).setText(sub.toString());
 
             v.findViewById(R.id.fav).setVisibility(favs().contains(path) ? View.VISIBLE : View.GONE);
-            v.findViewById(R.id.check).setVisibility(sel ? View.VISIBLE : View.GONE);
-            v.findViewById(R.id.chevron).setVisibility(!sel && e.dir ? View.VISIBLE : View.GONE);
+            // while selecting, every row shows a tick circle (filled when chosen) so it is clear
+            // that a tap toggles the row; folders cannot be ticked when choosing files to upload
+            boolean pickFiles = "files".equals(pickMode);
+            boolean selecting = (!selected.isEmpty() && pickMode == null) || pickFiles;
+            boolean showCheck = selecting && !(pickFiles && e.dir);
+            ImageView ck = v.findViewById(R.id.check);
+            ck.setVisibility(showCheck ? View.VISIBLE : View.GONE);
+            ck.setImageResource(sel ? R.drawable.ic_check_circle : R.drawable.ic_circle_outline);
+            ck.setImageTintList(ColorStateList.valueOf(Ui.color(FileManagerActivity.this,
+                    sel ? R.color.accent_text : R.color.text_hint)));
+            v.findViewById(R.id.chevron).setVisibility(!showCheck && e.dir ? View.VISIBLE : View.GONE);
+            View more = v.findViewById(R.id.more);
+            more.setVisibility(pickMode == null && selected.isEmpty() ? View.VISIBLE : View.GONE);
+            more.setOnClickListener(x -> itemMenu(e));
             Ui.shapeRow(FileManagerActivity.this, v, pos == 0, pos == shown.size() - 1,
                     sel ? R.color.accent_soft : R.color.surface);
             return v;
@@ -1006,6 +1053,7 @@ public class FileManagerActivity extends AppCompatActivity {
     private void updatePickBar() {
         if (pickMode == null || pickBar == null) return;
         pickBar.setVisibility(View.VISIBLE);
+        pickAll.setVisibility("files".equals(pickMode) ? View.VISIBLE : View.GONE);
         if ("files".equals(pickMode)) {
             int n = selected.size();
             pickGo.setEnabled(n > 0);
@@ -1053,10 +1101,21 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void selectAll() {
-        if (selected.size() == shown.size()) {
-            selected.clear();
+        boolean filesOnly = "files".equals(pickMode);
+        int eligible = 0;
+        int chosen = 0;
+        for (Entry e : shown) {
+            if (filesOnly && e.dir) continue;
+            eligible++;
+            if (selected.contains(e.f.getAbsolutePath())) chosen++;
+        }
+        if (eligible > 0 && chosen == eligible) {
+            for (Entry e : shown) selected.remove(e.f.getAbsolutePath());
         } else {
-            for (Entry e : shown) selected.add(e.f.getAbsolutePath());
+            for (Entry e : shown) {
+                if (filesOnly && e.dir) continue;
+                selected.add(e.f.getAbsolutePath());
+            }
         }
         updateChrome();
     }
@@ -1072,6 +1131,13 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private List<File> selectedFiles() {
         List<File> out = new ArrayList<>();
+        if ("files".equals(pickMode)) {
+            for (String p : selected) {
+                File f = new File(p);
+                if (f.isFile()) out.add(f);
+            }
+            return out;
+        }
         for (Entry e : shown) if (selected.contains(e.f.getAbsolutePath())) out.add(e.f);
         return out;
     }
@@ -1214,11 +1280,13 @@ public class FileManagerActivity extends AppCompatActivity {
                     String n = name.getText().toString().trim();
                     if (!validName(n)) {
                         toast(R.string.fm_bad_name);
+                        Dlg.stay(d);
                         return;
                     }
                     File t = new File(cur, n);
                     if (t.exists()) {
                         toast(R.string.fm_exists);
+                        Dlg.stay(d);
                         return;
                     }
                     boolean ok;
@@ -1236,6 +1304,78 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private static boolean validName(String n) {
         return !n.isEmpty() && !n.contains("/") && !n.equals(".") && !n.equals("..") && n.length() <= 200;
+    }
+
+    /** Actions for one row, opened from its "more" button (no need to know about long-press). */
+    private void itemMenu(final Entry e) {
+        if (pickMode != null) return;
+        final File f = e.f;
+        final List<File> one = new ArrayList<>();
+        one.add(f);
+        final boolean isZip = !e.dir && e.ext.equals("zip");
+        final boolean fav = favs().contains(f.getAbsolutePath());
+        final List<String> labels = new ArrayList<>();
+        final List<Integer> ids = new ArrayList<>();
+        if (!e.dir) add(labels, ids, getString(R.string.fm_open), 0);
+        add(labels, ids, getString(R.string.fm_select), 1);
+        add(labels, ids, getString(R.string.fm_copy), 2);
+        add(labels, ids, getString(R.string.fm_move), 3);
+        add(labels, ids, getString(R.string.fm_rename), 4);
+        add(labels, ids, getString(R.string.fm_details), 5);
+        if (!e.dir) add(labels, ids, getString(R.string.share), 6);
+        add(labels, ids, getString(R.string.fm_compress), 7);
+        if (isZip) {
+            add(labels, ids, getString(R.string.fm_extract_here), 8);
+            add(labels, ids, getString(R.string.fm_extract_folder), 9);
+        }
+        add(labels, ids, getString(fav ? R.string.fm_unfavorite : R.string.fm_favorite), 10);
+        add(labels, ids, getString(R.string.fm_copy_path), 11);
+        add(labels, ids, getString(R.string.delete), 12);
+        new Dlg(this).setTitle(e.name)
+                .setItems(labels.toArray(new String[0]), (d, which) -> {
+                    switch (ids.get(which)) {
+                        case 0:
+                            openFile(e);
+                            break;
+                        case 1:
+                            selected.add(f.getAbsolutePath());
+                            updateChrome();
+                            break;
+                        case 2:
+                        case 3:
+                            selected.clear();
+                            selected.add(f.getAbsolutePath());
+                            toClipboard(ids.get(which) == 3);
+                            break;
+                        case 4:
+                            renameDialog(f);
+                            break;
+                        case 5:
+                            showDetails(one);
+                            break;
+                        case 6:
+                            share(one);
+                            break;
+                        case 7:
+                            compress(one);
+                            break;
+                        case 8:
+                            extract(f, false);
+                            break;
+                        case 9:
+                            extract(f, true);
+                            break;
+                        case 10:
+                            toggleFav(one, fav);
+                            break;
+                        case 11:
+                            copyText(f.getAbsolutePath());
+                            break;
+                        default:
+                            confirmDelete(one);
+                            break;
+                    }
+                }).show();
     }
 
     private void moreMenu() {
@@ -1489,7 +1629,10 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void deleteSelected() {
-        final List<File> files = selectedFiles();
+        confirmDelete(selectedFiles());
+    }
+
+    private void confirmDelete(final List<File> files) {
         if (files.isEmpty()) return;
         String msg = files.size() == 1
                 ? getString(R.string.delete_msg_local, files.get(0).getName())
@@ -1517,12 +1660,14 @@ public class FileManagerActivity extends AppCompatActivity {
                     String n = name.getText().toString().trim();
                     if (!validName(n)) {
                         toast(R.string.fm_bad_name);
+                        Dlg.stay(d);
                         return;
                     }
                     if (n.equals(f.getName())) return;
                     File t = new File(f.getParentFile(), n);
                     if (t.exists()) {
                         toast(R.string.fm_exists);
+                        Dlg.stay(d);
                         return;
                     }
                     if (!f.renameTo(t)) toast(R.string.fm_rename_failed);
@@ -1542,6 +1687,7 @@ public class FileManagerActivity extends AppCompatActivity {
                     String n = name.getText().toString().trim();
                     if (!validName(n)) {
                         toast(R.string.fm_bad_name);
+                        Dlg.stay(d);
                         return;
                     }
                     if (!n.toLowerCase(Locale.ROOT).endsWith(".zip")) n = n + ".zip";

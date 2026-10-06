@@ -142,7 +142,7 @@ public class BranchesActivity extends BaseRepoActivity {
                 .setView(box)
                 .setPositiveButton(R.string.create, (d, w) -> {
                     final String n = name.getText().toString().trim();
-                    if (n.isEmpty() || names.isEmpty()) return;
+                    if (n.isEmpty() || names.isEmpty()) { Dlg.stay(d); return; }
                     final String src = names.get(sp.getSelectedItemPosition());
                     bg(() -> {
                         String sha = api.getBranchSha(owner, repo, src);

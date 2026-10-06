@@ -222,6 +222,7 @@ public class RepoSettingsActivity extends BaseRepoActivity {
                 .setPositiveButton(R.string.delete, (d, w) -> {
                     if (!confirmText.getText().toString().trim().equals(repo)) {
                         toast(R.string.name_mismatch);
+                        Dlg.stay(d);
                         return;
                     }
                     bg(() -> {

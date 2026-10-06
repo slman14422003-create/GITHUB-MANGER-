@@ -1009,26 +1009,13 @@ public class ActionsActivity extends BaseRepoActivity {
 
     private void selectRunsForDelete() {
         if (runs.isEmpty()) { toast(R.string.no_runs); return; }
-        final boolean[] checked = new boolean[runs.size()];
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 8));
-        final List<CheckBox> checks = new ArrayList<>();
-        for (JSONObject r : runs) {
-            CheckBox cb = Ui.check(this, "#" + r.optInt("run_number") + " · " + Fmt.s(r, "name"), false);
-            checks.add(cb); box.addView(cb);
-        }
-        ScrollView sv = new ScrollView(this); sv.setFillViewport(true); sv.addView(box);
-        androidx.appcompat.app.AlertDialog dialog = new Dlg(this).setTitle(R.string.select_items).setView(sv)
-                .setNeutralButton(R.string.select_all, null)
-                .setPositiveButton(R.string.delete_selected, (d,w) -> {
-                    List<Long> ids = new ArrayList<>();
-                    for (int i=0;i<checks.size();i++) if (checks.get(i).isChecked()) ids.add(runs.get(i).optLong("id"));
-                    deleteSelectedRuns(ids);
-                }).setNegativeButton(R.string.cancel, null).show();
-        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            boolean all = true; for (CheckBox c : checks) if (!c.isChecked()) { all = false; break; }
-            for (CheckBox c : checks) c.setChecked(!all);
+        final List<JSONObject> snap = new ArrayList<>(runs);   // the list may reload while the dialog is open
+        List<String> labels = new ArrayList<>();
+        for (JSONObject r : snap) labels.add("#" + r.optInt("run_number") + " · " + Fmt.s(r, "name"));
+        Dlg.multiSelect(this, getString(R.string.select_items), labels, R.string.delete_selected, true, idx -> {
+            List<Long> ids = new ArrayList<>();
+            for (int i : idx) ids.add(snap.get(i).optLong("id"));
+            deleteSelectedRuns(ids);
         });
     }
 
