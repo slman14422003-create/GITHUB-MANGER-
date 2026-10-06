@@ -39,6 +39,7 @@ public final class DispatchDialog {
         final WorkflowInputs.Result parsed = WorkflowInputs.parse(yaml);
         final LinearLayout box = Ui.box(a);
         final EditText ref = Ui.edit(a, a.getString(R.string.ref_hint), branch);
+        box.setPadding(Ui.dp(a, 2), Ui.dp(a, 4), Ui.dp(a, 2), Ui.dp(a, 8));
         box.addView(Ui.label(a, a.getString(R.string.br_branch)));
         box.addView(ref);
 
@@ -92,6 +93,13 @@ public final class DispatchDialog {
 
         final EditText fManual = manual;
         ScrollView sv = new ScrollView(a);
+        sv.setFillViewport(true);
+        sv.setClipToPadding(false);
+        sv.setPadding(0, 0, 0, Ui.dp(a, 4));
+        int screenH = a.getResources().getDisplayMetrics().heightPixels;
+        sv.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                Math.max(Ui.dp(a, 180), (int) (screenH * 0.58f))));
         sv.addView(box);
         new Dlg(a)
                 .setTitle(title)

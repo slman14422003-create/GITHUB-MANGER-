@@ -234,4 +234,9 @@
     <string name="workflow_label">الـ Workflow</string>
     <string name="workflows">الـ Workflows</string>
     <string name="ok">موافق</string>
+    <string name="select_items">تحديد العناصر</string>
+    <string name="select_all">تحديد الكل</string>
+    <string name="delete_selected">حذف المحدد</string>
+    <string name="nothing_selected">لم تحدد أي عنصر</string>
+    <string name="delete_selected_msg">سيتم حذف %d عنصرًا نهائيًا.</string>
 </resources>

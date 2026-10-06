@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.util.Base64;
 import android.widget.EditText;
+import android.widget.CheckBox;
+import android.widget.ScrollView;
 import android.widget.LinearLayout;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -60,7 +62,9 @@ public class ActionsDataActivity extends BaseRepoActivity {
         bindHeader(getString(titleRes), repo);
         initList();
         btnRefresh.setOnClickListener(v -> load());
-        if ("variables".equals(mode)) {
+        if ("artifacts".equals(mode)) {
+            action(btnA1, R.drawable.ic_check_circle, R.string.select_items, v -> selectArtifactsForDelete());
+        } else if ("variables".equals(mode)) {
             action(btnA1, R.drawable.ic_add, R.string.add, v -> variableDialog(null));
         } else if ("caches".equals(mode)) {
             action(btnA1, R.drawable.ic_delete, R.string.delete_all_caches, v -> deleteAllCaches());
@@ -153,6 +157,34 @@ public class ActionsDataActivity extends BaseRepoActivity {
         }
         adapter.setRows(rows);
         showEmpty(items.isEmpty(), R.string.nothing_here);
+    }
+
+    private void selectArtifactsForDelete() {
+        if (items.isEmpty()) { toast(R.string.nothing_here); return; }
+        final List<CheckBox> checks = new ArrayList<>();
+        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,8));
+        for (JSONObject o: items) {
+            CheckBox cb = Ui.check(this, o.optString("name"), false); checks.add(cb); box.addView(cb);
+        }
+        ScrollView sv = new ScrollView(this); sv.setFillViewport(true); sv.addView(box);
+        AlertDialog dialog = new Dlg(this).setTitle(R.string.select_items).setView(sv)
+            .setNeutralButton(R.string.select_all,null)
+            .setPositiveButton(R.string.delete_selected,(d,w)->{
+                List<Long> ids=new ArrayList<>(); for(int i=0;i<checks.size();i++) if(checks.get(i).isChecked()) ids.add(items.get(i).optLong("id"));
+                deleteSelectedArtifacts(ids);
+            }).setNegativeButton(R.string.cancel,null).show();
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{boolean all=true;for(CheckBox c:checks)if(!c.isChecked()){all=false;break;}for(CheckBox c:checks)c.setChecked(!all);});
+    }
+
+    private void deleteSelectedArtifacts(final List<Long> ids) {
+        if(ids.isEmpty()){toast(R.string.nothing_selected);return;}
+        confirm(getString(R.string.delete_selected),getString(R.string.delete_selected_msg,ids.size()),R.string.delete,()->{
+            if(busy)return; busy=true; showProgress(getString(R.string.working));
+            bg(()->{int ok=0; for(long id:ids){try{api.deleteArtifact(owner,repo,id);ok++;}catch(Exception ignored){}} final int done=ok;
+                post(()->{busy=false;hideProgress();toast(getString(R.string.deleted_count,done));load();});
+            });
+        });
     }
 
     private void itemMenu(final JSONObject o) {

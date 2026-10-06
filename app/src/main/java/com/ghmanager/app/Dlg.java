@@ -76,9 +76,10 @@ public class Dlg extends AlertDialog.Builder {
         w.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
         // a very tall dialog never runs under the status bar: it stops at 88% of the screen and scrolls
         final View decor = w.getDecorView();
+        decor.setClipChildren(false);
         decor.post(() -> {
             if (!d.isShowing()) return;
-            int max = (int) (c.getResources().getDisplayMetrics().heightPixels * 0.88f);
+            int max = (int) (c.getResources().getDisplayMetrics().heightPixels * 0.92f);
             if (decor.getHeight() > max) w.setLayout(width, max);
         });
     }
@@ -308,6 +309,16 @@ public class Dlg extends AlertDialog.Builder {
         for (Button b : order) {
             if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0, row);
             else pill(c, b, 1, row);
+            b.setVisibility(View.VISIBLE);
+            b.setAlpha(1f);
+        }
+        if (d.getWindow() != null) {
+            d.getWindow().getDecorView().post(() -> {
+                for (Button b : order) {
+                    b.setVisibility(View.VISIBLE);
+                    b.setAlpha(1f);
+                }
+            });
         }
     }
 

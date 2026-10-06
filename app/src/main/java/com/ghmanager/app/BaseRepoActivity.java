@@ -65,6 +65,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected TextView emptyView;
     protected ImageButton btnA1;
     protected ImageButton btnA2;
+    protected ImageButton btnA3;
     protected ImageButton btnRefresh;
     protected View loadingBar;
     protected ListView listView;
@@ -114,10 +115,12 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         btnA1 = findViewById(R.id.btnA1);
         btnA2 = findViewById(R.id.btnA2);
+        btnA3 = findViewById(R.id.btnA3);
         btnRefresh = findViewById(R.id.btnRefresh);
         Ui.press(this, findViewById(R.id.btnBack));
         Ui.press(this, btnA1);
         Ui.press(this, btnA2);
+        Ui.press(this, btnA3);
         Ui.press(this, btnRefresh);
         loadingBar = findViewById(R.id.loading);
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);

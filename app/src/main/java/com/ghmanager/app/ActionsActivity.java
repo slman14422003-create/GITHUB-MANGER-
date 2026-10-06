@@ -14,6 +14,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.ScrollView;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -170,6 +172,7 @@ public class ActionsActivity extends BaseRepoActivity {
         mgmt.addView(iconChip(R.string.variables, R.drawable.ic_clipboard, v -> openData("variables")));
         mgmt.addView(iconChip(R.string.secrets, R.drawable.ic_lock, v -> openData("secrets")));
         mgmt.addView(iconChip(R.string.act_cleanup, R.drawable.ic_trash_sweep, v -> cleanupMenu()));
+        mgmt.addView(iconChip(R.string.select_items, R.drawable.ic_check_circle, v -> selectRunsForDelete()));
 
         ((EditText) head.findViewById(R.id.runSearch)).addTextChangedListener(new TextWatcher() {
             @Override
@@ -1001,6 +1004,40 @@ public class ActionsActivity extends BaseRepoActivity {
             if (which == 0) bulkDelete("failure");
             else if (which == 1) bulkDelete("cancelled");
             else bulkDelete("completed");
+        });
+    }
+
+    private void selectRunsForDelete() {
+        if (runs.isEmpty()) { toast(R.string.no_runs); return; }
+        final boolean[] checked = new boolean[runs.size()];
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 8));
+        final List<CheckBox> checks = new ArrayList<>();
+        for (JSONObject r : runs) {
+            CheckBox cb = Ui.check(this, "#" + r.optInt("run_number") + " · " + Fmt.s(r, "name"), false);
+            checks.add(cb); box.addView(cb);
+        }
+        ScrollView sv = new ScrollView(this); sv.setFillViewport(true); sv.addView(box);
+        androidx.appcompat.app.AlertDialog dialog = new Dlg(this).setTitle(R.string.select_items).setView(sv)
+                .setNeutralButton(R.string.select_all, null)
+                .setPositiveButton(R.string.delete_selected, (d,w) -> {
+                    List<Long> ids = new ArrayList<>();
+                    for (int i=0;i<checks.size();i++) if (checks.get(i).isChecked()) ids.add(runs.get(i).optLong("id"));
+                    deleteSelectedRuns(ids);
+                }).setNegativeButton(R.string.cancel, null).show();
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            boolean all = true; for (CheckBox c : checks) if (!c.isChecked()) { all = false; break; }
+            for (CheckBox c : checks) c.setChecked(!all);
+        });
+    }
+
+    private void deleteSelectedRuns(final List<Long> ids) {
+        if (ids.isEmpty()) { toast(R.string.nothing_selected); return; }
+        confirm(getString(R.string.delete_selected), getString(R.string.delete_selected_msg, ids.size()), R.string.delete, () -> {
+            if (busy) return; busy = true; showProgress(getString(R.string.working));
+            bg(() -> { int ok=0; for (long id:ids) { try { api.deleteRun(owner,repo,id); ok++; } catch(Exception ignored){} }
+                final int done=ok; post(() -> { busy=false; hideProgress(); toast(getString(R.string.deleted_count,done)); load(true,false); }); });
         });
     }
 

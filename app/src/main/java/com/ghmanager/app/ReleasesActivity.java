@@ -41,6 +41,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         btnRefresh.setOnClickListener(v -> load(true));
         action(btnA1, R.drawable.ic_add, R.string.new_release, v -> createDialog());
         action(btnA2, R.drawable.ic_package, R.string.br_title, v -> buildReleaseDialog());
+        action(btnA3, R.drawable.ic_check_circle, R.string.select_items, v -> selectReleasesForDelete());
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == items.size()) {
                 page++;
@@ -108,6 +109,27 @@ public class ReleasesActivity extends BaseRepoActivity {
         if (hasMore) rows.add(new Row(R.drawable.ic_refresh, false, getString(R.string.load_more), null, false, false));
         adapter.setRows(rows);
         showEmpty(items.isEmpty(), R.string.no_releases);
+    }
+
+    private void selectReleasesForDelete() {
+        if(items.isEmpty()){toast(R.string.no_releases);return;}
+        final List<CheckBox> checks=new ArrayList<>(); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,4),Ui.dp(this,8));
+        for(JSONObject o:items){CheckBox cb=Ui.check(this, Fmt.s(o,"name") + " · " + Fmt.s(o,"tag_name"), false);checks.add(cb);box.addView(cb);}
+        ScrollView sv=new ScrollView(this);sv.setFillViewport(true);sv.addView(box);
+        AlertDialog dialog=new Dlg(this).setTitle(R.string.select_items).setView(sv)
+          .setNeutralButton(R.string.select_all,null)
+          .setPositiveButton(R.string.delete_selected,(d,w)->{List<Long> ids=new ArrayList<>();for(int i=0;i<checks.size();i++)if(checks.get(i).isChecked())ids.add(items.get(i).optLong("id"));deleteSelectedReleases(ids);})
+          .setNegativeButton(R.string.cancel,null).show();
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->{boolean all=true;for(CheckBox c:checks)if(!c.isChecked()){all=false;break;}for(CheckBox c:checks)c.setChecked(!all);});
+    }
+
+    private void deleteSelectedReleases(final List<Long> ids){
+        if(ids.isEmpty()){toast(R.string.nothing_selected);return;}
+        confirm(getString(R.string.delete_selected),getString(R.string.delete_selected_msg,ids.size()),R.string.delete,()->{
+            if(busy)return;busy=true;showProgress(getString(R.string.working));
+            bg(()->{int ok=0;for(long id:ids){try{api.deleteRelease(owner,repo,id);ok++;}catch(Exception ignored){}}final int done=ok;post(()->{busy=false;hideProgress();toast(getString(R.string.deleted_count,done));load(true);});});
+        });
     }
 
     private void createDialog() {

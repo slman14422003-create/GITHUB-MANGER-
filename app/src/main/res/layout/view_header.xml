@@ -66,6 +66,12 @@
         android:layout_marginEnd="6dp"
         android:visibility="gone" />
 
+    <ImageButton
+        android:id="@+id/btnA3"
+        style="@style/IconButton"
+        android:layout_marginEnd="6dp"
+        android:visibility="gone" />
+
     <FrameLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content">
