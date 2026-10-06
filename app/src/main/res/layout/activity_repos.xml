@@ -85,11 +85,23 @@
             android:contentDescription="@string/new_repo"
             android:src="@drawable/ic_add" />
 
+        <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
         <ImageButton
             android:id="@+id/btnRefresh"
             style="@style/IconButton"
             android:contentDescription="@string/refresh"
             android:src="@drawable/ic_refresh" />
+
+        <!-- iOS-style activity indicator: shown over the refresh button while the screen loads -->
+        <com.ghmanager.app.IosSpinner
+            android:id="@+id/refreshSpinner"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:visibility="invisible" />
+    </FrameLayout>
     </LinearLayout>
 
     <EditText

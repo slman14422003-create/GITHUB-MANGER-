@@ -144,11 +144,10 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <ProgressBar
+                    <com.ghmanager.app.IosSpinner
                         android:id="@+id/codeSpinner"
                         android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:indeterminate="true" />
+                        android:layout_height="18dp" />
 
                     <TextView
                         android:layout_width="wrap_content"

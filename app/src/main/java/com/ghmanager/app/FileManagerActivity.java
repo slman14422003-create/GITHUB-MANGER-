@@ -1345,18 +1345,21 @@ public class FileManagerActivity extends AppCompatActivity {
         cancelled = false;
         LinearLayout box = Ui.box(this);
         box.setPadding(Ui.dp(this, 22), Ui.dp(this, 14), Ui.dp(this, 22), Ui.dp(this, 8));
+        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        IosSpinner wheel = new IosSpinner(this);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(Ui.dp(this, 40), Ui.dp(this, 40));
+        sp.bottomMargin = Ui.dp(this, 14);
+        box.addView(wheel, sp);
         busyText = new TextView(this);
         busyText.setText(text);
         busyText.setSingleLine(true);
         busyText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         busyText.setTextColor(Ui.color(this, R.color.text_secondary));
         busyText.setTextSize(14);
+        busyText.setGravity(android.view.Gravity.CENTER);
         busyText.setPadding(0, 0, 0, Ui.dp(this, 12));
-        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        bar.setIndeterminate(true);
-        Ui.tint(this, bar);
-        box.addView(busyText);
-        box.addView(bar);
+        box.addView(busyText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         busy = new Dlg(this).setTitle(R.string.working).setView(box)
                 .setCancelable(false)
                 .setNegativeButton(R.string.cancel, (d, w) -> cancelled = true)

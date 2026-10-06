@@ -55,7 +55,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected final Handler ui = new Handler(Looper.getMainLooper());
 
     protected AlertDialog progressDialog;
-    protected ProgressBar progressBar;
+    protected IosSpinner progressSpinner;
     protected TextView progressText;
     protected boolean busy = false;
 
@@ -389,16 +389,19 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         hideProgress();
         LinearLayout box = Ui.box(this);
         box.setPadding(Ui.dp(this, 22), Ui.dp(this, 14), Ui.dp(this, 22), Ui.dp(this, 8));
+        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        progressSpinner = new IosSpinner(this);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(Ui.dp(this, 40), Ui.dp(this, 40));
+        sp.bottomMargin = Ui.dp(this, 14);
+        box.addView(progressSpinner, sp);
         progressText = new TextView(this);
         progressText.setText(text);
         progressText.setTextColor(Ui.color(this, R.color.text_secondary));
         progressText.setTextSize(14);
+        progressText.setGravity(android.view.Gravity.CENTER);
         progressText.setPadding(0, 0, 0, Ui.dp(this, 12));
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setIndeterminate(true);
-        Ui.tint(this, progressBar);
-        box.addView(progressText);
-        box.addView(progressBar);
+        box.addView(progressText, new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
         progressDialog = new Dlg(this)
                 .setTitle(R.string.working)
                 .setView(box)
@@ -408,20 +411,14 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void updateProgress(int cur, int total, String text) {
-        if (progressBar == null) return;
-        progressBar.setIndeterminate(false);
-        progressBar.setMax(total);
-        progressBar.setProgress(cur);
+        if (progressSpinner == null || progressText == null) return;
         progressText.setText((cur + 1) + "/" + total + "\n" + text);
     }
 
     protected void updateBytes(long done, long total) {
-        if (progressBar == null || progressText == null) return;
+        if (progressSpinner == null || progressText == null) return;
         if (total > 0) {
-            progressBar.setIndeterminate(false);
-            progressBar.setMax(1000);
-            progressBar.setProgress((int) (done * 1000 / total));
-            progressText.setText(Fmt.size(done) + " / " + Fmt.size(total));
+            progressText.setText(Fmt.size(done) + " / " + Fmt.size(total) + "  ·  " + (done * 100 / total) + "%");
         } else {
             progressText.setText(Fmt.size(done));
         }
@@ -435,7 +432,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             }
             progressDialog = null;
         }
-        progressBar = null;
+        progressSpinner = null;
         progressText = null;
         busy = false;
     }

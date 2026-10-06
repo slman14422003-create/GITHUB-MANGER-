@@ -415,24 +415,17 @@ public final class Ui {
         return new Toggle(v, sw);
     }
 
-    /** Spins a view (e.g. the refresh button) while work is running; stops and resets when done. */
+    /** Shows the iOS-style indicator that sits on top of a refresh button (its sibling in the same frame). */
     public static void spin(View v, boolean on) {
         if (v == null) return;
-        v.animate().cancel();
-        if (on && android.animation.ValueAnimator.areAnimatorsEnabled()) {
-            v.setEnabled(false);
-            v.setRotation(0f);
-            v.animate().rotationBy(360f).setDuration(900)
-                    .setInterpolator(new android.view.animation.LinearInterpolator())
-                    .withEndAction(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (!v.isEnabled()) spin(v, true);
-                        }
-                    }).start();
-        } else {
-            v.setEnabled(true);
-            v.setRotation(0f);
+        android.view.ViewParent p = v.getParent();
+        if (p instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) p;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View k = g.getChildAt(i);
+                if (k instanceof IosSpinner) k.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+            }
         }
+        v.setEnabled(!on);
     }
 }
