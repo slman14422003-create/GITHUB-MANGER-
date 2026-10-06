@@ -275,33 +275,20 @@ public class Dlg extends AlertDialog.Builder {
         if (row) {
             for (Button b : order) if (b.getText().length() > 14) row = false;
         }
+        // Keep AndroidX's original button bar intact. Re-parenting the buttons into a new
+        // container makes ButtonBarLayout lose its internal measurement state on some Samsung
+        // / AppCompat combinations, which can make every dialog action disappear. We only style
+        // the existing buttons and let the platform measure/place them.
         ViewParent parent = order.get(0).getParent();
-        if (parent instanceof LinearLayout) {
-            // The stock bar (ButtonBarLayout) re-stacks and re-measures its buttons on its own, and the
-            // tricks to switch that off are renamed away in the release build, so the buttons overlapped.
-            // They are moved into a plain bar that this class fully controls.
-            LinearLayout old = (LinearLayout) parent;
-            List<Button> placed = new ArrayList<>(order);
-            if (row) {
-                placed.clear();
-                if (shown(neg)) placed.add(neg);
-                placed.add(pos);
-            }
-            LinearLayout bar = new LinearLayout(c);
-            bar.setOrientation(row ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-            bar.setPaddingRelative(Ui.dp(c, 18), Ui.dp(c, 6), Ui.dp(c, 18), Ui.dp(c, 16));
-            for (Button b : placed) {
-                old.removeView(b);
-                bar.addView(b);
-            }
-            ViewParent gp = old.getParent();
-            if (gp instanceof ViewGroup) {
-                ViewGroup g = (ViewGroup) gp;
-                int idx = g.indexOfChild(old);
-                ViewGroup.LayoutParams lp = old.getLayoutParams();
-                g.removeViewAt(idx);
-                g.addView(bar, idx, lp);
-            }
+        if (parent instanceof androidx.appcompat.widget.ButtonBarLayout) {
+            androidx.appcompat.widget.ButtonBarLayout bar =
+                    (androidx.appcompat.widget.ButtonBarLayout) parent;
+            bar.setAllowStacking(true);
+            bar.setMinimumHeight(Ui.dp(c, 58));
+            bar.setPaddingRelative(Ui.dp(c, 12), Ui.dp(c, 4), Ui.dp(c, 12), Ui.dp(c, 10));
+        } else if (parent instanceof LinearLayout) {
+            LinearLayout bar = (LinearLayout) parent;
+            bar.setPaddingRelative(Ui.dp(c, 12), Ui.dp(c, 4), Ui.dp(c, 12), Ui.dp(c, 10));
         }
         for (Button b : order) {
             if (b == pos) pill(c, b, destructive(c, b.getText()) ? 2 : 0, row);
