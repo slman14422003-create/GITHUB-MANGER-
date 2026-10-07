@@ -101,10 +101,13 @@ final class SemoAi {
             // it out of order — safe to append the missing closes at the end of the file
             StringBuilder add = new StringBuilder();
             if (!out.endsWith("\n")) add.append('\n');
-            for (int i = scan.openStack.size() - 1; i >= 0; i--) add.append(closeFor(scan.openStack.get(i)));
+            int missing = scan.openStack.size();
+            // pop() returns the most recently opened bracket first — exactly the order needed to
+            // close them correctly (innermost first), so no indexed access into the Deque is needed
+            while (!scan.openStack.isEmpty()) add.append(closeFor(scan.openStack.pop()));
             add.append('\n');
             out = out + add;
-            fixes.add("إضافة " + scan.openStack.size() + " قوس إغلاق مفقود في نهاية الملف");
+            fixes.add("إضافة " + missing + " قوس إغلاق مفقود في نهاية الملف");
         }
 
         boolean changed = !out.equals(src);
