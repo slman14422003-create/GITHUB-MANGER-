@@ -30,7 +30,7 @@ public final class DispatchDialog {
     }
 
     public interface Runner {
-        void run(String ref, JSONObject inputs) throws Exception;
+        void run(String ref, JSONObject inputs, boolean semoAi) throws Exception;
     }
 
     /** Shows the dialog. yaml may be "" (then the plain key=value box is used). */
@@ -42,6 +42,10 @@ public final class DispatchDialog {
         box.setPadding(Ui.dp(a, 2), Ui.dp(a, 4), Ui.dp(a, 2), Ui.dp(a, 8));
         box.addView(Ui.label(a, a.getString(R.string.br_branch)));
         box.addView(ref);
+
+        final CheckBox semoAi = Ui.check(a, R.string.semo_ai_title, Store.semoAiOn(a));
+        box.addView(semoAi);
+        box.addView(Ui.body(a, a.getString(R.string.semo_ai_desc), 12, R.color.text_hint));
 
         final Map<String, View> fields = new LinkedHashMap<>();
         final String tagName = parsed.tagInput();
@@ -136,8 +140,10 @@ public final class DispatchDialog {
                         }
                     } catch (Exception ignored) {
                     }
+                    boolean useSemoAi = semoAi.isChecked();
+                    Store.setSemoAiOn(a, useSemoAi);
                     try {
-                        runner.run(useRef, out);
+                        runner.run(useRef, out, useSemoAi);
                     } catch (Exception ex) {
                         android.widget.Toast.makeText(a, String.valueOf(ex.getMessage()),
                                 android.widget.Toast.LENGTH_LONG).show();

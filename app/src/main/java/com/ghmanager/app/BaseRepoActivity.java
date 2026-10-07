@@ -37,6 +37,22 @@ import java.util.zip.ZipInputStream;
 
 /** Shared plumbing for every repository screen: API client, threading, dialogs, downloads. */
 public abstract class BaseRepoActivity extends AppCompatActivity {
+    // ---- one shared guard: stops a fast double tap from pushing the same screen twice
+    @Override
+    public void startActivity(android.content.Intent intent) {
+        if (Tap.ok("nav")) super.startActivity(intent);
+    }
+
+    @Override
+    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
+        if (Tap.ok("nav")) super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(android.content.Intent intent, int requestCode) {
+        if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
+    }
+
 
     protected interface Job {
         void run() throws Exception;
@@ -375,14 +391,52 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             post(() -> {
                 loading(false);
                 DispatchDialog.show(this, getString(R.string.run_workflow) + ": " + workflowName, branch, fy, fs,
-                        (useRef, in) -> bg(() -> {
-                            api.dispatchWorkflow(owner, repo, workflowId, useRef, in);
-                            post(() -> {
-                                toast(R.string.workflow_dispatched);
-                                if (after != null) after.run();
-                            });
+                        (useRef, in, useSemoAi) -> bg(() -> {
+                            if (useSemoAi) runSemoAiThenDispatch(workflowId, useRef, in, after);
+                            else {
+                                api.dispatchWorkflow(owner, repo, workflowId, useRef, in);
+                                post(() -> {
+                                    toast(R.string.workflow_dispatched);
+                                    if (after != null) after.run();
+                                });
+                            }
                         }), null);
             });
+        });
+    }
+
+    /**
+     * Runs SEMO AI's offline check over {@code useRef} first (committing any safe fixes it finds),
+     * then dispatches the workflow regardless of the outcome — a scan problem must never block the
+     * user from running their Action. Already on a background thread (called from {@link #bg}).
+     */
+    private void runSemoAiThenDispatch(long workflowId, String useRef, JSONObject in, Runnable after) {
+        post(() -> showProgress(getString(R.string.semo_ai_scanning)));
+        SemoAiRunner.Summary sum = SemoAiRunner.run(api, owner, repo, useRef,
+                (cur, total, path) -> post(() -> updateProgress(cur, total, path)));
+        try {
+            api.dispatchWorkflow(owner, repo, workflowId, useRef, in);
+        } catch (Exception e) {
+            post(() -> {
+                hideProgress();
+                showError(e);
+            });
+            return;
+        }
+        post(() -> {
+            hideProgress();
+            String summary;
+            if (sum.fixed > 0) {
+                summary = getString(R.string.semo_ai_fixed_n, sum.fixed, sum.scanned)
+                        + "\n\n" + android.text.TextUtils.join("\n", sum.fixedPaths);
+            } else if (sum.error != null) {
+                summary = getString(R.string.semo_ai_skip_error, sum.error);
+            } else {
+                summary = getString(R.string.semo_ai_clean, sum.scanned);
+            }
+            toast(R.string.workflow_dispatched);
+            Dlg.result(this, sum.error == null, getString(R.string.semo_ai_title), summary);
+            if (after != null) after.run();
         });
     }
 

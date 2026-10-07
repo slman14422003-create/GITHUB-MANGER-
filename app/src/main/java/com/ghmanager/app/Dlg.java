@@ -239,6 +239,7 @@ public class Dlg extends AlertDialog.Builder {
             lv.setOverScrollMode(View.OVER_SCROLL_NEVER);
             lv.setPaddingRelative(Ui.dp(c, 10), Ui.dp(c, 4), Ui.dp(c, 10), Ui.dp(c, 8));
             lv.setOnItemClickListener((p, v, pos, id) -> {
+                if (!Tap.ok("dialog")) return;
                 stayOpen = false;
                 if (listL != null && ref[0] != null) listL.onClick(ref[0], pos);
                 boolean keep = stayOpen;
@@ -301,6 +302,7 @@ public class Dlg extends AlertDialog.Builder {
                         ? (dangerPositive || destructive(c, (CharSequence) b[0]) ? 2 : 0) : 1;
                 pill(c, btn, kind);
                 btn.setOnClickListener(v -> {
+                    if (!Tap.ok("dialog")) return;
                     stayOpen = false;
                     if (l != null && ref[0] != null) l.onClick(ref[0], which);
                     boolean keep = stayOpen;

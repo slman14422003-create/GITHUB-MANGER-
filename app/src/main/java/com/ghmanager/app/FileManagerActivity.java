@@ -79,6 +79,22 @@ import java.util.zip.ZipOutputStream;
  * "largest files", text editing, APK install and image / APK thumbnails.
  */
 public class FileManagerActivity extends AppCompatActivity {
+    // ---- one shared guard: stops a fast double tap from pushing the same screen twice
+    @Override
+    public void startActivity(android.content.Intent intent) {
+        if (Tap.ok("nav")) super.startActivity(intent);
+    }
+
+    @Override
+    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
+        if (Tap.ok("nav")) super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(android.content.Intent intent, int requestCode) {
+        if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
+    }
+
 
     private static final int SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2, SORT_TYPE = 3;
     private static final int M_DIR = 0, M_SEARCH = 1, M_FAV = 2, M_LARGEST = 3;

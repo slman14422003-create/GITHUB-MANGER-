@@ -157,6 +157,15 @@ public class Store {
         sp(c).edit().putBoolean("upd_pre", on).apply();
     }
 
+    /** "Run with SEMO AI" checkbox state, remembered across repos (applies to every project). */
+    public static boolean semoAiOn(Context c) {
+        return sp(c).getBoolean("semo_ai_on", false);
+    }
+
+    public static void setSemoAiOn(Context c, boolean on) {
+        sp(c).edit().putBoolean("semo_ai_on", on).apply();
+    }
+
     public static long lastUpdateCheck(Context c) {
         return sp(c).getLong("upd_last", 0L);
     }

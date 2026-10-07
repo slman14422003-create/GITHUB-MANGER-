@@ -28,6 +28,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ReposActivity extends AppCompatActivity {
+    // ---- one shared guard: stops a fast double tap from pushing the same screen twice
+    @Override
+    public void startActivity(android.content.Intent intent) {
+        if (Tap.ok("nav")) super.startActivity(intent);
+    }
+
+    @Override
+    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
+        if (Tap.ok("nav")) super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(android.content.Intent intent, int requestCode) {
+        if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
+    }
+
     private GitHubApi api;
     private final List<JSONObject> allRepos = new ArrayList<>();
     private final List<JSONObject> shown = new ArrayList<>();

@@ -658,6 +658,34 @@ public class GitHubApi {
         return out;
     }
 
+    /** path + size, every blob in the whole repository tree (used by SEMO AI to pick which files to read). */
+    public static final class BlobInfo {
+        public final String path;
+        public final long size;
+
+        BlobInfo(String path, long size) {
+            this.path = path;
+            this.size = size;
+        }
+    }
+
+    /** All blobs in the whole repository (recursive), with size but not content — cheap to call. */
+    public List<BlobInfo> listAllBlobs(String o, String r, String branch) throws Exception {
+        String headSha = getBranchSha(o, r, branch);
+        String tree = getCommitTree(o, r, headSha);
+        String res = request("GET", repo(o, r) + "/git/trees/" + tree + "?recursive=1", null);
+        JSONObject root = new JSONObject(res);
+        JSONArray arr = root.getJSONArray("tree");
+        List<BlobInfo> out = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject e = arr.getJSONObject(i);
+            if ("blob".equals(e.optString("type"))) {
+                out.add(new BlobInfo(e.getString("path"), e.optLong("size", 0)));
+            }
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------ commits
 
     public JSONArray listCommits(String o, String r, String branch, int page, int perPage) throws Exception {

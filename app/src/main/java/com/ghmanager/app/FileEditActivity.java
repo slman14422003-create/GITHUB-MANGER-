@@ -28,6 +28,22 @@ import java.util.concurrent.Executors;
 
 /** Simple text viewer / editor for local files opened from the in-app file manager. */
 public class FileEditActivity extends AppCompatActivity {
+    // ---- one shared guard: stops a fast double tap from pushing the same screen twice
+    @Override
+    public void startActivity(android.content.Intent intent) {
+        if (Tap.ok("nav")) super.startActivity(intent);
+    }
+
+    @Override
+    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
+        if (Tap.ok("nav")) super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(android.content.Intent intent, int requestCode) {
+        if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
+    }
+
     private static final long MAX_BYTES = 2L * 1024 * 1024;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();

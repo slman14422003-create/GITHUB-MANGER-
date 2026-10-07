@@ -9,6 +9,22 @@ import androidx.appcompat.app.AppCompatActivity;
 
 /** Shows every permission the app uses, whether it is granted, and lets the user fix it in one tap. */
 public class PermissionsActivity extends AppCompatActivity {
+    // ---- one shared guard: stops a fast double tap from pushing the same screen twice
+    @Override
+    public void startActivity(android.content.Intent intent) {
+        if (Tap.ok("nav")) super.startActivity(intent);
+    }
+
+    @Override
+    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
+        if (Tap.ok("nav")) super.startActivity(intent, options);
+    }
+
+    @Override
+    public void startActivityForResult(android.content.Intent intent, int requestCode) {
+        if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
+    }
+
     private LinearLayout content;
 
     @Override

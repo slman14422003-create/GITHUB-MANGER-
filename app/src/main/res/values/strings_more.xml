@@ -231,6 +231,12 @@
     <string name="watchers_label">المتابعون</string>
     <string name="workflow_all">كل الـ Workflows</string>
     <string name="workflow_dispatched">تم إرسال أمر التشغيل، ستظهر النتيجة بعد لحظات</string>
+    <string name="semo_ai_title">SEMO AI</string>
+    <string name="semo_ai_desc">فحص محلي بدون إنترنت لتوازن الأقواس وأخطاء بسيطة قبل التشغيل، ودمج أي إصلاح آمن في الكود تلقائيًا</string>
+    <string name="semo_ai_scanning">SEMO AI يفحص الكود…</string>
+    <string name="semo_ai_fixed_n">تم إصلاح %1$d ملف من أصل %2$d تم فحصها، وحُفظت الإصلاحات في مستودعك</string>
+    <string name="semo_ai_clean">تم فحص %1$d ملف، لا توجد مشاكل بسيطة</string>
+    <string name="semo_ai_skip_error">تعذّر إكمال الفحص (%1$s)، تم تشغيل الـ Action كالمعتاد</string>
     <string name="workflow_label">الـ Workflow</string>
     <string name="workflows">الـ Workflows</string>
     <string name="ok">موافق</string>
