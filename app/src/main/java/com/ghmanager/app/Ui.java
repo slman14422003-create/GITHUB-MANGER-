@@ -32,6 +32,8 @@ public final class Ui {
     /** Gives a view a soft "press in, spring back" scale animation. */
     public static void press(Context c, View v) {
         if (v == null) return;
+        // list rows are recycled and bound again on every scroll: inflate the animator XML only once per view
+        if (v.getStateListAnimator() != null) return;
         v.setStateListAnimator(android.animation.AnimatorInflater.loadStateListAnimator(c, R.animator.press_scale));
     }
 
