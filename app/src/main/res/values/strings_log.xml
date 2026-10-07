@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lg_live">مباشر</string>
+    <string name="lg_waiting">بانتظار بدء المهمة…</string>
+    <string name="lg_copy_all">نسخ اللوج</string>
+    <string name="lg_copy_errors">نسخ الأخطاء</string>
+    <string name="lg_no_errors_copy">لا توجد أخطاء لنسخها</string>
+    <string name="lg_share">مشاركة</string>
+    <string name="lg_preview_title">اللوج المباشر · %1$s</string>
+    <string name="lg_open_full">فتح السجل كاملًا</string>
+</resources>

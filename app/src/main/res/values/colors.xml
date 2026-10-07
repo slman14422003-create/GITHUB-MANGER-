@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ChatGPT palette: pure black canvas, graphite surfaces, electric-blue accent -->
+    <color name="bg">#000000</color>
+    <color name="surface">#303030</color>
+    <color name="surface_high">#414141</color>
+    <color name="field">#212121</color>
+    <color name="stroke">#454545</color>
+    <color name="stroke_soft">#2A2A2A</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B4B4B4</color>
+    <color name="text_hint">#8E8E8E</color>
+    <color name="accent">#3566EF</color>
+    <color name="accent_text">#8EA9FF</color>
+    <color name="accent_soft">#17264F</color>
+    <color name="neutral_soft">#3A3A3A</color>
+    <color name="on_accent">#000000</color>
+    <color name="ripple">#22FFFFFF</color>
+    <color name="ripple_on_accent">#22000000</color>
+    <color name="ok">#4ADE80</color>
+    <color name="bad">#FF6B6B</color>
+    <color name="warn">#F5B94A</color>
+    <color name="info">#6AA6FF</color>
+    <color name="ic_launcher_bg">#000000</color>
+</resources>

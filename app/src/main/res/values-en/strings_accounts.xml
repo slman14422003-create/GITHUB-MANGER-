@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- accounts -->
+    <string name="acc_title">GitHub accounts</string>
+    <string name="acc_manage">Manage account</string>
+    <string name="acc_manage_sub">Profile, access, SSH keys and more</string>
+    <string name="acc_add">Add account</string>
+    <string name="acc_active">Active</string>
+    <string name="acc_switch">Switch to this account</string>
+    <string name="acc_accounts">Accounts on this device</string>
+    <string name="acc_signout">Sign out of this account</string>
+    <string name="acc_signout_msg">This account\'s token is removed from the device. Other accounts are not touched.</string>
+    <string name="acc_signout_all">Sign out of all accounts</string>
+    <string name="acc_signout_all_msg">Every account and its token is removed from this device.</string>
+    <string name="acc_profile">Profile</string>
+    <string name="acc_edit">Edit profile</string>
+    <string name="acc_name">Name</string>
+    <string name="acc_bio">Bio</string>
+    <string name="acc_company">Company</string>
+    <string name="acc_location">Location</string>
+    <string name="acc_blog">Website</string>
+    <string name="acc_saved">Saved</string>
+    <string name="acc_emails">Email addresses</string>
+    <string name="acc_keys">SSH keys</string>
+    <string name="acc_key_add">Add SSH key</string>
+    <string name="acc_key_title">Key title</string>
+    <string name="acc_key_body">Public key (ssh-ed25519 …)</string>
+    <string name="acc_key_delete_msg">This key is removed from your GitHub account.</string>
+    <string name="acc_orgs">Organizations</string>
+    <string name="acc_none">None</string>
+    <string name="acc_access">Access</string>
+    <string name="acc_token_type">Sign-in method</string>
+    <string name="acc_type_oauth">Signed in with GitHub</string>
+    <string name="acc_type_token">Personal access token</string>
+    <string name="acc_scopes">Scopes</string>
+    <string name="acc_scopes_none">Fine-grained token — GitHub does not list its scopes</string>
+    <string name="acc_rate">Rate limit</string>
+    <string name="acc_rate_val">%1$d of %2$d left · resets in %3$s</string>
+    <string name="acc_open">Open profile on GitHub</string>
+    <string name="acc_followers">followers</string>
+    <string name="acc_following">following</string>
+    <string name="acc_repos">repos</string>
+    <string name="acc_since">Joined GitHub on %1$s</string>
+    <string name="acc_private_plan">Plan: %1$s</string>
+
+    <!-- sign-in -->
+    <string name="login_add_title">Add account</string>
+    <string name="login_gh">Continue with GitHub</string>
+    <string name="login_gh_hint">Google · email · password · passkey — you pick on GitHub\'s own page, and the app never sees your password.</string>
+    <string name="login_or">or</string>
+    <string name="login_token_title">Sign in with a token</string>
+    <string name="login_code_title">Enter this code on the GitHub page</string>
+    <string name="login_open_gh">Open GitHub page</string>
+    <string name="login_copy_code">Copy code</string>
+    <string name="login_wait">Waiting for you to confirm on GitHub…</string>
+    <string name="login_cancel_flow">Cancel</string>
+    <string name="login_client_title">OAuth app Client ID</string>
+    <string name="login_client_msg">To sign in with GitHub, create an OAuth App at GitHub → Settings → Developer settings → OAuth Apps, enable Device Flow, then paste its Client ID here.</string>
+    <string name="login_client_hint">Client ID</string>
+    <string name="login_client_set">Set Client ID</string>
+    <string name="login_expired">The code expired, start again.</string>
+    <string name="login_denied">You denied the request on GitHub.</string>
+    <string name="login_failed">Sign-in failed: %1$s</string>
+
+    <!-- proxy mirror -->
+    <string name="mir_title">Mirror (Proxy)</string>
+    <string name="mir_row_sub_on">On · %1$s</string>
+    <string name="mir_row_sub_off">Off</string>
+    <string name="mir_enable">Use the mirror to bypass blocking</string>
+    <string name="mir_enable_sub">GitHub requests and downloads go through your own Cloudflare Worker</string>
+    <string name="mir_url">Mirror URL</string>
+    <string name="mir_url_hint">https://yourname.workers.dev</string>
+    <string name="mir_key">Access key (required)</string>
+    <string name="mir_key_required">Enter the same access key you set in the Worker (MIRROR_KEY)</string>
+    <string name="mir_test">Test connection</string>
+    <string name="mir_testing">Testing…</string>
+    <string name="mir_ok">The mirror works ✓</string>
+    <string name="mir_fail">Connection failed: %1$s</string>
+    <string name="mir_bad_url">Enter a valid https mirror URL</string>
+    <string name="mir_help">Deploy worker/mirror.js on Cloudflare and paste its URL here. Add the secret MIRROR_KEY to the Worker (mandatory: without it the Worker refuses every request) and enter the same value in the key field. The saved mirror is also used for the GitHub status check (githubstatus.com) when that site is blocked, even if the mirror switch is off.</string>
+    <string name="mir_settings_link">Mirror (Proxy) settings</string>
+
+    <!-- live run board -->
+    <string name="live_queued">Waiting for a runner…</string>
+    <string name="live_starting">Starting…</string>
+    <string name="live_now">Running: %1$s</string>
+    <string name="live_progress">Step %1$d of %2$d · job %3$d of %4$d</string>
+    <string name="live_done_ok">Finished successfully</string>
+    <string name="live_done_fail">Stopped by a failure</string>
+    <string name="live_done_other">Finished</string>
+    <string name="live_total">Total time %1$s</string>
+    <string name="live_no_steps">Waiting for steps to start…</string>
+    <string name="live_log">Log</string>
+    <string name="live_jobs">Live pipeline</string>
+</resources>

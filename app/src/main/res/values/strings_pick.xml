@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pk_upload">رفع</string>
+    <string name="pk_upload_folder">رفع المجلد</string>
+    <string name="pk_hint_files">اضغط على الملفات لتحديدها (ضغطة مطوّلة لتحديد مجلد)</string>
+    <string name="pk_selected_n">%d محدد</string>
+    <string name="pk_title_files">اختر ملفات للرفع</string>
+    <string name="pk_title_folder">اختر مجلدًا للرفع</string>
+    <string name="pk_nothing">لم يتم تحديد شيء</string>
+</resources>
