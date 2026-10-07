@@ -44,11 +44,6 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     @Override
-    public void startActivity(android.content.Intent intent, android.os.Bundle options) {
-        if (Tap.ok("nav")) super.startActivity(intent, options);
-    }
-
-    @Override
     public void startActivityForResult(android.content.Intent intent, int requestCode) {
         if (Tap.ok("nav")) super.startActivityForResult(intent, requestCode);
     }
