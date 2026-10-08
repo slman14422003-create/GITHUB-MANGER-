@@ -54,6 +54,7 @@ public class BrowserActivity extends BaseRepoActivity {
     private View hintRow, selBar, uploadBar, deleteBar;
     private TextView selCount, selAll, chipSelect;
     private Button btnDeleteSel;
+    private android.widget.ImageButton btnNew;
 
     private ActivityResultLauncher<Intent> pickLauncher;
     private List<java.io.File> pickedRoots;
@@ -67,7 +68,18 @@ public class BrowserActivity extends BaseRepoActivity {
         ((TextView) findViewById(R.id.title)).setText(repo);
 
         spinner = findViewById(R.id.branchSpinner);
-        pathView = findViewById(R.id.pathView);
+        pathView = findViewById(R.id.subtitle);
+        pathView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        pathView.setTextDirection(View.TEXT_DIRECTION_LTR);
+        pathView.setEllipsize(android.text.TextUtils.TruncateAt.START);
+        loadingBar = findViewById(R.id.loading);
+        btnNew = findViewById(R.id.btnA1);
+        btnNew.setImageResource(R.drawable.ic_add);
+        btnNew.setContentDescription(getString(R.string.new_item));
+        btnNew.setVisibility(View.VISIBLE);
+        Ui.press(this, btnNew);
+        Ui.press(this, findViewById(R.id.btnBack));
+        Ui.press(this, findViewById(R.id.btnRefresh));
         ListView list = findViewById(R.id.list);
         Button btnFolder = findViewById(R.id.btnFolder);
         Button btnFiles = findViewById(R.id.btnFiles);
@@ -77,7 +89,7 @@ public class BrowserActivity extends BaseRepoActivity {
         list.setAdapter(adapter);
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
-        findViewById(R.id.btnNew).setOnClickListener(v -> newMenu());
+        btnNew.setOnClickListener(v -> newMenu());
         findViewById(R.id.branchBox).setOnClickListener(v -> spinner.performClick());
 
         hintRow = findViewById(R.id.hintRow);
@@ -237,6 +249,7 @@ public class BrowserActivity extends BaseRepoActivity {
     }
 
     private void load() {
+        loading(true);
         pathView.setText("/" + path);
         final String p = path;
         final String b = branch;
@@ -275,6 +288,7 @@ public class BrowserActivity extends BaseRepoActivity {
         for (JSONObject o : list) alive.add(o.optString("path"));
         selected.retainAll(alive);
         if (list.isEmpty()) selecting = false;
+        loading(false);
         rebuildRows();
         applySelectUi();
         chipSelect.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
@@ -353,7 +367,7 @@ public class BrowserActivity extends BaseRepoActivity {
         selBar.setVisibility(selecting ? View.VISIBLE : View.GONE);
         uploadBar.setVisibility(selecting ? View.GONE : View.VISIBLE);
         deleteBar.setVisibility(selecting ? View.VISIBLE : View.GONE);
-        findViewById(R.id.btnNew).setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
+        btnNew.setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
         if (!selecting) return;
         int n = selected.size();
         selCount.setText(n == 0 ? getString(R.string.sel_hint)

@@ -5,76 +5,7 @@
     android:background="@color/bg"
     android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="6dp">
-
-        <ImageButton
-            android:id="@+id/btnBack"
-            style="@style/IconButton"
-            android:contentDescription="@string/back"
-            android:src="@drawable/ic_back" />
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:fontFamily="serif"
-                android:singleLine="true"
-                android:textColor="@color/text_primary"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/pathView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="start"
-                android:fontFamily="monospace"
-                android:singleLine="true"
-                android:textAlignment="viewStart"
-                android:textColor="@color/text_secondary"
-                android:textDirection="ltr"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <ImageButton
-            android:id="@+id/btnNew"
-            style="@style/IconButton"
-            android:contentDescription="@string/new_item"
-            android:src="@drawable/ic_add" />
-
-        <FrameLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
-
-        <ImageButton
-            android:id="@+id/btnRefresh"
-            style="@style/IconButton"
-            android:contentDescription="@string/refresh"
-            android:src="@drawable/ic_refresh" />
-
-        <!-- iOS-style activity indicator: shown over the refresh button while the screen loads -->
-        <com.ghmanager.app.IosSpinner
-            android:id="@+id/loading"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:visibility="invisible" />
-    </FrameLayout>
-    </LinearLayout>
+    <include layout="@layout/view_header" />
 
     <LinearLayout
         android:id="@+id/branchBox"

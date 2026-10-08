@@ -9,14 +9,7 @@
 
     <TextView
         android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="22dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="22dp"
-        android:paddingBottom="6dp"
-        android:textColor="@color/text_secondary"
-        android:textSize="13sp"
+        style="@style/StatusBanner"
         android:visibility="gone" />
 
     <EditText

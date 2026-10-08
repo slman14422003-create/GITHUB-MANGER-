@@ -53,6 +53,7 @@ public class Dlg extends AlertDialog.Builder {
     private boolean dangerPositive = false;
     private int iconRes = 0, iconColorRes = 0;
     private boolean noIcon = false;
+    private boolean centerTitle = false;
 
     /** Set by {@link #stay(DialogInterface)} while a button listener runs: the dialog stays open. */
     private static boolean stayOpen = false;
@@ -79,6 +80,12 @@ public class Dlg extends AlertDialog.Builder {
     public Dlg icon(int drawableRes, int colorRes) {
         iconRes = drawableRes;
         iconColorRes = colorRes;
+        return this;
+    }
+
+    /** Centres the title (progress / status dialogs). */
+    public Dlg centered() {
+        centerTitle = true;
         return this;
     }
 
@@ -258,7 +265,7 @@ public class Dlg extends AlertDialog.Builder {
             t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
             t.setTypeface(Typeface.DEFAULT_BOLD);
             t.setTextColor(Ui.color(c, R.color.text_primary));
-            t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+            t.setTextAlignment(centerTitle ? View.TEXT_ALIGNMENT_CENTER : View.TEXT_ALIGNMENT_VIEW_START);
             t.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, ic != 0 ? 14 : 24), Ui.dp(c, 24), Ui.dp(c, 8));
             root.addView(t, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));

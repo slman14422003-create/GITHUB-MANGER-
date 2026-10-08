@@ -24,6 +24,13 @@ public class IosSpinner extends View {
     private final int color;
     private int step = 0;
     private boolean running = false;
+    private boolean standalone = false;
+
+    /** A free-standing indicator (dialogs): no button disc, the spokes fill the whole view. */
+    public IosSpinner standalone() {
+        standalone = true;
+        return this;
+    }
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -63,13 +70,14 @@ public class IosSpinner extends View {
         float cx = getWidth() / 2f;
         float cy = getHeight() / 2f;
         float size = Math.min(getWidth(), getHeight());
-        boolean overlay = size >= Ui.dp(getContext(), 40);
+        boolean overlay = !standalone && size >= Ui.dp(getContext(), 40);
         if (overlay) {
             disc.setColor(Ui.color(getContext(), R.color.surface));
             cv.drawCircle(cx, cy, size / 2f - 0.5f, disc);
             spoke.setStrokeWidth(Ui.dp(getContext(), 1));
         }
         float glyph = overlay ? Ui.dp(getContext(), 22) : size;
+        spoke.setStrokeCap(Paint.Cap.ROUND);
         float r = glyph / 2f;
         float inner = r * 0.46f;
         float outer = r * 0.94f;

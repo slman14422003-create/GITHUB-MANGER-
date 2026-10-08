@@ -10,6 +10,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -191,7 +192,7 @@ public final class Ui {
         t.setTextSize(13);
         t.setSingleLine(true);
         int ph = dp(c, 14);
-        int pv = dp(c, 7);
+        int pv = dp(c, 8);
         t.setPadding(ph, pv, ph, pv);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -215,7 +216,8 @@ public final class Ui {
         TextView t = new TextView(c);
         t.setText(text);
         t.setTextColor(color(c, R.color.text_secondary));
-        t.setTextSize(14);
+        t.setTextSize(13);
+        t.setLetterSpacing(0.02f);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         t.setPaddingRelative(dp(c, 26), dp(c, 22), dp(c, 26), dp(c, 8));
@@ -435,6 +437,39 @@ public final class Ui {
         sw.setChecked(checked);
         v.setOnClickListener(x -> sw.toggle());
         return new Toggle(v, sw);
+    }
+
+    /**
+     * Body of every "working..." dialog: a large iOS wheel inside a soft round tile, with the
+     * status text under it. The caller keeps the wheel and the label to update them later.
+     */
+    public static LinearLayout busyBox(Context c, IosSpinner wheel, TextView label) {
+        LinearLayout box = new LinearLayout(c);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(c, 24), dp(c, 10), dp(c, 24), dp(c, 6));
+
+        FrameLayout tile = new FrameLayout(c);
+        GradientDrawable bgTile = new GradientDrawable();
+        bgTile.setShape(GradientDrawable.OVAL);
+        bgTile.setColor(color(c, R.color.field));
+        bgTile.setStroke(dp(c, 1), color(c, R.color.stroke_soft));
+        tile.setBackground(bgTile);
+        wheel.standalone();
+        tile.addView(wheel, new FrameLayout.LayoutParams(dp(c, 52), dp(c, 52), android.view.Gravity.CENTER));
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(dp(c, 96), dp(c, 96));
+        tl.topMargin = dp(c, 6);
+        tl.bottomMargin = dp(c, 16);
+        box.addView(tile, tl);
+
+        label.setTextColor(color(c, R.color.text_secondary));
+        label.setTextSize(15);
+        label.setLineSpacing(0, 1.2f);
+        label.setGravity(android.view.Gravity.CENTER);
+        label.setPadding(0, 0, 0, dp(c, 10));
+        box.addView(label, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return box;
     }
 
     /** Shows the iOS-style indicator that sits on top of a refresh button (its sibling in the same frame). */

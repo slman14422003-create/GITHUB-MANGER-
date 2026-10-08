@@ -428,22 +428,12 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     protected void showProgress(String text) {
         hideProgress();
-        LinearLayout box = Ui.box(this);
-        box.setPadding(Ui.dp(this, 22), Ui.dp(this, 14), Ui.dp(this, 22), Ui.dp(this, 8));
-        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
         progressSpinner = new IosSpinner(this);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(Ui.dp(this, 40), Ui.dp(this, 40));
-        sp.bottomMargin = Ui.dp(this, 14);
-        box.addView(progressSpinner, sp);
         progressText = new TextView(this);
         progressText.setText(text);
-        progressText.setTextColor(Ui.color(this, R.color.text_secondary));
-        progressText.setTextSize(14);
-        progressText.setGravity(android.view.Gravity.CENTER);
-        progressText.setPadding(0, 0, 0, Ui.dp(this, 12));
-        box.addView(progressText, new LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout box = Ui.busyBox(this, progressSpinner, progressText);
         progressDialog = new Dlg(this)
+                .centered()
                 .setTitle(R.string.working)
                 .setView(box)
                 .setCancelable(false)
