@@ -12,6 +12,9 @@ public class Row {
     public int badgeColor;
     /** Optional icon color (0 = default). */
     public int iconColor;
+    /** True on screens in select mode: the row shows a tick circle in front of its icon. */
+    public boolean selectable;
+    public boolean checked;
 
     public Row(int icon, boolean accent, String title, String sub, boolean lock, boolean chevron) {
         this.icon = icon;
@@ -25,6 +28,12 @@ public class Row {
     public Row badge(String text, int color) {
         this.badge = text;
         this.badgeColor = color;
+        return this;
+    }
+
+    public Row select(boolean selectable, boolean checked) {
+        this.selectable = selectable;
+        this.checked = checked;
         return this;
     }
 

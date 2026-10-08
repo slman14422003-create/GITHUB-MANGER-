@@ -53,7 +53,9 @@ public class RowAdapter extends BaseAdapter {
     public View getView(int position, View convertView, ViewGroup parent) {
         View v = convertView != null ? convertView : inflater.inflate(R.layout.item_row, parent, false);
         bind(ctx, v, rows.get(position));
-        Ui.shapeRow(ctx, v, position == 0, position == rows.size() - 1);
+        Row r = rows.get(position);
+        Ui.shapeRow(ctx, v, position == 0, position == rows.size() - 1,
+                r.checked ? R.color.accent_soft : R.color.surface);
         if (position > animatedUpTo) {
             animatedUpTo = position;
             Ui.enter(v, position);
@@ -71,9 +73,18 @@ public class RowAdapter extends BaseAdapter {
         ImageView icon = v.findViewById(R.id.icon);
         icon.setImageResource(r.icon);
         boolean colored = r.iconColor != 0;
-        icon.setBackground(null);
         int tint = colored ? r.iconColor : ContextCompat.getColor(ctx, R.color.text_primary);
         icon.setImageTintList(ColorStateList.valueOf(tint));
+        GradientDrawable tile = new GradientDrawable();
+        tile.setCornerRadius(Ui.dp(ctx, 14));
+        tile.setColor(colored ? (tint & 0x00FFFFFF) | 0x24000000 : ContextCompat.getColor(ctx, R.color.neutral_soft));
+        icon.setBackground(tile);
+
+        ImageView tick = v.findViewById(R.id.selTick);
+        if (tick != null) {
+            tick.setVisibility(r.selectable ? View.VISIBLE : View.GONE);
+            tick.setImageResource(r.checked ? R.drawable.ic_select_on : R.drawable.ic_select_off);
+        }
 
         ((TextView) v.findViewById(R.id.title)).setText(r.title);
 

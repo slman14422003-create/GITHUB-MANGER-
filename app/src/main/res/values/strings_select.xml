@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sel_mode">تحديد</string>
+    <string name="sel_close">إلغاء التحديد</string>
+    <string name="sel_hint">اضغط على العناصر لتحديدها</string>
+    <string name="sel_delete_btn">حذف (%d)</string>
+    <string name="sel_delete_title">حذف %d عنصر</string>
+    <string name="sel_delete_msg">سيتم حذف العناصر التالية من الفرع «%s» بـ commit واحد:</string>
+    <string name="sel_delete_more">و %d عنصر آخر…</string>
+    <string name="sel_delete_dirs_note">المجلدات المحددة تُحذف مع كل ما بداخلها.</string>
+    <string name="sel_delete_done">تم حذف %1$d عنصر (%2$d ملف) بـ commit واحد.</string>
+    <string name="sel_delete_progress">جارٍ حذف %d عنصر…</string>
+    <string name="sel_delete_msg_commit">Delete %d items</string>
+    <string name="sel_nothing">لم يتم تحديد أي عنصر</string>
+</resources>

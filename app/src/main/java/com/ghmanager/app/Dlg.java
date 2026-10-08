@@ -51,6 +51,8 @@ public class Dlg extends AlertDialog.Builder {
     private DialogInterface.OnClickListener listL;
     private boolean forceSheet = false;
     private boolean dangerPositive = false;
+    private int iconRes = 0, iconColorRes = 0;
+    private boolean noIcon = false;
 
     /** Set by {@link #stay(DialogInterface)} while a button listener runs: the dialog stays open. */
     private static boolean stayOpen = false;
@@ -70,6 +72,19 @@ public class Dlg extends AlertDialog.Builder {
     /** Shows this dialog as a bottom sheet even though it has no option list (details, long forms). */
     public Dlg sheet() {
         forceSheet = true;
+        return this;
+    }
+
+    /** Draws a round tinted icon above the title (confirmations: trash, sign-out, info...). */
+    public Dlg icon(int drawableRes, int colorRes) {
+        iconRes = drawableRes;
+        iconColorRes = colorRes;
+        return this;
+    }
+
+    /** Turns off the automatic icon that destructive confirmations get. */
+    public Dlg noIcon() {
+        noIcon = true;
         return this;
     }
 
@@ -212,6 +227,31 @@ public class Dlg extends AlertDialog.Builder {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPaddingRelative(Ui.dp(c, edge), Ui.dp(c, sheet ? 14 : 0), Ui.dp(c, edge), Ui.dp(c, edge));
 
+        // icon header: explicit, or automatic for message dialogs whose main action is destructive
+        int ic = iconRes, icCol = iconColorRes;
+        if (ic == 0 && !noIcon && listAdapter == null && customView == null && posText != null
+                && (dangerPositive || destructive(c, posText))) {
+            ic = autoIcon(c, posText);
+            icCol = R.color.bad;
+        }
+        if (ic != 0) {
+            int col = Ui.color(c, icCol == 0 ? R.color.accent_text : icCol);
+            ImageView iv = new ImageView(c);
+            iv.setImageResource(ic);
+            iv.setImageTintList(ColorStateList.valueOf(col));
+            int pad = Ui.dp(c, 12);
+            iv.setPadding(pad, pad, pad, pad);
+            GradientDrawable tile = new GradientDrawable();
+            tile.setShape(GradientDrawable.OVAL);
+            tile.setColor((col & 0x00FFFFFF) | 0x26000000);
+            iv.setBackground(tile);
+            iv.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(Ui.dp(c, 52), Ui.dp(c, 52));
+            ilp.setMarginStart(Ui.dp(c, 24));
+            ilp.topMargin = Ui.dp(c, sheet ? 8 : 24);
+            root.addView(iv, ilp);
+        }
+
         if (title != null && title.length() > 0) {
             TextView t = new TextView(c);
             t.setText(title);
@@ -219,7 +259,7 @@ public class Dlg extends AlertDialog.Builder {
             t.setTypeface(Typeface.DEFAULT_BOLD);
             t.setTextColor(Ui.color(c, R.color.text_primary));
             t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-            t.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, 24), Ui.dp(c, 24), Ui.dp(c, 8));
+            t.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, ic != 0 ? 14 : 24), Ui.dp(c, 24), Ui.dp(c, 8));
             root.addView(t, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         } else {
@@ -383,6 +423,17 @@ public class Dlg extends AlertDialog.Builder {
             R.string.delete_repo, R.string.delete_run, R.string.force_cancel, R.string.cancel_run,
             R.string.col_remove, R.string.adv_prot_remove,
             R.string.acc_signout, R.string.acc_signout_all};
+
+    private static int autoIcon(Context c, CharSequence label) {
+        String l = label.toString();
+        if (l.equals(c.getString(R.string.acc_signout)) || l.equals(c.getString(R.string.acc_signout_all))) {
+            return R.drawable.ic_logout;
+        }
+        if (l.equals(c.getString(R.string.force_cancel)) || l.equals(c.getString(R.string.cancel_run))) {
+            return R.drawable.ic_cancel;
+        }
+        return R.drawable.ic_delete;
+    }
 
     /** True for labels of actions that remove or abort something (shown in red). */
     static boolean destructive(Context c, CharSequence label) {

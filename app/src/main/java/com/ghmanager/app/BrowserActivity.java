@@ -30,7 +30,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public class BrowserActivity extends BaseRepoActivity {
 
@@ -43,6 +47,13 @@ public class BrowserActivity extends BaseRepoActivity {
     private Spinner spinner;
     private List<String> branches = new ArrayList<>();
     private boolean needsReload = false;
+
+    // ---- select mode (delete one / several / all repository files in a single commit)
+    private boolean selecting = false;
+    private final Set<String> selected = new LinkedHashSet<>();
+    private View hintRow, selBar, uploadBar, deleteBar;
+    private TextView selCount, selAll, chipSelect;
+    private Button btnDeleteSel;
 
     private ActivityResultLauncher<Intent> pickLauncher;
     private List<java.io.File> pickedRoots;
@@ -69,8 +80,31 @@ public class BrowserActivity extends BaseRepoActivity {
         findViewById(R.id.btnNew).setOnClickListener(v -> newMenu());
         findViewById(R.id.branchBox).setOnClickListener(v -> spinner.performClick());
 
+        hintRow = findViewById(R.id.hintRow);
+        selBar = findViewById(R.id.selBar);
+        uploadBar = findViewById(R.id.uploadBar);
+        deleteBar = findViewById(R.id.deleteBar);
+        selCount = findViewById(R.id.selCount);
+        selAll = findViewById(R.id.selAll);
+        btnDeleteSel = findViewById(R.id.btnDeleteSel);
+        chipSelect = Ui.chip(this, getString(R.string.sel_mode), false);
+        ((LinearLayout.LayoutParams) chipSelect.getLayoutParams()).setMarginEnd(0);
+        ((LinearLayout) hintRow).addView(chipSelect);
+        Ui.press(this, selAll);
+        Ui.press(this, btnDeleteSel);
+        chipSelect.setOnClickListener(v -> {
+            if (!items.isEmpty()) enterSelect(null);
+        });
+        findViewById(R.id.selClose).setOnClickListener(v -> exitSelect());
+        selAll.setOnClickListener(v -> toggleAll());
+        btnDeleteSel.setOnClickListener(v -> confirmDeleteSelected());
+
         list.setOnItemClickListener((p, v, pos, id) -> {
             JSONObject o = items.get(pos);
+            if (selecting) {
+                toggle(o.optString("path"));
+                return;
+            }
             if ("dir".equals(o.optString("type"))) {
                 path = o.optString("path");
                 load();
@@ -79,6 +113,10 @@ public class BrowserActivity extends BaseRepoActivity {
             }
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
+            if (selecting) {
+                toggle(items.get(pos).optString("path"));
+                return true;
+            }
             itemMenu(items.get(pos));
             return true;
         });
@@ -103,7 +141,9 @@ public class BrowserActivity extends BaseRepoActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (!path.isEmpty()) {
+                if (selecting) {
+                    exitSelect();
+                } else if (!path.isEmpty()) {
                     goUp();
                 } else {
                     setEnabled(false);
@@ -183,6 +223,7 @@ public class BrowserActivity extends BaseRepoActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 String b = branches.get(position);
                 if (!b.equals(branch)) {
+                    exitSelect();
                     branch = b;
                     path = "";
                     load();
@@ -229,14 +270,98 @@ public class BrowserActivity extends BaseRepoActivity {
     private void show(List<JSONObject> list) {
         items.clear();
         items.addAll(list);
+        // drop selections that no longer exist (renamed, deleted, other folder)
+        Set<String> alive = new HashSet<>();
+        for (JSONObject o : list) alive.add(o.optString("path"));
+        selected.retainAll(alive);
+        if (list.isEmpty()) selecting = false;
+        rebuildRows();
+        applySelectUi();
+        chipSelect.setVisibility(list.isEmpty() ? View.GONE : View.VISIBLE);
+        emptyView.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    private void rebuildRows() {
         List<Row> rows = new ArrayList<>();
-        for (JSONObject o : list) {
+        for (JSONObject o : items) {
             boolean dir = "dir".equals(o.optString("type"));
-            rows.add(new Row(dir ? R.drawable.ic_folder : R.drawable.ic_file, dir,
-                    o.optString("name"), dir ? null : Fmt.size(o.optLong("size")), false, dir));
+            String name = o.optString("name");
+            boolean on = selected.contains(o.optString("path"));
+            Row r = new Row(dir ? R.drawable.ic_folder : R.drawable.ic_file, dir, name,
+                    dir ? null : Fmt.size(o.optLong("size")), false, dir && !selecting);
+            r.tint(Ui.color(this, dir ? R.color.accent_text : fileTint(name)));
+            r.select(selecting, on);
+            rows.add(r);
         }
         adapter.setRows(rows);
-        emptyView.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    /** Soft colour per file kind so a long listing is easy to scan. */
+    private static int fileTint(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        int dot = n.lastIndexOf('.');
+        String e = dot < 0 ? "" : n.substring(dot + 1);
+        switch (e) {
+            case "java": case "kt": case "kts": case "js": case "ts": case "py": case "c": case "cpp":
+            case "h": case "go": case "rs": case "swift": case "php": case "html": case "css": case "sh":
+                return R.color.info;
+            case "yml": case "yaml": case "json": case "xml": case "gradle": case "toml":
+            case "properties": case "pro":
+                return R.color.warn;
+            case "png": case "jpg": case "jpeg": case "gif": case "webp": case "svg": case "mp4":
+            case "mp3": case "zip": case "apk":
+                return R.color.ok;
+            default:
+                return R.color.text_secondary;
+        }
+    }
+
+    // ---------- select mode ----------
+
+    private void enterSelect(String firstPath) {
+        selecting = true;
+        selected.clear();
+        if (firstPath != null) selected.add(firstPath);
+        rebuildRows();
+        applySelectUi();
+    }
+
+    private void exitSelect() {
+        if (!selecting && selected.isEmpty()) return;
+        selecting = false;
+        selected.clear();
+        rebuildRows();
+        applySelectUi();
+    }
+
+    private void toggle(String p) {
+        if (!selected.remove(p)) selected.add(p);
+        rebuildRows();
+        applySelectUi();
+    }
+
+    private void toggleAll() {
+        boolean all = !items.isEmpty() && selected.size() == items.size();
+        selected.clear();
+        if (!all) for (JSONObject o : items) selected.add(o.optString("path"));
+        rebuildRows();
+        applySelectUi();
+    }
+
+    private void applySelectUi() {
+        hintRow.setVisibility(selecting ? View.GONE : View.VISIBLE);
+        selBar.setVisibility(selecting ? View.VISIBLE : View.GONE);
+        uploadBar.setVisibility(selecting ? View.GONE : View.VISIBLE);
+        deleteBar.setVisibility(selecting ? View.VISIBLE : View.GONE);
+        findViewById(R.id.btnNew).setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
+        if (!selecting) return;
+        int n = selected.size();
+        selCount.setText(n == 0 ? getString(R.string.sel_hint)
+                : getString(R.string.sel_count, n, items.size()));
+        selAll.setText(n > 0 && n == items.size() ? R.string.deselect_all : R.string.select_all);
+        btnDeleteSel.setText(getString(R.string.sel_delete_btn, n));
+        btnDeleteSel.setEnabled(n > 0);
+        btnDeleteSel.setAlpha(n > 0 ? 1f : 0.45f);
     }
 
     // ---------- item actions ----------
@@ -246,6 +371,7 @@ public class BrowserActivity extends BaseRepoActivity {
         final String name = o.optString("name");
         final String p = o.optString("path");
         List<String> labels = new ArrayList<>();
+        labels.add(getString(R.string.sel_mode));
         if (!dir) labels.add(getString(R.string.view_edit));
         if (!dir) labels.add(getString(R.string.download));
         labels.add(getString(R.string.rename_move));
@@ -255,7 +381,9 @@ public class BrowserActivity extends BaseRepoActivity {
         final String[] arr = labels.toArray(new String[0]);
         choose(name, arr, (d, which) -> {
             String chosen = arr[which];
-            if (chosen.equals(getString(R.string.view_edit))) {
+            if (chosen.equals(getString(R.string.sel_mode))) {
+                enterSelect(p);
+            } else if (chosen.equals(getString(R.string.view_edit))) {
                 openFile(p);
             } else if (chosen.equals(getString(R.string.download))) {
                 saveAs(name, () -> api.openDownload(api.contentRawPath(owner, repo, p, branch),
@@ -514,5 +642,81 @@ public class BrowserActivity extends BaseRepoActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+    // ---------- delete several / all (one commit) ----------
+
+    private void confirmDeleteSelected() {
+        final List<JSONObject> chosen = new ArrayList<>();
+        for (JSONObject o : items) if (selected.contains(o.optString("path"))) chosen.add(o);
+        if (chosen.isEmpty()) {
+            toast(R.string.sel_nothing);
+            return;
+        }
+        final int n = chosen.size();
+        boolean anyDir = false;
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            JSONObject o = chosen.get(i);
+            boolean dir = "dir".equals(o.optString("type"));
+            if (dir) anyDir = true;
+            if (i < 6) {
+                if (i > 0) names.append('\n');
+                names.append("\u2022 ").append(o.optString("name")).append(dir ? "/" : "");
+            }
+        }
+        if (n > 6) names.append('\n').append(getString(R.string.sel_delete_more, n - 6));
+        String msg = getString(R.string.sel_delete_msg, branch) + "\n\n" + names;
+        if (anyDir) msg += "\n\n" + getString(R.string.sel_delete_dirs_note);
+        new Dlg(this)
+                .danger()
+                .setTitle(getString(R.string.sel_delete_title, n))
+                .setMessage(msg)
+                .setPositiveButton(R.string.delete, (d, w) -> deleteChosen(chosen))
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void deleteChosen(final List<JSONObject> chosen) {
+        if (busy) return;
+        final int n = chosen.size();
+        showProgress(getString(R.string.sel_delete_progress, n));
+        busy = true;   // showProgress() clears the flag, so it is raised afterwards
+        final String b = branch;
+        bg(() -> {
+            boolean anyDir = false;
+            for (JSONObject o : chosen) if ("dir".equals(o.optString("type"))) anyDir = true;
+            // one tree read covers every selected folder
+            List<GitHubApi.BlobInfo> all = anyDir ? api.listAllBlobs(owner, repo, b) : null;
+            List<String> paths = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            for (JSONObject o : chosen) {
+                String p = o.optString("path");
+                if ("dir".equals(o.optString("type"))) {
+                    String prefix = p + "/";
+                    if (all != null) {
+                        for (GitHubApi.BlobInfo bi : all) {
+                            if (bi.path.startsWith(prefix) && seen.add(bi.path)) paths.add(bi.path);
+                        }
+                    }
+                } else if (seen.add(p)) {
+                    paths.add(p);
+                }
+            }
+            if (!paths.isEmpty()) {
+                List<GitHubApi.TreeEntry> entries = new ArrayList<>();
+                for (String s : paths) entries.add(new GitHubApi.TreeEntry(s, null));
+                String message = n == 1 ? "Delete " + chosen.get(0).optString("name")
+                        : getString(R.string.sel_delete_msg_commit, n);
+                api.commitEntries(owner, repo, b, entries, message);
+            }
+            final int files = paths.size();
+            post(() -> {
+                hideProgress();
+                exitSelect();
+                load();
+                Dlg.result(BrowserActivity.this, true, getString(R.string.done),
+                        getString(R.string.sel_delete_done, n, files));
+            });
+        });
     }
 }

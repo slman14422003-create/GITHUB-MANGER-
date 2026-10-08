@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sel_mode">Select</string>
+    <string name="sel_close">Cancel selection</string>
+    <string name="sel_hint">Tap items to select them</string>
+    <string name="sel_delete_btn">Delete (%d)</string>
+    <string name="sel_delete_title">Delete %d items</string>
+    <string name="sel_delete_msg">The following items will be deleted from branch “%s” in a single commit:</string>
+    <string name="sel_delete_more">and %d more…</string>
+    <string name="sel_delete_dirs_note">Selected folders are deleted with everything inside them.</string>
+    <string name="sel_delete_done">Deleted %1$d items (%2$d files) in one commit.</string>
+    <string name="sel_delete_progress">Deleting %d items…</string>
+    <string name="sel_delete_msg_commit">Delete %d items</string>
+    <string name="sel_nothing">No items selected</string>
+    <string name="select_all">Select all</string>
+    <string name="deselect_all">Deselect all</string>
+    <string name="sel_count">%1$d of %2$d selected</string>
+</resources>

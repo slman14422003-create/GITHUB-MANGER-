@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ChatGPT palette: pure black canvas, graphite surfaces, electric-blue accent -->
-    <color name="bg">#000000</color>
-    <color name="surface">#303030</color>
-    <color name="surface_high">#414141</color>
-    <color name="field">#212121</color>
-    <color name="stroke">#454545</color>
-    <color name="stroke_soft">#2A2A2A</color>
+    <!-- Layered graphite palette: near-black canvas, soft surfaces, clear blue accent -->
+    <color name="bg">#0B0B0D</color>
+    <color name="surface">#1B1B1F</color>
+    <color name="surface_high">#26262B</color>
+    <color name="field">#141417</color>
+    <color name="stroke">#36363D</color>
+    <color name="stroke_soft">#25252A</color>
     <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#B4B4B4</color>
-    <color name="text_hint">#8E8E8E</color>
-    <color name="accent">#3566EF</color>
-    <color name="accent_text">#8EA9FF</color>
-    <color name="accent_soft">#17264F</color>
-    <color name="neutral_soft">#3A3A3A</color>
+    <color name="text_secondary">#B7B7C2</color>
+    <color name="text_hint">#8A8A96</color>
+    <color name="accent">#4C7DFF</color>
+    <color name="accent_text">#9DB5FF</color>
+    <color name="accent_soft">#16224A</color>
+    <color name="neutral_soft">#2A2A30</color>
     <color name="on_accent">#000000</color>
-    <color name="ripple">#22FFFFFF</color>
+    <color name="ripple">#26FFFFFF</color>
     <color name="ripple_on_accent">#22000000</color>
     <color name="ok">#4ADE80</color>
     <color name="bad">#FF6B6B</color>
