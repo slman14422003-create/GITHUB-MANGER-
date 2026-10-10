@@ -35,6 +35,9 @@ public class LoginActivity extends AppCompatActivity {
     private static final long SPLASH_MS = 900;
 
     private boolean destroyed = false;
+    private boolean resumed = false;
+    /** The account is saved but the app was in the background: Android blocks opening a screen from there. */
+    private boolean ready = false;
     private DeviceFlow.Code dev;
     private long deadline;
     private int interval = 5;
@@ -261,10 +264,8 @@ public class LoginActivity extends AppCompatActivity {
                         Toast.makeText(this, getString(R.string.invalid_token) + ": Keystore", Toast.LENGTH_LONG).show();
                         return;
                     }
-                    Intent i = new Intent(this, ReposActivity.class);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(i);
-                    finish();
+                    ready = true;
+                    if (resumed) goRepos();   // otherwise onResume continues as soon as the user is back
                 });
             } catch (Exception e) {
                 ui.post(() -> {
@@ -275,6 +276,34 @@ public class LoginActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    private void goRepos() {
+        if (!ready || isFinishing()) return;
+        ready = false;
+        Intent i = new Intent(this, ReposActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(i);
+        finish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (ready) {
+            goRepos();
+        } else if (dev != null) {
+            // back from the browser: ask GitHub right now instead of waiting for the next timer tick
+            ui.removeCallbacks(pollTask);
+            ui.post(pollTask);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        resumed = false;
     }
 
     @Override
