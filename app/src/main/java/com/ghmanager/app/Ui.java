@@ -43,17 +43,18 @@ public final class Ui {
         if (v == null) return;
         v.animate().cancel();
         // the system "remove animations" setting is honoured: show the item at once
-        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+        if (!Motion.enabled()) {
             v.setAlpha(1f);
             v.setTranslationY(0f);
             return;
         }
+        Context c = v.getContext();
         v.setAlpha(0f);
-        v.setTranslationY(dp(v.getContext(), 14));
+        v.setTranslationY(dp(c, 14));
         v.animate().alpha(1f).translationY(0f)
-                .setStartDelay(Math.min(Math.max(index, 0), 9) * 28L)
-                .setDuration(300)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
+                .setStartDelay(Math.min(Math.max(index, 0), 9) * (long) Motion.stagger(c))
+                .setDuration(Motion.slow(c))
+                .setInterpolator(Motion.enter())
                 .start();
     }
 

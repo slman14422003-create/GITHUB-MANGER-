@@ -12,6 +12,10 @@
     <string name="tr_update_title">تحديث التطبيق</string>
     <string name="tr_tap_install">اضغط هنا للتثبيت</string>
     <string name="tr_saved_to">تم الحفظ في:\n%1$s</string>
+    <string name="tr_eta">متبقي %1$s</string>
+    <string name="tr_connecting">جارٍ الاتصال…</string>
+    <string name="tr_reserving">جارٍ حجز مساحة الملف (%1$s)…</string>
+    <string name="tr_no_space">لا توجد مساحة كافية في الذاكرة لحفظ الملف (يلزم %1$s)</string>
     <string name="tr_scanning">جارٍ تجهيز الملفات…</string>
     <string name="upload_skip_junk">تجاهل ما يستثنيه .gitignore وملفات البناء (build، node_modules…)</string>
     <string name="dl_title">التحميلات</string>

@@ -13,7 +13,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
+import java.nio.channels.Channels;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,49 +55,81 @@ public final class TransferTasks {
 
     // ------------------------------------------------------------------ download
 
+    /**
+     * Reserves the whole file on disk BEFORE the first byte arrives: the storage is checked up front
+     * (a clear "not enough space" instead of a failure at 90%), and writing into an already sized
+     * file is faster because the file system does not have to grow it chunk by chunk.
+     */
+    private static void reserve(Transfers.Job job, File dest, RandomAccessFile raf, long size) throws IOException {
+        if (size <= 0) return;
+        job.progress(job.app.getString(R.string.tr_reserving, Fmt.size(size)), 0, 0);
+        File dir = dest.getParentFile();
+        if (dir != null) {
+            long free = dir.getUsableSpace();
+            if (free > 0 && free < size + 8L * 1024 * 1024) {
+                throw new IOException(job.app.getString(R.string.tr_no_space, Fmt.size(size)));
+            }
+        }
+        try {
+            android.system.Os.posix_fallocate(raf.getFD(), 0, size);
+        } catch (Exception unsupported) {
+            // some file systems cannot pre-allocate: a sized (sparse) file is still reserved
+            raf.setLength(size);
+        }
+        job.check();
+        job.progressBytes(dest.getName(), 0, size);
+    }
+
     /** Downloads {@code src} into {@code dest}; with {@code extractApk} only the .apk inside the ZIP is kept. */
     public static Transfers.Task download(final Transfers.Src src, final File dest, final boolean extractApk) {
         return job -> {
             File parent = dest.getParentFile();
             if (parent != null && !parent.exists()) //noinspection ResultOfMethodCallIgnored
                 parent.mkdirs();
+            job.progress(job.app.getString(R.string.tr_connecting), 0, 0);
             boolean ok = false;
             try {
                 HttpURLConnection c = src.open();
                 try {
                     long total = c.getContentLengthLong();
                     InputStream in = c.getInputStream();
-                    OutputStream out;
+                    RandomAccessFile raf;
                     try {
-                        out = new FileOutputStream(dest);
+                        raf = new RandomAccessFile(dest, "rw");
                     } catch (IOException openFail) {
                         in.close();
                         throw new IOException(job.app.getString(R.string.save_failed, dest.getParent()), openFail);
                     }
                     try {
+                        OutputStream out = Channels.newOutputStream(raf.getChannel());
                         GitHubApi.Progress prog = (done, tot) -> {
-                            job.progress(dest.getName(), done, tot);
+                            job.progressBytes(dest.getName(), done, tot);
                             job.check();
                         };
+                        long written = 0;
                         if (extractApk) {
                             ZipInputStream zin = new ZipInputStream(in);
                             ZipEntry e;
                             boolean found = false;
                             while ((e = zin.getNextEntry()) != null) {
                                 if (!e.isDirectory() && e.getName().toLowerCase(Locale.US).endsWith(".apk")) {
-                                    GitHubApi.copy(zin, out, e.getSize(), prog);
+                                    reserve(job, dest, raf, e.getSize());
+                                    written = GitHubApi.copy(zin, out, e.getSize(), prog);
                                     found = true;
                                     break;
                                 }
                             }
                             if (!found) throw new IOException(job.app.getString(R.string.no_apk_in_artifact));
                         } else {
-                            GitHubApi.copy(in, out, total, prog);
+                            reserve(job, dest, raf, total);
+                            written = GitHubApi.copy(in, out, total, prog);
                         }
+                        // drop whatever is left of the reserved size (compressed or unknown-length sources)
+                        raf.setLength(written);
                         ok = true;
                     } finally {
                         try {
-                            out.close();
+                            raf.close();
                         } catch (Exception ignored) {
                         }
                         try {
@@ -138,20 +172,24 @@ public final class TransferTasks {
             File[] old = dir == null ? null : dir.listFiles();
             if (old != null) for (File o : old) //noinspection ResultOfMethodCallIgnored
                 o.delete();
+            job.progress(job.app.getString(R.string.tr_connecting), 0, 0);
             HttpURLConnection c = api.openDownload(api.assetPath(owner, repo, in.assetId), "application/octet-stream");
             try {
                 long total = c.getContentLengthLong();
                 if (total <= 0) total = in.assetSize;
                 InputStream is = c.getInputStream();
-                OutputStream os = new FileOutputStream(apk);
+                RandomAccessFile raf = new RandomAccessFile(apk, "rw");
                 try {
-                    GitHubApi.copy(is, os, total, (done, tot) -> {
-                        job.progress(in.assetName, done, tot);
-                        job.check();
-                    });
+                    reserve(job, apk, raf, total);
+                    long written = GitHubApi.copy(is, Channels.newOutputStream(raf.getChannel()), total,
+                            (done, tot) -> {
+                                job.progressBytes(in.assetName, done, tot);
+                                job.check();
+                            });
+                    raf.setLength(written);
                 } catch (RuntimeException | IOException e) {
                     try {
-                        os.close();
+                        raf.close();
                     } catch (Exception ignored) {
                     }
                     //noinspection ResultOfMethodCallIgnored
@@ -159,7 +197,7 @@ public final class TransferTasks {
                     throw e;
                 } finally {
                     try {
-                        os.close();
+                        raf.close();
                     } catch (Exception ignored) {
                     }
                     try {

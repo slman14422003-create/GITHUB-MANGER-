@@ -92,18 +92,25 @@ public class RunDetailActivity extends BaseRepoActivity {
             try {
                 final JSONObject r = api.getRun(owner, repo, runId);
                 JSONArray j = api.listJobs(owner, repo, runId);
+                // artifacts only change when the run ends: skip them on the quick polls of a running run
+                // (one request less every 2.5 s keeps the GitHub rate limit healthy)
                 JSONArray a = null;
-                try {
-                    a = api.listRunArtifacts(owner, repo, runId);
-                } catch (Exception ignored) {
+                boolean fetchedArtifacts = false;
+                if (!silent || !Status.isActive(r.optString("status"))) {
+                    fetchedArtifacts = true;
+                    try {
+                        a = api.listRunArtifacts(owner, repo, runId);
+                    } catch (Exception ignored) {
+                    }
                 }
                 final JSONArray fj = j == null ? new JSONArray() : j;
+                final boolean keepArtifacts = !fetchedArtifacts;
                 final JSONArray fa = a == null ? new JSONArray() : a;
                 post(() -> {
                     loading(false);
                     run = r;
                     jobs = fj;
-                    artifacts = fa;
+                    if (!keepArtifacts) artifacts = fa;
                     silentRender = silent;
                     board.update(r, fj);
                     render();

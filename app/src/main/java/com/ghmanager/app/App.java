@@ -59,14 +59,25 @@ public class App extends Application {
                 ViewCompat.requestApplyInsets(content);
             }
 
-            @Override public void onActivityResumed(Activity a) { }
-            @Override public void onActivityPaused(Activity a) { }
+            @Override
+            public void onActivityResumed(Activity a) {
+                // running uploads / downloads get a live progress card on every normal screen
+                if (!(a instanceof LockActivity) && !(a instanceof LoginActivity)) TransferDock.resume(a);
+            }
+
+            @Override
+            public void onActivityPaused(Activity a) {
+                TransferDock.pause(a);
+            }
             @Override
             public void onActivityStopped(Activity a) {
                 AppLock.onStopped();
             }
             @Override public void onActivitySaveInstanceState(Activity a, Bundle b) { }
-            @Override public void onActivityDestroyed(Activity a) { }
+            @Override
+            public void onActivityDestroyed(Activity a) {
+                TransferDock.destroy(a);
+            }
         });
     }
 }

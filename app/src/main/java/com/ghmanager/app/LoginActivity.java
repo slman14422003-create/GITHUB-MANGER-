@@ -70,7 +70,8 @@ public class LoginActivity extends AppCompatActivity {
                 .alpha(0f)
                 .scaleX(0.92f)
                 .scaleY(0.92f)
-                .setDuration(220)
+                .setDuration(Motion.base(this))
+                .setInterpolator(Motion.standard())
                 .withEndAction(provider::remove)
                 .start());
         final boolean add = getIntent().getBooleanExtra("add", false);

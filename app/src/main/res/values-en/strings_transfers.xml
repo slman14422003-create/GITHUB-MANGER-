@@ -12,6 +12,10 @@
     <string name="tr_update_title">App update</string>
     <string name="tr_tap_install">Tap here to install</string>
     <string name="tr_saved_to">Saved to:\n%1$s</string>
+    <string name="tr_eta">%1$s left</string>
+    <string name="tr_connecting">Connecting…</string>
+    <string name="tr_reserving">Reserving file space (%1$s)…</string>
+    <string name="tr_no_space">Not enough free storage to save the file (%1$s needed)</string>
     <string name="tr_scanning">Preparing files…</string>
     <string name="upload_skip_junk">Skip what .gitignore excludes and build files (build, node_modules…)</string>
     <string name="dl_title">Downloads</string>

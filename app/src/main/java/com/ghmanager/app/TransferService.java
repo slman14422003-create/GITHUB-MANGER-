@@ -130,7 +130,7 @@ public class TransferService extends Service {
 
     private void update(boolean force) {
         long now = System.currentTimeMillis();
-        if (!force && now - lastNotify < 600) return;
+        if (!force && now - lastNotify < 400) return;
         lastNotify = now;
         try {
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -159,10 +159,28 @@ public class TransferService extends Service {
         }
         Transfers.Job first = js.get(0);
         b.setContentTitle(js.size() > 1 ? getString(R.string.tr_n_running, js.size()) : first.title);
-        b.setContentText(first.text);
-        long total = first.total;
-        if (total > 0) b.setProgress(100, (int) Math.min(100, first.done * 100 / total), false);
-        else b.setProgress(0, 0, true);
+        // overall fraction: the average of every running transfer whose size is known
+        float sum = 0f;
+        int known = 0;
+        for (Transfers.Job j : js) {
+            float f = j.fraction();
+            if (f >= 0f) {
+                sum += f;
+                known++;
+            }
+        }
+        String detail = first.detail();
+        // the percentage leads the text and also sits in the header line, so a long file name never hides it
+        b.setContentText(detail.isEmpty() ? first.text() : detail);
+        b.setStyle(new NotificationCompat.BigTextStyle()
+                .bigText(detail.isEmpty() ? first.text() : first.text() + "\n" + detail));
+        if (known > 0) {
+            int pct = Math.min(100, Math.round(sum / known * 100f));
+            b.setProgress(100, pct, false);
+            b.setSubText(pct + "%");
+        } else {
+            b.setProgress(0, 0, true);
+        }
         return b.build();
     }
 

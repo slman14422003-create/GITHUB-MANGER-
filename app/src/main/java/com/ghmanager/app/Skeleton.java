@@ -62,9 +62,10 @@ public final class Skeleton {
         if (old instanceof ObjectAnimator) ((ObjectAnimator) old).cancel();
         v.setTag(TAG_ANIM, null);
         v.setAlpha(1f);
-        if (!on || !android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        if (!on || !Motion.enabled()) return;
         ObjectAnimator a = ObjectAnimator.ofFloat(v, View.ALPHA, 1f, 0.45f);
-        a.setDuration(800);
+        a.setDuration(Motion.slow(v.getContext()) * 3L);
+        a.setInterpolator(Motion.standard());
         a.setRepeatMode(ObjectAnimator.REVERSE);
         a.setRepeatCount(ObjectAnimator.INFINITE);
         a.start();

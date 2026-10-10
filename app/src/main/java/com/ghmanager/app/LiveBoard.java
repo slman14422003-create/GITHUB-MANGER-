@@ -414,7 +414,7 @@ public class LiveBoard extends LinearLayout {
             head.setOnClickListener(v -> {
                 userSet = true;
                 expanded = !expanded;
-                TransitionManager.beginDelayedTransition(LiveBoard.this);
+                TransitionManager.beginDelayedTransition(LiveBoard.this, Motion.layout(getContext()));
                 steps.setVisibility(expanded ? View.VISIBLE : View.GONE);
             });
             head.setOnLongClickListener(v -> {
@@ -438,6 +438,10 @@ public class LiveBoard extends LinearLayout {
             int[] states = new int[n];
             // rows: index 0 of `steps` is the "empty" hint, the step rows follow it
             int have = steps.getChildCount() - 1;
+            // steps appearing while the run goes on glide into place instead of popping in
+            if (have != n && isAttachedToWindow() && Motion.enabled()) {
+                TransitionManager.beginDelayedTransition(LiveBoard.this, Motion.layout(c));
+            }
             while (have < n) {
                 steps.addView(new StepRow(c));
                 have++;
@@ -455,7 +459,8 @@ public class LiveBoard extends LinearLayout {
             }
             bar.set(states);
             empty.setVisibility(n == 0 ? View.VISIBLE : View.GONE);
-            if (!userSet) expanded = st == 1 || st == 3;
+            // every stage shows all of its steps; the header can still collapse a stage by hand
+            if (!userSet) expanded = true;
             steps.setVisibility(expanded ? View.VISIBLE : View.GONE);
             tick();
         }

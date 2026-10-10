@@ -293,7 +293,7 @@ public class GitHubApi {
     }
 
     public static long copy(InputStream in, OutputStream out, long total, Progress p) throws IOException {
-        byte[] buf = new byte[32768];
+        byte[] buf = new byte[131072];
         long done = 0;
         long last = 0;
         int n;

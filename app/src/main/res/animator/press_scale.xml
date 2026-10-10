@@ -3,12 +3,14 @@
     <item android:state_pressed="true">
         <set android:ordering="together">
             <objectAnimator
-                android:duration="80"
+                android:duration="@integer/motion_press"
+                android:interpolator="@android:interpolator/decelerate_cubic"
                 android:propertyName="scaleX"
                 android:valueTo="0.97"
                 android:valueType="floatType" />
             <objectAnimator
-                android:duration="80"
+                android:duration="@integer/motion_press"
+                android:interpolator="@android:interpolator/decelerate_cubic"
                 android:propertyName="scaleY"
                 android:valueTo="0.97"
                 android:valueType="floatType" />
@@ -17,13 +19,13 @@
     <item>
         <set android:ordering="together">
             <objectAnimator
-                android:duration="180"
+                android:duration="@integer/motion_base"
                 android:interpolator="@android:interpolator/decelerate_quint"
                 android:propertyName="scaleX"
                 android:valueTo="1"
                 android:valueType="floatType" />
             <objectAnimator
-                android:duration="180"
+                android:duration="@integer/motion_base"
                 android:interpolator="@android:interpolator/decelerate_quint"
                 android:propertyName="scaleY"
                 android:valueTo="1"

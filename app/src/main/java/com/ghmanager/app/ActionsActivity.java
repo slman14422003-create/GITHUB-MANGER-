@@ -64,6 +64,8 @@ public class ActionsActivity extends BaseRepoActivity {
     private JSONArray workflows = null;
     private final Map<Long, int[]> progress = new HashMap<>();
     private final Map<Long, String> stepNow = new HashMap<>();
+    /** Jobs (with all their steps) of the runs that are still going: shown live inside the list. */
+    private final Map<Long, JSONArray> liveJobs = new HashMap<>();
     private LinearLayout dash;
     private RunAdapter runAdapter;
 
@@ -74,8 +76,29 @@ public class ActionsActivity extends BaseRepoActivity {
     private TextView clearFilters;
     private LinearLayout filterChips;
 
+    private static final long POLL_MS = 4000;
+
     private final Runnable poll = () -> {
         if (resumed && !busy) load(true, true);
+    };
+
+    /** Keeps the running clocks of the live runs ticking every second without rebuilding the list. */
+    private final Runnable ticker = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed) return;
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < listView.getChildCount(); i++) {
+                View row = listView.getChildAt(i);
+                View d = row.findViewById(R.id.dur);
+                if (d instanceof TextView && d.getTag() instanceof Long) {
+                    ((TextView) d).setText(Fmt.duration(now - (Long) d.getTag()));
+                }
+                View lw = row.findViewById(R.id.liveWrap);
+                if (lw != null) LiveSteps.tick(lw);
+            }
+            ui.postDelayed(this, 1000);
+        }
     };
 
     @Override
@@ -128,6 +151,8 @@ public class ActionsActivity extends BaseRepoActivity {
         resumed = true;
         load(true, !firstLoad);
         firstLoad = false;
+        ui.removeCallbacks(ticker);
+        ui.postDelayed(ticker, 1000);
     }
 
     @Override
@@ -135,6 +160,7 @@ public class ActionsActivity extends BaseRepoActivity {
         super.onPause();
         resumed = false;
         ui.removeCallbacks(poll);
+        ui.removeCallbacks(ticker);
     }
 
     // ------------------------------------------------------------------ header (GitHub-style page head)
@@ -304,12 +330,15 @@ public class ActionsActivity extends BaseRepoActivity {
                 }
                 final Map<Long, int[]> prog = new HashMap<>();
                 final Map<Long, String> cur = new HashMap<>();
+                final Map<Long, JSONArray> live = new HashMap<>();
                 int fetched = 0;
                 for (JSONObject r : tmp) {
-                    if (fetched >= 4) break;
-                    if (!"in_progress".equals(r.optString("status"))) continue;
+                    if (fetched >= 3) break;
+                    // queued runs too: their jobs appear (and start) while the list is open
+                    if (!Status.isActive(r.optString("status"))) continue;
                     try {
                         JSONArray jobs = api.listJobs(owner, repo, r.optLong("id"));
+                        if (jobs != null) live.put(r.optLong("id"), jobs);
                         int done = 0;
                         int totalSteps = 0;
                         String now = "";
@@ -340,6 +369,10 @@ public class ActionsActivity extends BaseRepoActivity {
                     showStatus(null);
                     progress.putAll(prog);
                     stepNow.putAll(cur);
+                    for (JSONObject r : tmp) {
+                        if (!Status.isActive(r.optString("status"))) liveJobs.remove(r.optLong("id"));
+                    }
+                    liveJobs.putAll(live);
                     if (pg == 1) runs.clear();
                     runs.addAll(tmp);
                     totalCount = total;
@@ -362,7 +395,7 @@ public class ActionsActivity extends BaseRepoActivity {
                 break;
             }
         }
-        if (resumed && active && page == 1) ui.postDelayed(poll, 8000);
+        if (resumed && active && page == 1) ui.postDelayed(poll, POLL_MS);
     }
 
     private void applySearch() {
@@ -743,8 +776,10 @@ public class ActionsActivity extends BaseRepoActivity {
 
         TextView dur = v.findViewById(R.id.dur);
         long a = Fmt.parse(Fmt.s(run, "run_started_at"));
+        dur.setTag(null);
         if (active && a > 0) {
             dur.setText(Fmt.duration(System.currentTimeMillis() - a));
+            dur.setTag(a);   // advanced every second by the ticker
             dur.setVisibility(View.VISIBLE);
         } else if ("completed".equals(s) && runMillis(run) > 0) {
             dur.setText(Fmt.duration(runMillis(run)));
@@ -754,13 +789,16 @@ public class ActionsActivity extends BaseRepoActivity {
         }
         smallIcon(dur, R.drawable.ic_timer);
 
-        // live step progress for running runs
+        // live pipeline: a progress bar plus every job with all of its steps
         View progWrap = v.findViewById(R.id.progWrap);
+        LinearLayout liveWrap = v.findViewById(R.id.liveWrap);
         int[] pr = progress.get(run.optLong("id"));
-        if ("in_progress".equals(s) && pr != null && pr[1] > 0) {
+        if (active && pr != null && pr[1] > 0) {
             progWrap.setVisibility(View.VISIBLE);
             ProgressBar pb = v.findViewById(R.id.prog);
-            pb.setProgress(Math.max(4, pr[0] * 100 / pr[1]));
+            int target = Math.max(4, pr[0] * 1000 / pr[1]);
+            pb.setMax(1000);
+            pb.setProgress(target, Motion.enabled());
             String now = stepNow.get(run.optLong("id"));
             String line = getString(R.string.act_step_progress, pr[0], pr[1])
                     + (now == null || now.isEmpty() ? "" : "  ·  " + now);
@@ -768,6 +806,8 @@ public class ActionsActivity extends BaseRepoActivity {
         } else {
             progWrap.setVisibility(View.GONE);
         }
+        if (active) LiveSteps.bind(this, liveWrap, liveJobs.get(run.optLong("id")));
+        else liveWrap.setVisibility(View.GONE);
 
         // quick actions: cancel while running, re-run (failed jobs) after a failure
         View actions = v.findViewById(R.id.actions);

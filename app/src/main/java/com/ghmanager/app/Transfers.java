@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
@@ -57,6 +58,14 @@ public final class Transfers {
         volatile long done;
         volatile long total;
         volatile boolean cancelled;
+        /** done/total are byte counts (otherwise item counts). */
+        volatile boolean bytes;
+        /** Smoothed transfer speed in bytes per second. */
+        volatile float speed;
+        private long sampleT;
+        private long sampleD;
+        /** 0 running, 1 finished ok, 2 failed, 3 cancelled. */
+        public volatile int state;
         /** Result text shown in the final notification. */
         public volatile String message = "";
         /** What a tap on the final notification opens (a folder, the installer ...). */
@@ -69,11 +78,72 @@ public final class Transfers {
             this.tag = tag == null ? "" : tag;
         }
 
+        /** Progress counted in items (files uploaded ...). */
         public void progress(String t, long d, long tot) {
+            update(t, d, tot, false);
+        }
+
+        /** Progress counted in bytes: also feeds the speed and the time left. */
+        public void progressBytes(String t, long d, long tot) {
+            update(t, d, tot, true);
+        }
+
+        private void update(String t, long d, long tot, boolean isBytes) {
             text = t == null ? "" : t;
+            bytes = isBytes;
+            if (isBytes) {
+                long now = SystemClock.elapsedRealtime();
+                if (sampleT == 0 || d < sampleD) {
+                    sampleT = now;
+                    sampleD = d;
+                } else if (now - sampleT >= 500) {
+                    float inst = (d - sampleD) * 1000f / (now - sampleT);
+                    speed = speed <= 0f ? inst : speed * 0.6f + inst * 0.4f;
+                    sampleT = now;
+                    sampleD = d;
+                }
+            }
             done = d;
             total = tot;
             TransferService.refresh();
+        }
+
+        /** 0..1, or -1 while the size is not known yet. */
+        public float fraction() {
+            long t = total;
+            return t > 0 ? Math.max(0f, Math.min(1f, done / (float) t)) : -1f;
+        }
+
+        public String text() {
+            return text;
+        }
+
+        public void cancel() {
+            cancelled = true;
+        }
+
+        /** "42%  ·  12 MB / 29 MB  ·  1.2 MB/s  ·  14s left" (items instead of bytes for uploads). */
+        public String detail() {
+            long d = done;
+            long t = total;
+            StringBuilder sb = new StringBuilder();
+            if (t > 0) sb.append(Math.min(100, d * 100 / t)).append('%');
+            if (bytes) {
+                if (sb.length() > 0) sb.append("  ·  ");
+                sb.append(Fmt.size(d));
+                if (t > 0) sb.append(" / ").append(Fmt.size(t));
+                float sp = speed;
+                if (sp > 0f) {
+                    sb.append("  ·  ").append(Fmt.size((long) sp)).append("/s");
+                    if (t > d) {
+                        sb.append("  ·  ").append(app.getString(R.string.tr_eta,
+                                LiveBoard.clock((long) ((t - d) / sp * 1000f))));
+                    }
+                }
+            } else if (t > 0) {
+                sb.append("  ·  ").append(d).append('/').append(t);
+            }
+            return sb.toString();
         }
 
         public boolean cancelled() {
@@ -120,6 +190,7 @@ public final class Transfers {
         JOBS.remove(job);
         FINISHED.incrementAndGet();
         job.message = msg == null ? "" : msg;
+        job.state = cancelled ? 3 : ok ? 1 : 2;
         TransferService.finished(job.app, job, ok, cancelled);
         MAIN.post(() -> {
             try {
