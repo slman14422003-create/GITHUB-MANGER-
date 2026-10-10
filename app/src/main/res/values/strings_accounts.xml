@@ -45,10 +45,10 @@
 
     <!-- sign-in -->
     <string name="login_add_title">إضافة حساب</string>
-    <string name="login_gh">المتابعة عبر GitHub</string>
-    <string name="login_gh_hint">Google · البريد الإلكتروني · كلمة المرور · مفتاح المرور — تختارها من صفحة GitHub نفسها، والتطبيق لا يرى كلمة مرورك أبداً.</string>
-    <string name="login_or">أو</string>
-    <string name="login_token_title">الدخول برمز وصول</string>
+    <string name="login_gh">المتابعة بحساب Google أو البريد الإلكتروني</string>
+    <string name="login_gh_hint">تُفتح صفحة GitHub الرسمية: إن كان حساب Google موجوداً على جهازك يظهر لك زر «المتابعة مع Google»، وإلا سجّل بالبريد الإلكتروني وكلمة المرور. ثم يطلب GitHub بنفسه كل ما يلزم: التحقق بخطوتين (تطبيق المصادقة أو الرسائل أو مفتاح المرور أو GitHub Mobile) وتأكيد الجهاز. التطبيق لا يرى كلمة مرورك أبداً.</string>
+    <string name="login_or">أو الخيار الثاني</string>
+    <string name="login_token_title">الخيار الثاني: الدخول برمز الوصول (API)</string>
     <string name="login_code_title">أدخل هذا الرمز في صفحة GitHub</string>
     <string name="login_open_gh">فتح صفحة GitHub</string>
     <string name="login_copy_code">نسخ الرمز</string>

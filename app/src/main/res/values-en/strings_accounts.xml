@@ -45,10 +45,10 @@
 
     <!-- sign-in -->
     <string name="login_add_title">Add account</string>
-    <string name="login_gh">Continue with GitHub</string>
-    <string name="login_gh_hint">Google · email · password · passkey — you pick on GitHub\'s own page, and the app never sees your password.</string>
-    <string name="login_or">or</string>
-    <string name="login_token_title">Sign in with a token</string>
+    <string name="login_gh">Continue with Google or email</string>
+    <string name="login_gh_hint">GitHub\'s official page opens: if a Google account is on this device you get \u201cContinue with Google\u201d, otherwise sign in with email and password. GitHub itself then asks for everything it requires: two-factor verification (authenticator app, SMS, passkey or GitHub Mobile) and device confirmation. The app never sees your password.</string>
+    <string name="login_or">or the second option</string>
+    <string name="login_token_title">Option 2: sign in with an access token (API)</string>
     <string name="login_code_title">Enter this code on the GitHub page</string>
     <string name="login_open_gh">Open GitHub page</string>
     <string name="login_copy_code">Copy code</string>

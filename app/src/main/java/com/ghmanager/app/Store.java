@@ -227,7 +227,9 @@ public class Store {
 
     /** Client ID of the user's own GitHub OAuth App (Device Flow sign-in). */
     public static String oauthClientId(Context c) {
-        return rawPref(c, "upd_oauth_client");
+        String own = rawPref(c, "upd_oauth_client");
+        // a Client ID typed by the user wins; otherwise the one compiled in by the build
+        return own.isEmpty() ? BuildConfig.OAUTH_CLIENT_ID : own;
     }
 
     public static void setOauthClientId(Context c, String v) {

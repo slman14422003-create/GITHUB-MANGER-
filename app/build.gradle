@@ -43,6 +43,9 @@ android {
         versionName = System.getenv('APP_VERSION_NAME') ?: "2.2"
         buildConfigField 'String', 'CERT_SHA256', "\"${expectedCert}\""
         // true only when the CI sealed this APK (tools/seal_apk.py): the app then verifies the seal at start
+        // Client ID of the app's GitHub OAuth App (public by design, device flow needs no secret). CI passes it
+        // from the repository variable GH_OAUTH_CLIENT_ID so nobody has to type it in the app.
+        buildConfigField 'String', 'OAUTH_CLIENT_ID', "\"${(System.getenv('GH_OAUTH_CLIENT_ID') ?: '').replaceAll('[^A-Za-z0-9._-]', '')}\""
         buildConfigField 'boolean', 'SEALED', "${System.getenv('GUARD_SEAL') == '1'}"
     }
 
