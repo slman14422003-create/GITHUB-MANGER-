@@ -208,53 +208,29 @@ public class UpdateActivity extends BaseRepoActivity {
 
     private void download() {
         final Updater.Info in = info;
-        if (in == null || busy) return;
-        busy = true;
-        showProgress(getString(R.string.downloading));
-        bg(() -> {
-            File dir = new File(getCacheDir(), "apk");
-            if (!dir.exists()) dir.mkdirs();
-            File[] old = dir.listFiles();
-            if (old != null) for (File o : old) o.delete();
-            final File apk = new File(dir, "update.apk");
-            HttpURLConnection c = api.openDownload(api.assetPath(owner, repo, in.assetId), "application/octet-stream");
-            try {
-                long total = c.getContentLengthLong();
-                if (total <= 0) total = in.assetSize;
-                InputStream is = c.getInputStream();
-                OutputStream os = new FileOutputStream(apk);
-                try {
-                    GitHubApi.copy(is, os, total, (done, tot) -> post(() -> updateBytes(done, tot)));
-                } finally {
-                    os.close();
-                    is.close();
-                }
-            } finally {
-                c.disconnect();
+        if (in == null) return;
+        for (Transfers.Job j : Transfers.snapshot()) {
+            if ("update".equals(j.tag)) {   // already downloading: do not start a second copy
+                toast(R.string.tr_started_bg);
+                return;
             }
-            if (in.assetSize > 0 && apk.length() != in.assetSize) {
-                apk.delete();
-                throw new java.io.IOException(getString(R.string.upd_size_bad));
-            }
-            if (!in.sha256.isEmpty()) {
-                post(() -> {
-                    if (progressText != null) progressText.setText(R.string.upd_verifying);
+        }
+        final java.lang.ref.WeakReference<UpdateActivity> ref = new java.lang.ref.WeakReference<>(this);
+        // The download runs in the background service: it continues if the user leaves the app and the
+        // finished update is offered in a notification ("tap to install").
+        Transfers.start(getApplicationContext(), getString(R.string.tr_update_title), "update",
+                TransferTasks.updateDownload(api, owner, repo, in),
+                (job, ok, msg) -> {
+                    UpdateActivity a = ref.get();
+                    boolean visible = a != null && !a.isFinishing() && !a.isDestroyed()
+                            && a.getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
+                    if (ok && visible) {
+                        Perms.installApk(a, TransferTasks.updateApkFile(job.app));
+                    } else if (!ok) {
+                        android.widget.Toast.makeText(job.app, job.app.getString(R.string.tr_failed) + ": " + msg,
+                                android.widget.Toast.LENGTH_LONG).show();
+                    }
                 });
-                String got = sha256Hex(apk);
-                if (!got.equalsIgnoreCase(in.sha256)) {
-                    apk.delete();
-                    throw new java.io.IOException(getString(R.string.upd_hash_bad));
-                }
-            }
-            // the update must be signed by the same key as the installed app
-            if (!Integrity.sameSigner(UpdateActivity.this, apk)) {
-                apk.delete();
-                throw new java.io.IOException(getString(R.string.upd_sig_bad));
-            }
-            post(() -> {
-                hideProgress();
-                Perms.installApk(UpdateActivity.this, apk);
-            });
-        });
+        toast(R.string.tr_started_bg);
     }
 }

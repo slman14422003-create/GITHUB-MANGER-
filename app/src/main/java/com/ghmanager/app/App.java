@@ -19,6 +19,8 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        // more idle sockets kept open = fewer TCP/TLS handshakes when several requests run together
+        System.setProperty("http.maxConnections", "10");
         Lang.init(this);
         Mirror.load(this);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {

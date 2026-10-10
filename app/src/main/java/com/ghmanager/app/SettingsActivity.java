@@ -61,6 +61,21 @@ public class SettingsActivity extends BaseRepoActivity {
         auto.onChange((b, on) -> Store.setAutoUpdate(this, on));
         content.addView(auto.view);
 
+        // ---- downloads
+        content.addView(Ui.sectionTitle(this, getString(R.string.dl_title)));
+        final Ui.Toggle ask = Ui.toggle(this, content, R.string.dl_ask_location, R.string.dl_ask_location_sub,
+                Store.askSaveLocation(this));
+        ask.onChange((b, on) -> Store.setAskSaveLocation(this, on));
+        content.addView(ask.view);
+        addRow(new Row(R.drawable.ic_folder, true, getString(R.string.dl_open_folder),
+                        TransferTasks.rootDir().getAbsolutePath(), false, true),
+                v -> {
+                    java.io.File d = TransferTasks.rootDir();
+                    //noinspection ResultOfMethodCallIgnored
+                    if (!d.exists() && Perms.hasAllFiles(this)) d.mkdirs();
+                    startActivity(new Intent(this, FileManagerActivity.class).putExtra("path", d.getAbsolutePath()));
+                });
+
         // ---- tools
         content.addView(Ui.sectionTitle(this, getString(R.string.app_tools)));
         addRow(new Row(R.drawable.ic_folder, true, getString(R.string.fm_title), null, false, true),

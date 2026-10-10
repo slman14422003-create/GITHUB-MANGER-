@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tr_channel_run">العمليات الجارية (رفع / تحميل / تحديث)</string>
+    <string name="tr_channel_done">اكتمال العمليات</string>
+    <string name="tr_cancel">إلغاء</string>
+    <string name="tr_n_running">%1$d عمليات جارية</string>
+    <string name="tr_started_bg">بدأت العملية في الخلفية، وتكمل حتى لو خرجت من التطبيق. تابعها من الإشعارات.</string>
+    <string name="tr_done">اكتملت العملية</string>
+    <string name="tr_failed">فشلت العملية</string>
+    <string name="tr_download_title">تحميل: %1$s</string>
+    <string name="tr_upload_title">رفع إلى %1$s</string>
+    <string name="tr_update_title">تحديث التطبيق</string>
+    <string name="tr_tap_install">اضغط هنا للتثبيت</string>
+    <string name="tr_saved_to">تم الحفظ في:\n%1$s</string>
+    <string name="tr_scanning">جارٍ تجهيز الملفات…</string>
+    <string name="upload_skip_junk">تجاهل ما يستثنيه .gitignore وملفات البناء (build، node_modules…)</string>
+    <string name="dl_title">التحميلات</string>
+    <string name="dl_ask_location">اسأل عن مكان الحفظ في كل مرة</string>
+    <string name="dl_ask_location_sub">مغلق: يُحفظ كل شيء تلقائياً في Download/GitHubManager/اسم-المستودع</string>
+    <string name="dl_open_folder">فتح مجلد التحميلات</string>
+    <string name="fm_github">GitHub</string>
+</resources>

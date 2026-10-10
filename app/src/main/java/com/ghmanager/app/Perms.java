@@ -59,6 +59,24 @@ public final class Perms {
         }
     }
 
+    // ------------------------------------------------------------------ notifications (transfer progress)
+
+    public static final int REQ_NOTIF = 4022;
+
+    /** Android 13+: asks once so the progress of background transfers is visible. Transfers run either way. */
+    public static void ensureNotifications(Activity a) {
+        if (Build.VERSION.SDK_INT < 33) return;
+        if (ContextCompat.checkSelfPermission(a, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) return;
+        android.content.SharedPreferences sp = a.getSharedPreferences("gh", Context.MODE_PRIVATE);
+        if (sp.getBoolean("upd_notif_asked", false)) return;
+        sp.edit().putBoolean("upd_notif_asked", true).apply();
+        try {
+            ActivityCompat.requestPermissions(a, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        } catch (Exception ignored) {
+        }
+    }
+
     // ------------------------------------------------------------------ install unknown apps
 
     public static boolean canInstall(Context c) {

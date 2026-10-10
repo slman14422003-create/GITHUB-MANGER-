@@ -23,26 +23,125 @@ public class FileScanner {
 
     /** Files and folders chosen in the in-app file manager (plain java.io paths). */
     public static void scanFiles(List<java.io.File> roots, boolean includeFolderName, List<Item> out) {
+        scanFiles(roots, includeFolderName, false, out);
+    }
+
+    /**
+     * Same, and with {@code skipJunk} the picked folder's own .gitignore is honoured (the way git
+     * would) and the usual build / cache folders are left out, so what reaches GitHub is what a
+     * normal "git add" would have added.
+     */
+    public static void scanFiles(List<java.io.File> roots, boolean includeFolderName, boolean skipJunk,
+                                 List<Item> out) {
         for (java.io.File r : roots) {
             if (r.isDirectory()) {
-                walkFile(r, includeFolderName ? r.getName() + "/" : "", out);
+                Ignore ig = skipJunk ? Ignore.load(r) : null;
+                walkFile(r, includeFolderName ? r.getName() + "/" : "", "", ig, out);
             } else if (r.isFile()) {
                 out.add(new Item(r.getName(), Uri.fromFile(r)));
             }
         }
     }
 
-    private static void walkFile(java.io.File dir, String prefix, List<Item> out) {
+    private static void walkFile(java.io.File dir, String prefix, String rel, Ignore ig, List<Item> out) {
         java.io.File[] kids = dir.listFiles();
         if (kids == null) return;
         java.util.Arrays.sort(kids);
         for (java.io.File k : kids) {
+            String relPath = rel + k.getName();
             if (k.isDirectory()) {
                 if (".git".equals(k.getName())) continue;
-                walkFile(k, prefix + k.getName() + "/", out);
+                if (ig != null && ig.skip(relPath, true)) continue;
+                walkFile(k, prefix + k.getName() + "/", relPath + "/", ig, out);
             } else if (k.isFile()) {
+                if (ig != null && ig.skip(relPath, false)) continue;
                 out.add(new Item(prefix + k.getName(), Uri.fromFile(k)));
             }
+        }
+    }
+
+    /** Minimal .gitignore matcher (names, *.ext, dir/, /anchored, **) plus a built-in junk list. */
+    static final class Ignore {
+        private static final String[] JUNK_DIRS = {"node_modules", "build", ".gradle", ".idea", ".cxx",
+                "__pycache__", ".dart_tool", "Pods", ".externalNativeBuild"};
+        private static final String[] JUNK_FILES = {".DS_Store", "Thumbs.db", "local.properties", "keystore.properties"};
+
+        private final List<java.util.regex.Pattern> names = new ArrayList<>();
+        private final List<Boolean> namesDirOnly = new ArrayList<>();
+        private final List<java.util.regex.Pattern> paths = new ArrayList<>();
+        private final List<Boolean> pathsDirOnly = new ArrayList<>();
+
+        static Ignore load(java.io.File root) {
+            Ignore ig = new Ignore();
+            java.io.File f = new java.io.File(root, ".gitignore");
+            if (f.isFile() && f.length() < 256 * 1024) {
+                try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(
+                        new java.io.FileInputStream(f), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = br.readLine()) != null) ig.add(line.trim());
+                } catch (Exception ignored) {
+                }
+            }
+            return ig;
+        }
+
+        private void add(String line) {
+            if (line.isEmpty() || line.startsWith("#") || line.startsWith("!")) return;
+            boolean dirOnly = line.endsWith("/");
+            if (dirOnly) line = line.substring(0, line.length() - 1);
+            boolean anchored = line.startsWith("/");
+            if (anchored) line = line.substring(1);
+            if (line.isEmpty()) return;
+            boolean hasSlash = line.indexOf('/') >= 0;
+            StringBuilder re = new StringBuilder();
+            for (int i = 0; i < line.length(); i++) {
+                char c = line.charAt(i);
+                if (c == '*') {
+                    if (i + 1 < line.length() && line.charAt(i + 1) == '*') {
+                        re.append(".*");
+                        i++;
+                    } else {
+                        re.append("[^/]*");
+                    }
+                } else if (c == '?') {
+                    re.append("[^/]");
+                } else if ("\\.[]{}()+-^$|".indexOf(c) >= 0) {
+                    re.append('\\').append(c);
+                } else {
+                    re.append(c);
+                }
+            }
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile(re.toString());
+                if (hasSlash || anchored) {
+                    paths.add(p);
+                    pathsDirOnly.add(dirOnly);
+                } else {
+                    names.add(p);
+                    namesDirOnly.add(dirOnly);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        boolean skip(String relPath, boolean dir) {
+            int slash = relPath.lastIndexOf('/');
+            String name = slash < 0 ? relPath : relPath.substring(slash + 1);
+            if (dir) {
+                for (String j : JUNK_DIRS) if (j.equals(name)) return true;
+            } else {
+                for (String j : JUNK_FILES) if (j.equals(name)) return true;
+                if (name.endsWith(".iml")) return true;
+            }
+            for (int i = 0; i < names.size(); i++) {
+                if (namesDirOnly.get(i) && !dir) continue;
+                if (names.get(i).matcher(name).matches()) return true;
+            }
+            for (int i = 0; i < paths.size(); i++) {
+                if (pathsDirOnly.get(i) && !dir) continue;
+                if (paths.get(i).matcher(relPath).matches()) return true;
+            }
+            return false;
         }
     }
 

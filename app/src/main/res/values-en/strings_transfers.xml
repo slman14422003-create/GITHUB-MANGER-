@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tr_channel_run">Running tasks (upload / download / update)</string>
+    <string name="tr_channel_done">Finished tasks</string>
+    <string name="tr_cancel">Cancel</string>
+    <string name="tr_n_running">%1$d tasks running</string>
+    <string name="tr_started_bg">Started in the background. It keeps going even if you leave the app. Follow it in the notifications.</string>
+    <string name="tr_done">Task finished</string>
+    <string name="tr_failed">Task failed</string>
+    <string name="tr_download_title">Downloading: %1$s</string>
+    <string name="tr_upload_title">Uploading to %1$s</string>
+    <string name="tr_update_title">App update</string>
+    <string name="tr_tap_install">Tap here to install</string>
+    <string name="tr_saved_to">Saved to:\n%1$s</string>
+    <string name="tr_scanning">Preparing files…</string>
+    <string name="upload_skip_junk">Skip what .gitignore excludes and build files (build, node_modules…)</string>
+    <string name="dl_title">Downloads</string>
+    <string name="dl_ask_location">Ask where to save every time</string>
+    <string name="dl_ask_location_sub">Off: everything is saved automatically to Download/GitHubManager/repo-name</string>
+    <string name="dl_open_folder">Open the downloads folder</string>
+    <string name="fm_github">GitHub</string>
+</resources>

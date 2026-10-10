@@ -88,7 +88,7 @@ public class BrowserActivity extends BaseRepoActivity {
         adapter = new RowAdapter(this);
         list.setAdapter(adapter);
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
-        findViewById(R.id.btnRefresh).setOnClickListener(v -> load());
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> reloadFresh());
         btnNew.setOnClickListener(v -> newMenu());
         findViewById(R.id.branchBox).setOnClickListener(v -> spinner.performClick());
 
@@ -168,13 +168,39 @@ public class BrowserActivity extends BaseRepoActivity {
         load();
     }
 
+    private int seenFinished = -1;
+    private final Transfers.Listener txListener = job -> {
+        if (job.tag.startsWith("upload:" + owner + "/" + repo)) {
+            seenFinished = Transfers.finishedCount();
+            load();
+        }
+    };
+
     @Override
     protected void onResume() {
         super.onResume();
+        Transfers.addListener(txListener);
         if (needsReload) {
             needsReload = false;
+            reloadFresh();
+        } else if (seenFinished >= 0 && seenFinished != Transfers.finishedCount()) {
+            // an upload may have finished while this screen was in the background
             load();
         }
+        seenFinished = Transfers.finishedCount();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Transfers.removeListener(txListener);
+        seenFinished = Transfers.finishedCount();
+    }
+
+    /** After a change made by this screen: drop the cached tree so the next listing is the real one. */
+    private void reloadFresh() {
+        RepoTree.invalidate(getApplicationContext(), owner, repo, branch);
+        load(true);
     }
 
     // ---------- helpers ----------
@@ -248,36 +274,101 @@ public class BrowserActivity extends BaseRepoActivity {
         });
     }
 
+    private int loadGen = 0;
+
     private void load() {
+        load(false);
+    }
+
+    /**
+     * Shows the folder instantly from the cached tree, then checks quietly (one tiny conditional
+     * request) whether the repository changed. {@code force} skips the cache.
+     */
+    private void load(final boolean force) {
+        final int gen = ++loadGen;
         loading(true);
         pathView.setText("/" + path);
         final String p = path;
         final String b = branch;
+        final android.content.Context app = getApplicationContext();
         io.execute(() -> {
+            RepoTree.Snapshot have = null;
             try {
-                JSONArray arr = api.listContents(owner, repo, p, b);
-                final List<JSONObject> tmp = new ArrayList<>();
-                for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
-                Collections.sort(tmp, new Comparator<JSONObject>() {
-                    @Override
-                    public int compare(JSONObject x, JSONObject y) {
-                        boolean dx = "dir".equals(x.optString("type"));
-                        boolean dy = "dir".equals(y.optString("type"));
-                        if (dx != dy) return dx ? -1 : 1;
-                        return x.optString("name").compareToIgnoreCase(y.optString("name"));
+                have = force ? null : RepoTree.cached(app, owner, repo, b);
+                if (have != null) {
+                    final List<JSONObject> l = have.list(p);
+                    post(() -> {
+                        if (gen == loadGen) show(l);
+                    });
+                    try {
+                        RepoTree.Snapshot fresh = RepoTree.fetch(app, api, owner, repo, b, have);
+                        if (fresh != have && !fresh.truncated) {
+                            final List<JSONObject> l2 = fresh.list(p);
+                            if (!RepoTree.same(l, l2)) post(() -> {
+                                if (gen == loadGen) show(l2);
+                            });
+                        }
+                    } catch (GitHubApi.ApiException e) {
+                        if (e.code == 401) showError(e);
+                    } catch (Exception ignored) {
+                        // offline or flaky: the cached listing stays on screen
                     }
-                });
-                post(() -> show(tmp));
+                    return;
+                }
+                RepoTree.Snapshot s = RepoTree.fetch(app, api, owner, repo, b, null);
+                if (!s.truncated) {
+                    final List<JSONObject> l = s.list(p);
+                    post(() -> {
+                        if (gen == loadGen) show(l);
+                    });
+                    return;
+                }
+                loadViaContents(p, b, gen);
             } catch (GitHubApi.ApiException e) {
-                if (e.code == 404) {
-                    post(() -> show(new ArrayList<JSONObject>()));
-                } else {
+                if (e.code == 404 || e.code == 409) {
+                    post(() -> {
+                        if (gen == loadGen) show(new ArrayList<JSONObject>());
+                    });
+                } else if (e.code == 401) {
                     showError(e);
+                } else {
+                    loadViaContents(p, b, gen);
                 }
             } catch (Exception e) {
-                showError(e);
+                loadViaContents(p, b, gen);
             }
         });
+    }
+
+    /** Fallback for huge repositories (the single tree answer is cut off) or if the tree call fails. */
+    private void loadViaContents(final String p, final String b, final int gen) {
+        try {
+            JSONArray arr = api.listContents(owner, repo, p, b);
+            final List<JSONObject> tmp = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
+            Collections.sort(tmp, new Comparator<JSONObject>() {
+                @Override
+                public int compare(JSONObject x, JSONObject y) {
+                    boolean dx = "dir".equals(x.optString("type"));
+                    boolean dy = "dir".equals(y.optString("type"));
+                    if (dx != dy) return dx ? -1 : 1;
+                    return x.optString("name").compareToIgnoreCase(y.optString("name"));
+                }
+            });
+            post(() -> {
+                if (gen == loadGen) show(tmp);
+            });
+        } catch (GitHubApi.ApiException e) {
+            if (e.code == 404) {
+                post(() -> {
+                    if (gen == loadGen) show(new ArrayList<JSONObject>());
+                });
+            } else {
+                showError(e);
+            }
+        } catch (Exception e) {
+            showError(e);
+        }
     }
 
     private void show(List<JSONObject> list) {
@@ -440,7 +531,7 @@ public class BrowserActivity extends BaseRepoActivity {
                                         "Create folder " + n, branch, null);
                                 post(() -> {
                                     hideProgress();
-                                    load();
+                                    reloadFresh();
                                 });
                             });
                         }
@@ -484,7 +575,7 @@ public class BrowserActivity extends BaseRepoActivity {
                         }
                         post(() -> {
                             hideProgress();
-                            load();
+                            reloadFresh();
                         });
                     });
                 })
@@ -500,129 +591,51 @@ public class BrowserActivity extends BaseRepoActivity {
         target.setTextDirection(View.TEXT_DIRECTION_LTR);
         final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
         final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
+        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, true);
 
         box.addView(Ui.field(this, getString(R.string.target_folder), target));
         box.addView(Ui.field(this, getString(R.string.commit_message), msg));
-        if (tree != null || (pickedRoots != null && pickedFolder)) box.addView(includeRoot);
+        if (pickedRoots != null && pickedFolder) {
+            box.addView(includeRoot);
+            box.addView(skipJunk);
+        }
 
         new Dlg(this)
                 .setTitle(R.string.upload)
                 .setView(box)
-                .setPositiveButton(R.string.upload, (d, w) -> startUpload(tree, files,
+                .setPositiveButton(R.string.upload, (d, w) -> startUpload(
                         normalize(target.getText().toString()),
                         msg.getText().toString().trim().isEmpty()
                                 ? getString(R.string.default_commit) : msg.getText().toString().trim(),
-                        includeRoot.isChecked()))
+                        includeRoot.isChecked(), pickedFolder && skipJunk.isChecked()))
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
-    private static byte[] readBytes(ContentResolver cr, Uri u) throws IOException {
-        InputStream is;
-        try {
-            is = cr.openInputStream(u);
-        } catch (java.io.FileNotFoundException e) {
-            return null;
-        }
-        if (is == null) return null;
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = is.read(buf)) != -1) {
-                bos.write(buf, 0, n);
-                if (bos.size() > MAX_FILE_BYTES) return null;
-            }
-            return bos.toByteArray();
-        } finally {
-            is.close();
-        }
-    }
-
-    private void startUpload(final Uri tree, final List<Uri> files, final String base,
-                             final String message, final boolean includeRoot) {
-        if (busy) return;
-        busy = true;
-        showProgress(getString(R.string.preparing));
-        final String b = branch;
-        final List<java.io.File> roots = tree == null && files == null ? pickedRoots : null;
+    /**
+     * Hands the upload to the background service: it keeps running (with a progress notification)
+     * when the user leaves this screen or the whole app.
+     */
+    private void startUpload(final String base, final String message, final boolean includeRoot,
+                             final boolean skipJunk) {
+        final List<java.io.File> roots = pickedRoots;
         final boolean folderPick = pickedFolder;
         pickedRoots = null;
-
-        bg(() -> {
-            ContentResolver cr = getContentResolver();
-            List<FileScanner.Item> all = new ArrayList<>();
-            if (tree != null) {
-                FileScanner.scanTree(cr, tree, includeRoot, all);
-            } else if (roots != null) {
-                FileScanner.scanFiles(roots, folderPick ? includeRoot : true, all);
-            } else {
-                for (Uri u : files) {
-                    String n = FileScanner.displayName(cr, u);
-                    if (n == null) n = "file_" + System.currentTimeMillis();
-                    all.add(new FileScanner.Item(n, u));
-                }
-            }
-            if (all.isEmpty()) {
-                post(() -> {
-                    hideProgress();
-                    Toast.makeText(BrowserActivity.this, R.string.no_files, Toast.LENGTH_LONG).show();
+        if (roots == null || roots.isEmpty()) return;
+        final String b = branch;
+        Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, repo),
+                "upload:" + owner + "/" + repo,
+                TransferTasks.upload(api, owner, repo, b, base, message, roots, folderPick ? includeRoot : true,
+                        skipJunk),
+                (job, ok, msg) -> {
+                    android.content.Context app = job.app;
+                    String first = msg == null ? "" : msg;
+                    int nl = first.indexOf('\n');
+                    if (nl > 0) first = first.substring(0, nl);
+                    Toast.makeText(app, ok ? first : app.getString(R.string.tr_failed) + ": " + first,
+                            Toast.LENGTH_LONG).show();
                 });
-                return;
-            }
-
-            boolean empty = false;
-            try {
-                api.getBranchSha(owner, repo, b);
-            } catch (GitHubApi.ApiException e) {
-                if (e.code == 404 || e.code == 409) empty = true;
-                else throw e;
-            }
-
-            final int total = all.size();
-            List<GitHubApi.TreeEntry> entries = new ArrayList<>();
-            List<String> skipped = new ArrayList<>();
-            int idx = 0;
-            for (FileScanner.Item it : all) {
-                final int cur = idx;
-                final String name = it.path;
-                post(() -> updateProgress(cur, total, name));
-                idx++;
-                byte[] data = readBytes(cr, it.uri);
-                if (data == null) {
-                    skipped.add(it.path);
-                    continue;
-                }
-                String full = base.isEmpty() ? it.path : base + "/" + it.path;
-                if (empty) {
-                    api.putFile(owner, repo, full, data, message);
-                    empty = false;
-                    continue;
-                }
-                String sha = api.createBlob(owner, repo, data);
-                entries.add(new GitHubApi.TreeEntry(full, sha));
-            }
-
-            if (!entries.isEmpty()) {
-                post(() -> {
-                    if (progressText != null) progressText.setText(R.string.committing);
-                });
-                api.commitEntries(owner, repo, b, entries, message);
-            }
-
-            final int uploaded = total - skipped.size();
-            final StringBuilder sb = new StringBuilder(getString(R.string.upload_summary, uploaded));
-            if (!skipped.isEmpty()) {
-                StringBuilder names = new StringBuilder();
-                for (int i = 0; i < Math.min(skipped.size(), 10); i++) names.append(skipped.get(i)).append('\n');
-                sb.append("\n\n").append(getString(R.string.skipped_summary, skipped.size(), names.toString()));
-            }
-            post(() -> {
-                hideProgress();
-                Dlg.result(BrowserActivity.this, true, getString(R.string.done), sb.toString());
-                load();
-            });
-        });
+        Toast.makeText(this, R.string.tr_started_bg, Toast.LENGTH_LONG).show();
     }
 
     // ---------- delete ----------
@@ -650,7 +663,7 @@ public class BrowserActivity extends BaseRepoActivity {
                         }
                         post(() -> {
                             hideProgress();
-                            load();
+                            reloadFresh();
                         });
                     });
                 })
@@ -727,7 +740,7 @@ public class BrowserActivity extends BaseRepoActivity {
             post(() -> {
                 hideProgress();
                 exitSelect();
-                load();
+                reloadFresh();
                 Dlg.result(BrowserActivity.this, true, getString(R.string.done),
                         getString(R.string.sel_delete_done, n, files));
             });

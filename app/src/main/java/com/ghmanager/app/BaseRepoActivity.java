@@ -103,6 +103,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         branch = i.getStringExtra("branch");
         if (branch == null || branch.isEmpty()) branch = "main";
         api = new GitHubApi(Store.getToken(this));
+        Perms.ensureNotifications(this);
     }
 
     // ------------------------------------------------------------------ header / list
@@ -479,6 +480,18 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         pendingSource = src;
         pendingExtractApk = extractApk;
         pendingName = safeName(fileName);
+        // Default: straight into Download/GitHubManager/<repo> - no questions, always the same easy-to-find place.
+        if (!Store.askSaveLocation(this) && Perms.hasAllFiles(this)) {
+            java.io.File dir = TransferTasks.saveDir(repo);
+            Source s = pendingSource;
+            boolean extract = pendingExtractApk;
+            String name = pendingName;
+            pendingSource = null;
+            pendingExtractApk = false;
+            pendingName = null;
+            runDownload(uniqueFile(dir, name), s, extract);
+            return;
+        }
         try {
             saveLauncher.launch(new Intent(this, FileManagerActivity.class)
                     .putExtra("pick", "save")
@@ -503,75 +516,47 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         return s.isEmpty() ? "download" : s;
     }
 
-    /** name, name (1).ext, name (2).ext … so an existing file is never overwritten. */
+    /** name, name (1).ext, name (2).ext ... so an existing file is never overwritten; the name is reserved at once. */
     private static java.io.File uniqueFile(java.io.File dir, String name) {
-        java.io.File f = new java.io.File(dir, name);
-        if (!f.exists()) return f;
+        try {
+            if (!dir.exists()) //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+        } catch (Exception ignored) {
+        }
         int dot = name.lastIndexOf('.');
         String base = dot > 0 ? name.substring(0, dot) : name;
         String ext = dot > 0 ? name.substring(dot) : "";
-        for (int i = 1; i < 1000; i++) {
-            f = new java.io.File(dir, base + " (" + i + ")" + ext);
-            if (!f.exists()) return f;
+        for (int i = 0; i < 1000; i++) {
+            java.io.File f = new java.io.File(dir, i == 0 ? name : base + " (" + i + ")" + ext);
+            try {
+                if (f.createNewFile()) return f;
+            } catch (IOException e) {
+                return f;   // cannot reserve (read-only?) - the download reports the real error
+            }
         }
         return new java.io.File(dir, base + "-" + System.currentTimeMillis() + ext);
     }
 
+    /** Runs the download in the background service: it goes on when the screen or the app is closed. */
     private void runDownload(final java.io.File dest, final Source src, final boolean extractApk) {
-        if (busy) return;
-        busy = true;
-        showProgress(getString(R.string.downloading));
-        bg(() -> {
-            HttpURLConnection c = src.open();
-            try {
-                long total = c.getContentLengthLong();
-                InputStream in = c.getInputStream();
-                OutputStream out;
-                try {
-                    out = new java.io.FileOutputStream(dest);
-                } catch (java.io.IOException openFail) {
-                    in.close();
-                    throw new IOException(getString(R.string.save_failed, dest.getParent()), openFail);
-                }
-                try {
-                    GitHubApi.Progress prog = (done, tot) -> post(() -> updateBytes(done, tot));
-                    if (extractApk) {
-                        ZipInputStream zin = new ZipInputStream(in);
-                        ZipEntry e;
-                        boolean found = false;
-                        while ((e = zin.getNextEntry()) != null) {
-                            if (!e.isDirectory() && e.getName().toLowerCase(Locale.US).endsWith(".apk")) {
-                                GitHubApi.copy(zin, out, e.getSize(), prog);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) throw new IOException(getString(R.string.no_apk_in_artifact));
+        final java.lang.ref.WeakReference<BaseRepoActivity> ref = new java.lang.ref.WeakReference<>(this);
+        Transfers.start(getApplicationContext(), getString(R.string.tr_download_title, dest.getName()),
+                "download:" + dest.getName(), TransferTasks.download(src::open, dest, extractApk),
+                (job, ok, msg) -> {
+                    BaseRepoActivity a = ref.get();
+                    boolean visible = a != null && !a.isFinishing() && !a.isDestroyed()
+                            && a.getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED);
+                    if (ok && extractApk && visible) {
+                        a.offerInstall(dest);
                     } else {
-                        GitHubApi.copy(in, out, total, prog);
+                        String first = msg == null ? "" : msg;
+                        int nl = first.indexOf('\n');
+                        if (nl > 0) first = first.substring(0, nl);
+                        Toast.makeText(job.app, ok ? first : job.app.getString(R.string.tr_failed) + ": " + first,
+                                Toast.LENGTH_LONG).show();
                     }
-                } catch (Exception ex) {
-                    // never leave a half-written or empty file behind
-                    try {
-                        out.close();
-                    } catch (Exception ignored) {
-                    }
-                    //noinspection ResultOfMethodCallIgnored
-                    dest.delete();
-                    throw ex;
-                } finally {
-                    out.close();
-                    in.close();
-                }
-            } finally {
-                c.disconnect();
-            }
-            post(() -> {
-                hideProgress();
-                if (extractApk) offerInstall(dest);
-                else toast(getString(R.string.saved_to, dest.getAbsolutePath()));
-            });
-        });
+                });
+        toast(R.string.tr_started_bg);
     }
 
     private void offerInstall(final java.io.File apkFile) {

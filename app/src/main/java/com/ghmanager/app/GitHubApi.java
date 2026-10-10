@@ -180,6 +180,7 @@ public class GitHubApi {
         for (int hop = 0; ; hop++) {
             HttpURLConnection c = open(method, url, JSON, true);
             c.setInstanceFollowRedirects(false);
+            boolean reusable = false;
             try {
                 if (data != null) {
                     c.setDoOutput(true);
@@ -199,10 +200,55 @@ public class GitHubApi {
                 InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
                 String resp = is == null ? "" : readAll(is);
                 if (code >= 400) throw toException(code, resp);
+                reusable = true;
                 return resp;
             } finally {
-                c.disconnect();
+                // A fully read answer leaves the socket in the keep-alive pool: the next request skips the
+                // TCP/TLS handshake (a big saving through the proxy). Only a failed call is cut.
+                if (!reusable) c.disconnect();
             }
+        }
+    }
+
+    /**
+     * The whole file tree of a branch in ONE request (instead of one request per folder). When
+     * {@code etag} is still current GitHub answers 304 with no body and this returns null.
+     * The new validator is written to {@code etagOut[0]}.
+     */
+    public JSONObject treeRecursive(String o, String r, String branch, String etag, String[] etagOut) throws Exception {
+        String ref = branch;
+        boolean conditional = etag != null && !etag.isEmpty() && branch.indexOf('/') < 0;
+        if (branch.indexOf('/') >= 0) {
+            // a ref with a slash is not accepted in the tree path: resolve it to the tree sha first
+            ref = getCommitTree(o, r, getBranchSha(o, r, branch));
+        }
+        String url = BASE + repo(o, r) + "/git/trees/" + enc(ref) + "?recursive=1";
+        HttpURLConnection c = open("GET", url, JSON, true);
+        c.setInstanceFollowRedirects(false);
+        if (conditional) c.setRequestProperty("If-None-Match", etag);
+        boolean reusable = false;
+        try {
+            int code = c.getResponseCode();
+            if (code == 304) {
+                try {
+                    c.getInputStream().close();
+                } catch (Exception ignored) {
+                }
+                reusable = true;
+                return null;
+            }
+            if (code >= 300 && code < 400) throw new ApiException(code, "Redirect");
+            InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            String resp = is == null ? "" : readAll(is);
+            if (code >= 400) throw toException(code, resp);
+            if (etagOut != null && etagOut.length > 0) {
+                String tag = c.getHeaderField("ETag");
+                etagOut[0] = tag == null ? "" : tag;
+            }
+            reusable = true;
+            return new JSONObject(resp);
+        } finally {
+            if (!reusable) c.disconnect();
         }
     }
 

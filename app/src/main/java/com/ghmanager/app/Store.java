@@ -118,6 +118,7 @@ public class Store {
         }
         e.apply();
         RepoCache.clear(c);
+        RepoTree.clearAll(c);
         try {
             KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
             ks.load(null);
@@ -191,6 +192,15 @@ public class Store {
 
     public static void setLanguage(Context c, String v) {
         sp(c).edit().putString("upd_lang", v == null ? "system" : v).apply();
+    }
+
+    /** true = every download asks where to save; false (default) = straight into Download/GitHubManager/<repo>. */
+    public static boolean askSaveLocation(Context c) {
+        return sp(c).getBoolean("upd_ask_save", false);
+    }
+
+    public static void setAskSaveLocation(Context c, boolean on) {
+        sp(c).edit().putBoolean("upd_ask_save", on).apply();
     }
 
     // ------------------------------------------------------------------ proxy mirror / OAuth

@@ -775,6 +775,11 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private void buildPlaces() {
         placesRow.removeAllViews();
+        // first chip: the one folder where every download of the app lands (Download/GitHubManager/<repo>)
+        File gh = TransferTasks.rootDir();
+        if (!gh.exists() && Perms.hasAllFiles(this)) //noinspection ResultOfMethodCallIgnored
+            gh.mkdirs();
+        addPlace(getString(R.string.fm_github), gh);
         addPlace(getString(R.string.fm_internal), Environment.getExternalStorageDirectory());
         addPlace(getString(R.string.fm_downloads), Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS));
         addPlace(getString(R.string.fm_dcim), Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM));
