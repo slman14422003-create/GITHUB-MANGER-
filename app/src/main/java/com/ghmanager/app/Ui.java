@@ -58,6 +58,23 @@ public final class Ui {
                 .start();
     }
 
+    /** Moves a progress bar to {@code target} with a smooth ease-out, like the iOS progress view. */
+    public static void progress(ProgressBar bar, int target) {
+        if (!Motion.enabled() || !bar.isShown() || bar.isIndeterminate()) {
+            bar.setProgress(target);
+            return;
+        }
+        android.animation.ObjectAnimator a = android.animation.ObjectAnimator.ofInt(bar, "progress",
+                bar.getProgress(), target);
+        a.setDuration(380);
+        a.setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f));
+        a.start();
+    }
+
+    public static int radius(Context c, int dimenRes) {
+        return c.getResources().getDimensionPixelSize(dimenRes);
+    }
+
     public static int dp(Context c, int v) {
         return (int) (v * c.getResources().getDisplayMetrics().density);
     }
@@ -206,7 +223,7 @@ public final class Ui {
 
     public static void setChip(Context c, TextView t, boolean selected) {
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dp(c, 100));
+        g.setCornerRadius(radius(c, R.dimen.radius_pill));
         g.setStroke(dp(c, 1), color(c, selected ? R.color.accent : R.color.stroke));
         g.setColor(color(c, selected ? R.color.accent_soft : R.color.surface));
         t.setBackground(g);
@@ -261,20 +278,20 @@ public final class Ui {
         l.setOrientation(LinearLayout.HORIZONTAL);
         l.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(c, 6));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(c, 4));
         lp.setMargins(dp(c, 26), dp(c, 2), dp(c, 26), dp(c, 8));
         l.setLayoutParams(lp);
         float pct = (float) Math.max(1, Math.min(100, percent));
         View fill = new View(c);
         GradientDrawable g1 = new GradientDrawable();
-        g1.setCornerRadius(dp(c, 6));
+        g1.setCornerRadius(radius(c, R.dimen.radius_pill));
         g1.setColor(color(c, colorRes));
         fill.setBackground(g1);
         fill.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, pct));
         View rest = new View(c);
         GradientDrawable g2 = new GradientDrawable();
-        g2.setCornerRadius(dp(c, 6));
-        g2.setColor(color(c, R.color.neutral_soft));
+        g2.setCornerRadius(radius(c, R.dimen.radius_pill));
+        g2.setColor(color(c, R.color.stroke));
         rest.setBackground(g2);
         rest.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 100f - pct));
         l.addView(fill);

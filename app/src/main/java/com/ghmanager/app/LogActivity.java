@@ -118,7 +118,7 @@ public class LogActivity extends BaseRepoActivity {
                     t.setPadding(Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 4),
                             Ui.dp(LogActivity.this, 10), Ui.dp(LogActivity.this, 4));
                 } else {
-                    t.setTextSize(12.5f);
+                    t.setTextSize(13f);
                     t.setTextColor(Ui.color(LogActivity.this, R.color.text_hint));
                     t.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
                     t.setPadding(Ui.dp(LogActivity.this, 16), Ui.dp(LogActivity.this, 8),

@@ -119,7 +119,7 @@ final class TransferDock implements Transfers.Listener {
             bar.setProgressDrawable(act.getDrawable(R.drawable.progress_pill));
             bar.setIndeterminateTintList(ColorStateList.valueOf(Ui.color(act, R.color.accent)));
             LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                    Ui.dp(act, 8));
+                    Ui.dp(act, 4));
             bl.setMarginEnd(Ui.dp(act, 8));
             bl.topMargin = Ui.dp(act, 2);
             root.addView(bar, bl);
@@ -145,8 +145,7 @@ final class TransferDock implements Transfers.Listener {
             setIndeterminate(f < 0f);
             if (f >= 0f) {
                 int v = Math.round(f * 1000f);
-                if (Motion.enabled()) bar.setProgress(v, true);
-                else bar.setProgress(v);
+                Ui.progress(bar, v);
                 pct.setText(Math.round(f * 100f) + "%");
                 detail.setText(job.detail());
             } else {
@@ -171,7 +170,7 @@ final class TransferDock implements Transfers.Listener {
             boolean ok = j.state == 1;
             int col = Ui.color(act, ok ? R.color.ok : R.color.bad);
             bar.setProgressTintList(ColorStateList.valueOf(col));
-            if (ok) bar.setProgress(1000);
+            if (ok) Ui.progress(bar, 1000);
             pct.setTextColor(col);
             pct.setText(ok ? "✓" : "✕");
             String msg = j.message == null ? "" : j.message.trim();

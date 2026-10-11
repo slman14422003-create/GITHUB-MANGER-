@@ -33,7 +33,7 @@ final class StepHeader {
         row.setPadding(Ui.dp(ctx, 8), 0, Ui.dp(ctx, 12), 0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Ui.color(ctx, R.color.surface_high));
-        bg.setCornerRadius(Ui.dp(ctx, 10));
+        bg.setCornerRadius(Ui.radius(ctx, R.dimen.radius_s));
         row.setBackground(bg);
         dot = new LiveBoard.Dot(ctx, 7, 23);
         row.addView(dot, new LinearLayout.LayoutParams(Ui.dp(ctx, 26), Ui.dp(ctx, 46)));

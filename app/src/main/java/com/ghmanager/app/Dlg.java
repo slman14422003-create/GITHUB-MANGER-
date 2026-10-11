@@ -189,10 +189,12 @@ public class Dlg extends AlertDialog.Builder {
     private static final int MAX_WIDTH_DP = 460;
     private static final int SHEET_MAX_WIDTH_DP = 560;
 
-    private static int windowWidth(Context c, boolean sheet) {
+    private static final int ALERT_MAX_WIDTH_DP = 380;
+
+    private static int windowWidth(Context c, boolean sheet, boolean alert) {
         android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
-        int cap = Ui.dp(c, sheet ? SHEET_MAX_WIDTH_DP : MAX_WIDTH_DP);
-        int want = (int) (dm.widthPixels * (sheet ? 1f : 0.94f));
+        int cap = Ui.dp(c, sheet ? SHEET_MAX_WIDTH_DP : alert ? ALERT_MAX_WIDTH_DP : MAX_WIDTH_DP);
+        int want = (int) (dm.widthPixels * (sheet ? 1f : alert ? 0.88f : 0.94f));
         return Math.min(want, cap);
     }
 
@@ -229,6 +231,8 @@ public class Dlg extends AlertDialog.Builder {
 
     private View buildContent(final Context c, final boolean sheet, final AlertDialog[] ref) {
         final int edge = sheet ? 8 : 6;
+        final boolean alert = listAdapter == null && customView == null;
+        final boolean center = centerTitle || alert;
         android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -254,7 +258,8 @@ public class Dlg extends AlertDialog.Builder {
             iv.setBackground(tile);
             iv.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(Ui.dp(c, 52), Ui.dp(c, 52));
-            ilp.setMarginStart(Ui.dp(c, 24));
+            if (center) ilp.gravity = Gravity.CENTER_HORIZONTAL;
+            else ilp.setMarginStart(Ui.dp(c, 24));
             ilp.topMargin = Ui.dp(c, sheet ? 8 : 24);
             root.addView(iv, ilp);
         }
@@ -265,7 +270,7 @@ public class Dlg extends AlertDialog.Builder {
             t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
             t.setTypeface(Typeface.DEFAULT_BOLD);
             t.setTextColor(Ui.color(c, R.color.text_primary));
-            t.setTextAlignment(centerTitle ? View.TEXT_ALIGNMENT_CENTER : View.TEXT_ALIGNMENT_VIEW_START);
+            t.setTextAlignment(center ? View.TEXT_ALIGNMENT_CENTER : View.TEXT_ALIGNMENT_VIEW_START);
             t.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, ic != 0 ? 14 : 24), Ui.dp(c, 24), Ui.dp(c, 8));
             root.addView(t, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -296,7 +301,7 @@ public class Dlg extends AlertDialog.Builder {
         } else if (customView instanceof ScrollView || customView instanceof ListView
                 || (customView != null && "dlg_selfscroll".equals(customView.getTag()))) {
             if (message != null && message.length() > 0) {
-                root.addView(messageView(c), new LinearLayout.LayoutParams(
+                root.addView(messageView(c, center), new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             }
             if (!"dlg_selfscroll".equals(customView.getTag()) && !padded(customView)) {
@@ -310,7 +315,7 @@ public class Dlg extends AlertDialog.Builder {
             LinearLayout inner = new LinearLayout(c);
             inner.setOrientation(LinearLayout.VERTICAL);
             if (message != null && message.length() > 0) {
-                inner.addView(messageView(c), new LinearLayout.LayoutParams(
+                inner.addView(messageView(c, center), new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             }
             if (customView != null) {
@@ -374,13 +379,13 @@ public class Dlg extends AlertDialog.Builder {
         return root;
     }
 
-    private TextView messageView(Context c) {
+    private TextView messageView(Context c, boolean center) {
         TextView msg = new TextView(c);
         msg.setText(message);
         msg.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         msg.setTextColor(Ui.color(c, R.color.text_secondary));
         msg.setLineSpacing(0, 1.2f);
-        msg.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        msg.setTextAlignment(center ? View.TEXT_ALIGNMENT_CENTER : View.TEXT_ALIGNMENT_VIEW_START);
         msg.setTextIsSelectable(true);
         msg.setPaddingRelative(Ui.dp(c, 24), Ui.dp(c, 4), Ui.dp(c, 24), Ui.dp(c, 8));
         return msg;
@@ -388,9 +393,13 @@ public class Dlg extends AlertDialog.Builder {
 
     /** One place decides the size of every dialog in the app. */
     private static void size(AlertDialog d, boolean sheet) {
+        size(d, sheet, false);
+    }
+
+    private static void size(AlertDialog d, boolean sheet, boolean alert) {
         Window w = d.getWindow();
         if (w == null) return;
-        int width = windowWidth(d.getContext(), sheet);
+        int width = windowWidth(d.getContext(), sheet, alert);
         w.setGravity(sheet ? (Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL) : Gravity.CENTER);
         w.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
@@ -420,7 +429,8 @@ public class Dlg extends AlertDialog.Builder {
                 w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             }
         }
-        d.setOnShowListener(x -> size(d, sheet));
+        final boolean alertSize = listAdapter == null && customView == null;
+        d.setOnShowListener(x -> size(d, sheet, alertSize));
         return d;
     }
 
@@ -469,7 +479,7 @@ public class Dlg extends AlertDialog.Builder {
             t.setTextColor(Ui.color(c, destructive(c, label) ? R.color.bad : R.color.text_primary));
             GradientDrawable mask = new GradientDrawable();
             mask.setColor(0xFFFFFFFF);
-            mask.setCornerRadius(Ui.dp(c, 16));
+            mask.setCornerRadius(Ui.radius(c, R.dimen.radius_s));
             t.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.color(c, R.color.ripple)), null, mask));
             return t;
         }

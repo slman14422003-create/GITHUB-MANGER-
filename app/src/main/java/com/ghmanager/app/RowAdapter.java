@@ -76,7 +76,7 @@ public class RowAdapter extends BaseAdapter {
         int tint = colored ? r.iconColor : ContextCompat.getColor(ctx, R.color.text_primary);
         icon.setImageTintList(ColorStateList.valueOf(tint));
         GradientDrawable tile = new GradientDrawable();
-        tile.setCornerRadius(Ui.dp(ctx, 14));
+        tile.setCornerRadius(Ui.radius(ctx, R.dimen.radius_s));
         tile.setColor(colored ? (tint & 0x00FFFFFF) | 0x24000000 : ContextCompat.getColor(ctx, R.color.neutral_soft));
         icon.setBackground(tile);
 
@@ -103,7 +103,7 @@ public class RowAdapter extends BaseAdapter {
             badge.setText(r.badge);
             badge.setTextColor(r.badgeColor);
             GradientDrawable g = new GradientDrawable();
-            g.setCornerRadius(Ui.dp(ctx, 100));
+            g.setCornerRadius(Ui.radius(ctx, R.dimen.radius_pill));
             g.setColor((r.badgeColor & 0x00FFFFFF) | 0x26000000);
             badge.setBackground(g);
             badge.setVisibility(View.VISIBLE);

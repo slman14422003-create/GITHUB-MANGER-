@@ -62,7 +62,7 @@ final class LiveSteps {
         name.setSingleLine(true);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-        name.setTextSize(isJob ? 13.5f : 12.5f);
+        name.setTextSize(isJob ? 14f : 13f);
         name.setText(isJob ? o.optString("name") : o.optInt("number") + ". " + o.optString("name"));
         name.setTextColor(Ui.color(c, st == 1 ? R.color.info : st == 3 ? R.color.bad
                 : isJob || st == 2 ? R.color.text_primary : R.color.text_secondary));
@@ -72,7 +72,7 @@ final class LiveSteps {
         row.addView(name, nl);
 
         TextView time = new TextView(c);
-        time.setTextSize(11.5f);
+        time.setTextSize(12f);
         time.setTypeface(Typeface.MONOSPACE);
         time.setTextDirection(View.TEXT_DIRECTION_LTR);
         long start = Fmt.parse(Fmt.s(o, "started_at"));

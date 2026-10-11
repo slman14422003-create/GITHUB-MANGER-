@@ -72,7 +72,7 @@
         <item name="android:lineSpacingMultiplier">1.15</item>
         <item name="android:textAlignment">viewStart</item>
         <item name="android:textColor">@color/text_secondary</item>
-        <item name="android:textSize">13.5sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textIsSelectable">true</item>
     </style>
 

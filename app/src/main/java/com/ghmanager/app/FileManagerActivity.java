@@ -937,7 +937,7 @@ public class FileManagerActivity extends AppCompatActivity {
             icon.setImageResource(iconFor(type));
             icon.setImageTintList(ColorStateList.valueOf(color));
             GradientDrawable g = new GradientDrawable();
-            g.setCornerRadius(Ui.dp(FileManagerActivity.this, 12));
+            g.setCornerRadius(Ui.radius(FileManagerActivity.this, R.dimen.radius_s));
             g.setColor((color & 0x00FFFFFF) | 0x26000000);
             icon.setBackground(g);
             thumb.setBackground(g);

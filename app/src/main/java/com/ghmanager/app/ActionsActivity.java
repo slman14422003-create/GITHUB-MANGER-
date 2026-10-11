@@ -457,7 +457,7 @@ public class ActionsActivity extends BaseRepoActivity {
         int pv = Ui.dp(this, 12);
         t.setPadding(Ui.dp(this, 4), pv, Ui.dp(this, 4), pv);
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(Ui.dp(this, 20));
+        g.setCornerRadius(Ui.radius(this, R.dimen.radius_m));
         g.setColor(Ui.color(this, R.color.field));
         t.setBackground(g);
         TextView n = text(String.valueOf(count), 22, colorRes);
@@ -570,7 +570,7 @@ public class ActionsActivity extends BaseRepoActivity {
             float f = Status.isActive(r.optString("status")) ? 0.55f : Math.max(0.25f, ms / (float) max);
             View bar = new View(this);
             GradientDrawable g = new GradientDrawable();
-            g.setCornerRadius(Ui.dp(this, 4));
+            g.setCornerRadius(Ui.radius(this, R.dimen.radius_xs));
             g.setColor(Status.color(this, r.optString("status"), r.optString("conclusion")));
             bar.setBackground(g);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
@@ -723,13 +723,13 @@ public class ActionsActivity extends BaseRepoActivity {
         Ui.press(this, card);
         GradientDrawable fill = new GradientDrawable();
         fill.setColor(Ui.color(this, R.color.surface));
-        fill.setCornerRadius(Ui.dp(this, 24));
+        fill.setCornerRadius(Ui.radius(this, R.dimen.radius_m));
         boolean hot = isBad(state) || "in_progress".equals(state);
         fill.setStroke(Ui.dp(this, 1), hot ? ((color & 0x00FFFFFF) | 0x80000000)
                 : Ui.color(this, R.color.stroke_soft));
         GradientDrawable mask = new GradientDrawable();
         mask.setColor(0xFFFFFFFF);
-        mask.setCornerRadius(Ui.dp(this, 24));
+        mask.setCornerRadius(Ui.radius(this, R.dimen.radius_m));
         card.setBackground(new RippleDrawable(
                 ColorStateList.valueOf(Ui.color(this, R.color.ripple)), fill, mask));
 
@@ -766,7 +766,7 @@ public class ActionsActivity extends BaseRepoActivity {
         badge.setText(Status.label(s, c));
         badge.setTextColor(color);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(Ui.dp(this, 100));
+        bg.setCornerRadius(Ui.radius(this, R.dimen.radius_pill));
         bg.setColor((color & 0x00FFFFFF) | 0x26000000);
         badge.setBackground(bg);
 
@@ -798,7 +798,7 @@ public class ActionsActivity extends BaseRepoActivity {
             ProgressBar pb = v.findViewById(R.id.prog);
             int target = Math.max(4, pr[0] * 1000 / pr[1]);
             pb.setMax(1000);
-            pb.setProgress(target, Motion.enabled());
+            Ui.progress(pb, target);
             String now = stepNow.get(run.optLong("id"));
             String line = getString(R.string.act_step_progress, pr[0], pr[1])
                     + (now == null || now.isEmpty() ? "" : "  ·  " + now);

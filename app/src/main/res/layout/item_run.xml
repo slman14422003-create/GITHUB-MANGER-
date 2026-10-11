@@ -62,7 +62,7 @@
                     android:textAlignment="viewStart"
                     android:textColor="@color/text_secondary"
                     android:textDirection="locale"
-                    android:textSize="12.5sp" />
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <ImageView
@@ -104,7 +104,7 @@
                 android:singleLine="true"
                 android:textColor="@color/accent_text"
                 android:textDirection="ltr"
-                android:textSize="11.5sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/badge"
@@ -167,7 +167,7 @@
                 android:id="@+id/prog"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="6dp"
+                android:layout_height="4dp"
                 android:max="100"
                 android:progressDrawable="@drawable/progress_pill" />
 
@@ -215,7 +215,7 @@
                 android:paddingStart="13dp"
                 android:paddingEnd="13dp"
                 android:textColor="@color/text_primary"
-                android:textSize="12.5sp" />
+                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/act2"
@@ -230,7 +230,7 @@
                 android:paddingStart="13dp"
                 android:paddingEnd="13dp"
                 android:textColor="@color/text_primary"
-                android:textSize="12.5sp" />
+                android:textSize="13sp" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
