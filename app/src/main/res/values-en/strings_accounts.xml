@@ -58,6 +58,7 @@
     <string name="login_client_msg">To sign in with GitHub, create an OAuth App at GitHub → Settings → Developer settings → OAuth Apps, enable Device Flow, then paste its Client ID here.</string>
     <string name="login_client_hint">Client ID</string>
     <string name="login_client_set">Set Client ID</string>
+    <string name="login_renewed">A new code was created and copied, paste it in GitHub.</string>
     <string name="login_expired">The code expired, start again.</string>
     <string name="login_denied">You denied the request on GitHub.</string>
     <string name="login_failed">Sign-in failed: %1$s</string>

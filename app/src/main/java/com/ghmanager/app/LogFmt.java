@@ -8,8 +8,10 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,7 +20,90 @@ final class LogFmt {
     private static final Pattern TS = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z ?");
     private static final Pattern ANSI = Pattern.compile("\\x1B\\[[0-9;?]*[ -/]*[@-~]");
 
+    private static final Pattern TS_FULL = Pattern.compile(
+            "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,9}))?Z ?");
+
     private LogFmt() {
+    }
+
+    /** One cleaned log line with the data needed to file it under its step. */
+    static final class Line {
+        long ts;
+        int no;
+        boolean marker;
+        boolean err;
+        SpannableStringBuilder text;
+        String plain = "";
+    }
+
+    /**
+     * Every line of the log (nothing filtered out but empty ones), with its timestamp, whether it starts
+     * a new step ("##[group]Run ...") and whether it looks like an error.
+     */
+    static List<Line> parse(Context c, String raw) {
+        final int bad = Ui.color(c, R.color.bad);
+        final int warn = Ui.color(c, R.color.warn);
+        final int info = Ui.color(c, R.color.info);
+        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        List<Line> out = new ArrayList<>();
+        for (String l : raw.split("\n", -1)) {
+            String line = l;
+            if (line.endsWith("\r")) line = line.substring(0, line.length() - 1);
+            long ts = 0;
+            Matcher m = TS_FULL.matcher(line);
+            if (m.find()) {
+                try {
+                    cal.clear();
+                    cal.set(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)) - 1,
+                            Integer.parseInt(m.group(3)), Integer.parseInt(m.group(4)),
+                            Integer.parseInt(m.group(5)), Integer.parseInt(m.group(6)));
+                    long ms = 0;
+                    String fr = m.group(7);
+                    if (fr != null && !fr.isEmpty()) {
+                        String three = (fr + "000").substring(0, 3);
+                        ms = Long.parseLong(three);
+                    }
+                    ts = cal.getTimeInMillis() + ms;
+                } catch (Exception ignored) {
+                    ts = 0;
+                }
+                line = line.substring(m.end());
+            }
+            line = ANSI.matcher(line).replaceAll("");
+            if (line.startsWith("##[endgroup]")) continue;
+            if (line.isEmpty() && l.isEmpty()) continue;
+
+            Line ln = new Line();
+            ln.ts = ts;
+            ln.marker = line.startsWith("##[group]Run ") || line.startsWith("##[group]Post Run ")
+                    || line.startsWith("Cleaning up orphan processes");
+            int color = 0;
+            boolean bold = false;
+            boolean isError = false;
+            if (line.startsWith("##[group]")) {
+                line = "\u25B6 " + line.substring(9);
+                bold = true;
+            } else if (line.startsWith("##[error]")) {
+                line = "\u2716 " + line.substring(9);
+                color = bad;
+                bold = true;
+                isError = true;
+            } else if (line.startsWith("##[warning]")) {
+                line = "\u26A0 " + line.substring(11);
+                color = warn;
+            } else if (line.startsWith("##[command]")) {
+                line = "$ " + line.substring(11);
+                color = info;
+            }
+            ln.err = isError || looksLikeError(line.toLowerCase(Locale.ROOT));
+            ln.plain = line;
+            SpannableStringBuilder sb = new SpannableStringBuilder(line);
+            if (color != 0) sb.setSpan(new ForegroundColorSpan(color), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (bold) sb.setSpan(new StyleSpan(Typeface.BOLD), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            ln.text = sb;
+            out.add(ln);
+        }
+        return out;
     }
 
     static boolean looksLikeError(String lower) {

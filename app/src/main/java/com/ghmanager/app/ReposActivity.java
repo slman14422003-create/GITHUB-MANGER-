@@ -44,6 +44,31 @@ public class ReposActivity extends AppCompatActivity {
     private GhStatusCard statusCard;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private boolean resumed = false;
+    private boolean syncing = false;
+    private String signature = "";
+    private static final long SYNC_MS = 15000;
+    private static final long CLOCK_MS = 10000;
+
+    /** Repositories change on GitHub all the time: bring the list quietly while the screen is open. */
+    private final Runnable syncTask = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed) return;
+            load(true);
+            ui.postDelayed(this, SYNC_MS);
+        }
+    };
+
+    /** Keeps the "x minutes ago" labels of every project moving without waiting for a sync. */
+    private final Runnable clockTask = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed) return;
+            if (!allRepos.isEmpty()) render();
+            ui.postDelayed(this, CLOCK_MS);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -135,6 +160,9 @@ public class ReposActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        resumed = false;
+        ui.removeCallbacks(syncTask);
+        ui.removeCallbacks(clockTask);
         if (statusCard != null) statusCard.stop();
     }
 
@@ -143,6 +171,16 @@ public class ReposActivity extends AppCompatActivity {
         super.onResume();
         if (statusCard != null) statusCard.start();
         if (accountBtn != null) refreshAccountIcon();
+        resumed = true;
+        ui.removeCallbacks(syncTask);
+        ui.removeCallbacks(clockTask);
+        if (!allRepos.isEmpty()) {
+            render();
+            ui.post(syncTask);
+        } else {
+            ui.postDelayed(syncTask, SYNC_MS);
+        }
+        ui.postDelayed(clockTask, CLOCK_MS);
     }
 
     private void refreshAccountIcon() {
@@ -234,7 +272,20 @@ public class ReposActivity extends AppCompatActivity {
         }
     }
 
+    private static String sign(JSONArray arr) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            b.append(o.optLong("id")).append('|').append(o.optString("pushed_at")).append('|')
+                    .append(o.optString("updated_at")).append('|').append(o.optInt("stargazers_count")).append('|')
+                    .append(o.optBoolean("private")).append(o.optBoolean("archived")).append(';');
+        }
+        return b.toString();
+    }
+
     private void fill(JSONArray arr) throws Exception {
+        signature = sign(arr);
         final List<JSONObject> tmp = new ArrayList<>();
         for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
         allRepos.clear();
@@ -243,7 +294,33 @@ public class ReposActivity extends AppCompatActivity {
     }
 
     private void load() {
+        load(false);
+    }
+
+    private void load(final boolean quiet) {
+        if (quiet && (syncing || allRepos.isEmpty())) return;
         final boolean hadData = !allRepos.isEmpty();
+        if (quiet) {
+            syncing = true;
+            io.execute(() -> {
+                try {
+                    final JSONArray arr = api.listRepos();
+                    RepoCache.save(this, arr);
+                    final String sig = sign(arr);
+                    ui.post(() -> {
+                        syncing = false;
+                        if (isFinishing() || !resumed || sig.equals(signature)) return;
+                        try {
+                            fill(arr);
+                        } catch (Exception ignored) {
+                        }
+                    });
+                } catch (Exception e) {
+                    ui.post(() -> syncing = false);
+                }
+            });
+            return;
+        }
         status.setVisibility(View.GONE);
         Ui.spin(refreshBtn, true);
         if (!hadData) showSkeleton(true);

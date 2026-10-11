@@ -41,6 +41,10 @@ public class LoginActivity extends AppCompatActivity {
     private DeviceFlow.Code dev;
     private long deadline;
     private int interval = 5;
+    private boolean polling = false;
+    private int renewals = 0;
+    private static final int MAX_RENEWALS = 4;
+    private static final String K_FLOW = "dev_flow";
 
     private Button btnOauth;
     private Button loginBtn;
@@ -127,6 +131,7 @@ public class LoginActivity extends AppCompatActivity {
             loginBtn.setEnabled(false);
             complete(t, "token");
         });
+        restoreFlow();
     }
 
     // ------------------------------------------------------------------ device flow
@@ -152,6 +157,11 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void startFlow() {
+        startFlow(true);
+    }
+
+    /** @param open true when the user asked for it: copy the code and open GitHub; false = silent renewal. */
+    private void startFlow(final boolean open) {
         final String cid = Store.oauthClientId(this);
         if (cid.isEmpty()) return;
         btnOauth.setEnabled(false);
@@ -160,15 +170,7 @@ public class LoginActivity extends AppCompatActivity {
                 final DeviceFlow.Code c = DeviceFlow.start(cid);
                 ui.post(() -> {
                     if (destroyed) return;
-                    dev = c;
-                    interval = c.interval;
-                    deadline = System.currentTimeMillis() + c.expiresIn * 1000L;
-                    codeText.setText(c.userCode);
-                    codePanel.setVisibility(View.VISIBLE);
-                    copyCode(c.userCode);
-                    openGithub(c.uri);
-                    ui.removeCallbacks(pollTask);
-                    ui.postDelayed(pollTask, interval * 1000L);
+                    applyCode(c, System.currentTimeMillis() + c.expiresIn * 1000L, open);
                 });
             } catch (Exception e) {
                 ui.post(() -> {
@@ -179,36 +181,136 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
-    private void pollOnce() {
-        if (dev == null || destroyed) return;
-        if (System.currentTimeMillis() > deadline) {
+    private void applyCode(DeviceFlow.Code c, long until, boolean open) {
+        dev = c;
+        interval = c.interval;
+        deadline = until - 10000L;
+        polling = false;
+        saveFlow(c, until);
+        codeText.setText(c.userCode);
+        codePanel.setVisibility(View.VISIBLE);
+        btnOauth.setEnabled(false);
+        if (open) {
+            renewals = 0;
+            copyCode(c.userCode);
+            openGithub(c.uri);
+        } else {
+            copyCode(c.userCode);
+            Toast.makeText(this, R.string.login_renewed, Toast.LENGTH_LONG).show();
+        }
+        ui.removeCallbacks(pollTask);
+        ui.postDelayed(pollTask, interval * 1000L);
+    }
+
+    private void saveFlow(DeviceFlow.Code c, long until) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("dc", c.deviceCode);
+            o.put("uc", c.userCode);
+            o.put("uri", c.uri);
+            o.put("until", until);
+            o.put("iv", c.interval);
+            Store.putPrefs(this, K_FLOW, o.toString(), K_FLOW + "_v", "1");
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void clearFlow() {
+        Store.putPrefs(this, K_FLOW, "", K_FLOW + "_v", "");
+    }
+
+    /** The screen was recreated (low memory, rotation, app switch): carry on with the code still valid. */
+    private void restoreFlow() {
+        String raw = Store.rawPref(this, K_FLOW);
+        if (raw.isEmpty() || Store.oauthClientId(this).isEmpty()) return;
+        try {
+            JSONObject o = new JSONObject(raw);
+            long until = o.optLong("until");
+            if (until - System.currentTimeMillis() < 20000L) {
+                clearFlow();
+                return;
+            }
+            DeviceFlow.Code c = new DeviceFlow.Code();
+            c.deviceCode = o.optString("dc");
+            c.userCode = o.optString("uc");
+            c.uri = o.optString("uri", c.uri);
+            c.interval = Math.max(5, o.optInt("iv", 5));
+            if (c.deviceCode.isEmpty() || c.userCode.isEmpty()) return;
+            dev = c;
+            interval = c.interval;
+            deadline = until - 10000L;
+            codeText.setText(c.userCode);
+            codePanel.setVisibility(View.VISIBLE);
+            btnOauth.setEnabled(false);
+            ui.removeCallbacks(pollTask);
+            ui.post(pollTask);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Asks GitHub for a brand new code without the user doing anything. */
+    private void renew() {
+        if (renewals >= MAX_RENEWALS) {
             stopFlow();
             Toast.makeText(this, R.string.login_expired, Toast.LENGTH_LONG).show();
             return;
         }
+        renewals++;
+        dev = null;
+        ui.removeCallbacks(pollTask);
+        startFlow(false);
+    }
+
+    private void pollOnce() {
+        if (dev == null || destroyed || polling) return;
+        if (System.currentTimeMillis() > deadline) {
+            renew();
+            return;
+        }
         final String cid = Store.oauthClientId(this);
         final String code = dev.deviceCode;
+        polling = true;
         io.execute(() -> {
             try {
                 DeviceFlow.Result r = DeviceFlow.poll(cid, code);
                 if (r.token != null) {
+                    ui.post(() -> {
+                        polling = false;
+                        clearFlow();
+                    });
                     complete(r.token, "oauth");
                     return;
                 }
                 if (r.slowDown) interval += 5;
                 ui.post(() -> {
-                    if (dev != null && !destroyed) ui.postDelayed(pollTask, interval * 1000L);
+                    polling = false;
+                    if (dev != null && !destroyed && dev.deviceCode.equals(code)) {
+                        ui.removeCallbacks(pollTask);
+                        ui.postDelayed(pollTask, interval * 1000L);
+                    }
                 });
-            } catch (Exception e) {
+            } catch (DeviceFlow.Fatal e) {
                 ui.post(() -> {
-                    stopFlow();
+                    polling = false;
                     String m = e.getMessage() == null ? "" : e.getMessage();
                     if ("expired_token".equals(m)) {
-                        Toast.makeText(this, R.string.login_expired, Toast.LENGTH_LONG).show();
-                    } else if ("access_denied".equals(m)) {
-                        Toast.makeText(this, R.string.login_denied, Toast.LENGTH_LONG).show();
+                        renew();
                     } else {
-                        failed(e);
+                        stopFlow();
+                        if ("access_denied".equals(m)) {
+                            Toast.makeText(this, R.string.login_denied, Toast.LENGTH_LONG).show();
+                        } else {
+                            failed(e);
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                // network hiccup (browser switch, mobile data): keep the code alive and try again
+                ui.post(() -> {
+                    polling = false;
+                    if (dev != null && !destroyed) {
+                        ui.removeCallbacks(pollTask);
+                        ui.postDelayed(pollTask, interval * 1000L);
                     }
                 });
             }
@@ -217,6 +319,8 @@ public class LoginActivity extends AppCompatActivity {
 
     private void stopFlow() {
         dev = null;
+        polling = false;
+        clearFlow();
         ui.removeCallbacks(pollTask);
         if (codePanel != null) codePanel.setVisibility(View.GONE);
         if (btnOauth != null) btnOauth.setEnabled(true);
@@ -251,30 +355,48 @@ public class LoginActivity extends AppCompatActivity {
 
     /** Checks the token against GitHub, saves the account and opens the repositories. */
     private void complete(final String token, final String type) {
+        final android.content.Context app = getApplicationContext();
         io.execute(() -> {
-            try {
-                final JSONObject u = new GitHubApi(token).getUser();
-                ui.post(() -> {
-                    if (destroyed) return;
-                    Accounts.add(this, token, u, type);
-                    if (Store.getToken(this).isEmpty()) {
-                        // the Android Keystore refused to keep the token
-                        stopFlow();
-                        if (loginBtn != null) loginBtn.setEnabled(true);
-                        Toast.makeText(this, getString(R.string.invalid_token) + ": Keystore", Toast.LENGTH_LONG).show();
-                        return;
+            Exception last = null;
+            JSONObject user = null;
+            // the token is precious: a short network hiccup must not throw it away
+            for (int attempt = 0; attempt < 3 && user == null; attempt++) {
+                try {
+                    user = new GitHubApi(token).getUser();
+                } catch (Exception e) {
+                    last = e;
+                    if (e instanceof GitHubApi.ApiException && ((GitHubApi.ApiException) e).code == 401) break;
+                    try {
+                        Thread.sleep(1200);
+                    } catch (InterruptedException ie) {
+                        break;
                     }
-                    ready = true;
-                    if (resumed) goRepos();   // otherwise onResume continues as soon as the user is back
-                });
-            } catch (Exception e) {
-                ui.post(() -> {
+                }
+            }
+            final JSONObject u = user;
+            final Exception err = last;
+            ui.post(() -> {
+                if (u == null) {
+                    if (destroyed) return;
                     stopFlow();
                     if (loginBtn != null) loginBtn.setEnabled(true);
-                    Toast.makeText(this, getString(R.string.invalid_token) + ": " + e.getMessage(),
-                            Toast.LENGTH_LONG).show();
-                });
-            }
+                    Toast.makeText(this, getString(R.string.invalid_token) + ": "
+                            + (err == null ? "" : err.getMessage()), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                Accounts.add(app, token, u, type);
+                clearFlow();
+                if (destroyed) return;
+                if (Store.getToken(this).isEmpty()) {
+                    // the Android Keystore refused to keep the token
+                    stopFlow();
+                    if (loginBtn != null) loginBtn.setEnabled(true);
+                    Toast.makeText(this, getString(R.string.invalid_token) + ": Keystore", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                ready = true;
+                if (resumed) goRepos();   // otherwise onResume continues as soon as the user is back
+            });
         });
     }
 
@@ -297,6 +419,8 @@ public class LoginActivity extends AppCompatActivity {
             // back from the browser: ask GitHub right now instead of waiting for the next timer tick
             ui.removeCallbacks(pollTask);
             ui.post(pollTask);
+        } else if (dev == null && codePanel != null && codePanel.getVisibility() == View.VISIBLE) {
+            restoreFlow();
         }
     }
 

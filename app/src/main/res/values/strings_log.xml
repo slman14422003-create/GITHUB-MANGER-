@@ -8,4 +8,8 @@
     <string name="lg_share">مشاركة</string>
     <string name="lg_preview_title">اللوج المباشر · %1$s</string>
     <string name="lg_open_full">فتح السجل كاملًا</string>
+    <string name="log_expand_all">فتح كل الخطوات</string>
+    <string name="log_collapse_all">طي كل الخطوات</string>
+    <string name="step_no_output">لا يوجد مخرجات لهذه الخطوة</string>
+    <string name="step_pending">الخطوة لم تبدأ بعد</string>
 </resources>

@@ -59,6 +59,7 @@
     <string name="login_client_hint">Client ID</string>
     <string name="login_client_set">ضبط Client ID</string>
     <string name="login_expired">انتهت صلاحية الرمز، ابدأ من جديد.</string>
+    <string name="login_renewed">تم إنشاء رمز جديد تلقائيًا ونُسخ، الصقه في GitHub.</string>
     <string name="login_denied">رفضت الطلب في GitHub.</string>
     <string name="login_failed">تعذّر تسجيل الدخول: %1$s</string>
 

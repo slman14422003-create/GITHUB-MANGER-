@@ -52,4 +52,8 @@
     <string name="gs_i_investigating">Investigating</string>
     <string name="gs_i_identified">Identified</string>
     <string name="gs_i_monitoring">Monitoring</string>
+    <string name="log_expand_all">Expand all steps</string>
+    <string name="log_collapse_all">Collapse all steps</string>
+    <string name="step_no_output">This step has no output</string>
+    <string name="step_pending">This step has not started yet</string>
 </resources>

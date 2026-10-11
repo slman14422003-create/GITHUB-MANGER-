@@ -23,6 +23,13 @@ public final class DeviceFlow {
         public int interval = 5;
     }
 
+    /** A definitive answer from GitHub (expired, denied...): polling must stop. Anything else is a hiccup to retry. */
+    public static final class Fatal extends Exception {
+        public Fatal(String code) {
+            super(code);
+        }
+    }
+
     public static final class Result {
         public String token;
         public boolean slowDown;
@@ -60,6 +67,6 @@ public final class DeviceFlow {
             r.slowDown = true;
             return r;
         }
-        throw new Exception(err);
+        throw new Fatal(err);
     }
 }
