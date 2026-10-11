@@ -22,7 +22,11 @@ description: Progress log of the GITHUB-MANGER Android app (Java/Views, com.ghma
    - Running step opens by itself and its clock ticks; failed steps open by default; filter "errors only" keeps original line numbers.
    - Menu: expand all / collapse all; long press copies a step or a block.
 
+# Structure
+- DeviceFlow owns the device-flow code and its persistence (save/load/clear); LoginActivity only drives the UI.
+- LogFmt.parse -> StepLog.build -> LogActivity; StepHeader (step row view) and LineNumberSpan (line-number gutter) are separate classes.
+- LiveBoard.Listener.onStep: tapping a step in the run screen opens the log with that step expanded (extra "step").
+
 # Next ideas
-- Open the log directly on a step tapped from the live board in RunDetailActivity (extra "step" is already supported by LogActivity).
 - Collapsible ##[group] sections inside a step.
 - Build and test on a device: no Android SDK was available when these changes were written.

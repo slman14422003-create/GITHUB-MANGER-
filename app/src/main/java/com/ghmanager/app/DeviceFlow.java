@@ -1,5 +1,7 @@
 package com.ghmanager.app;
 
+import android.content.Context;
+
 import org.json.JSONObject;
 
 /**
@@ -21,6 +23,8 @@ public final class DeviceFlow {
         public String uri = "https://github.com/login/device";
         public int expiresIn = 900;
         public int interval = 5;
+        /** Wall-clock time (ms) at which GitHub stops accepting this code. */
+        public long until = 0;
     }
 
     /** A definitive answer from GitHub (expired, denied...): polling must stop. Anything else is a hiccup to retry. */
@@ -46,6 +50,7 @@ public final class DeviceFlow {
         if (!uri.isEmpty()) c.uri = uri;
         c.expiresIn = j.optInt("expires_in", 900);
         c.interval = Math.max(5, j.optInt("interval", 5));
+        c.until = System.currentTimeMillis() + c.expiresIn * 1000L;
         if (c.deviceCode.isEmpty() || c.userCode.isEmpty()) throw new Exception("GitHub");
         return c;
     }
@@ -68,5 +73,48 @@ public final class DeviceFlow {
             return r;
         }
         throw new Fatal(err);
+    }
+
+    private static final String KEY = "dev_flow";
+
+    /** Keeps the pending code so a recreated screen can carry on with it. */
+    public static void save(Context c, Code code) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("dc", code.deviceCode);
+            o.put("uc", code.userCode);
+            o.put("uri", code.uri);
+            o.put("until", code.until);
+            o.put("iv", code.interval);
+            Store.putPrefs(c, KEY, o.toString(), KEY + "_v", "1");
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void clear(Context c) {
+        Store.putPrefs(c, KEY, "", KEY + "_v", "");
+    }
+
+    /** The saved code while it is still valid for at least 20 s, otherwise null. */
+    public static Code load(Context c) {
+        String raw = Store.rawPref(c, KEY);
+        if (raw.isEmpty()) return null;
+        try {
+            JSONObject o = new JSONObject(raw);
+            Code code = new Code();
+            code.until = o.optLong("until");
+            code.deviceCode = o.optString("dc");
+            code.userCode = o.optString("uc");
+            code.uri = o.optString("uri", code.uri);
+            code.interval = Math.max(5, o.optInt("iv", 5));
+            if (code.deviceCode.isEmpty() || code.userCode.isEmpty()) return null;
+            if (code.until - System.currentTimeMillis() < 20000L) {
+                clear(c);
+                return null;
+            }
+            return code;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

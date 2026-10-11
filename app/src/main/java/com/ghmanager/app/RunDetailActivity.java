@@ -3,10 +3,6 @@ package com.ghmanager.app;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.StyleSpan;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -53,7 +49,12 @@ public class RunDetailActivity extends BaseRepoActivity {
         board = new LiveBoard(this, new LiveBoard.Listener() {
             @Override
             public void onJob(JSONObject job) {
-                openLog(job);
+                openLog(job, 0);
+            }
+
+            @Override
+            public void onStep(JSONObject job, int number) {
+                openLog(job, number);
             }
 
             @Override
@@ -194,11 +195,12 @@ public class RunDetailActivity extends BaseRepoActivity {
         }
     }
 
-    private void openLog(JSONObject job) {
+    private void openLog(JSONObject job, int step) {
         Intent i = repoIntent(LogActivity.class);
         i.putExtra("jobId", job.optLong("id"));
         i.putExtra("jobName", job.optString("name"));
         i.putExtra("active", Status.isActive(job.optString("status")));
+        i.putExtra("step", step);
         startActivity(i);
     }
 
@@ -294,7 +296,7 @@ public class RunDetailActivity extends BaseRepoActivity {
                 getString(R.string.open_in_github)};
         choose(job.optString("name"), items, (d, which) -> {
             if (which == 0) {
-                openLog(job);
+                openLog(job, 0);
             } else if (which == 1) {
                 if (!done) {
                     toast(R.string.job_not_finished);

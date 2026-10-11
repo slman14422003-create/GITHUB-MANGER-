@@ -44,7 +44,6 @@ public class LoginActivity extends AppCompatActivity {
     private boolean polling = false;
     private int renewals = 0;
     private static final int MAX_RENEWALS = 4;
-    private static final String K_FLOW = "dev_flow";
 
     private Button btnOauth;
     private Button loginBtn;
@@ -170,7 +169,7 @@ public class LoginActivity extends AppCompatActivity {
                 final DeviceFlow.Code c = DeviceFlow.start(cid);
                 ui.post(() -> {
                     if (destroyed) return;
-                    applyCode(c, System.currentTimeMillis() + c.expiresIn * 1000L, open);
+                    applyCode(c, open);
                 });
             } catch (Exception e) {
                 ui.post(() -> {
@@ -181,71 +180,38 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
-    private void applyCode(DeviceFlow.Code c, long until, boolean open) {
+    private void showCode(DeviceFlow.Code c) {
         dev = c;
         interval = c.interval;
-        deadline = until - 10000L;
+        deadline = c.until - 10000L;
         polling = false;
-        saveFlow(c, until);
         codeText.setText(c.userCode);
         codePanel.setVisibility(View.VISIBLE);
         btnOauth.setEnabled(false);
+    }
+
+    private void applyCode(DeviceFlow.Code c, boolean open) {
+        showCode(c);
+        DeviceFlow.save(this, c);
+        copyCode(c.userCode);
         if (open) {
             renewals = 0;
-            copyCode(c.userCode);
             openGithub(c.uri);
         } else {
-            copyCode(c.userCode);
             Toast.makeText(this, R.string.login_renewed, Toast.LENGTH_LONG).show();
         }
         ui.removeCallbacks(pollTask);
         ui.postDelayed(pollTask, interval * 1000L);
     }
 
-    private void saveFlow(DeviceFlow.Code c, long until) {
-        try {
-            JSONObject o = new JSONObject();
-            o.put("dc", c.deviceCode);
-            o.put("uc", c.userCode);
-            o.put("uri", c.uri);
-            o.put("until", until);
-            o.put("iv", c.interval);
-            Store.putPrefs(this, K_FLOW, o.toString(), K_FLOW + "_v", "1");
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void clearFlow() {
-        Store.putPrefs(this, K_FLOW, "", K_FLOW + "_v", "");
-    }
-
     /** The screen was recreated (low memory, rotation, app switch): carry on with the code still valid. */
     private void restoreFlow() {
-        String raw = Store.rawPref(this, K_FLOW);
-        if (raw.isEmpty() || Store.oauthClientId(this).isEmpty()) return;
-        try {
-            JSONObject o = new JSONObject(raw);
-            long until = o.optLong("until");
-            if (until - System.currentTimeMillis() < 20000L) {
-                clearFlow();
-                return;
-            }
-            DeviceFlow.Code c = new DeviceFlow.Code();
-            c.deviceCode = o.optString("dc");
-            c.userCode = o.optString("uc");
-            c.uri = o.optString("uri", c.uri);
-            c.interval = Math.max(5, o.optInt("iv", 5));
-            if (c.deviceCode.isEmpty() || c.userCode.isEmpty()) return;
-            dev = c;
-            interval = c.interval;
-            deadline = until - 10000L;
-            codeText.setText(c.userCode);
-            codePanel.setVisibility(View.VISIBLE);
-            btnOauth.setEnabled(false);
-            ui.removeCallbacks(pollTask);
-            ui.post(pollTask);
-        } catch (Exception ignored) {
-        }
+        if (Store.oauthClientId(this).isEmpty()) return;
+        DeviceFlow.Code c = DeviceFlow.load(this);
+        if (c == null) return;
+        showCode(c);
+        ui.removeCallbacks(pollTask);
+        ui.post(pollTask);
     }
 
     /** Asks GitHub for a brand new code without the user doing anything. */
@@ -276,7 +242,7 @@ public class LoginActivity extends AppCompatActivity {
                 if (r.token != null) {
                     ui.post(() -> {
                         polling = false;
-                        clearFlow();
+                        DeviceFlow.clear(this);
                     });
                     complete(r.token, "oauth");
                     return;
@@ -320,7 +286,7 @@ public class LoginActivity extends AppCompatActivity {
     private void stopFlow() {
         dev = null;
         polling = false;
-        clearFlow();
+        DeviceFlow.clear(this);
         ui.removeCallbacks(pollTask);
         if (codePanel != null) codePanel.setVisibility(View.GONE);
         if (btnOauth != null) btnOauth.setEnabled(true);
@@ -385,7 +351,7 @@ public class LoginActivity extends AppCompatActivity {
                     return;
                 }
                 Accounts.add(app, token, u, type);
-                clearFlow();
+                DeviceFlow.clear(this);
                 if (destroyed) return;
                 if (Store.getToken(this).isEmpty()) {
                     // the Android Keystore refused to keep the token

@@ -35,6 +35,8 @@ public class LiveBoard extends LinearLayout {
         void onJob(JSONObject job);
 
         void onJobMenu(JSONObject job);
+
+        void onStep(JSONObject job, int number);
     }
 
     // state codes: 0 waiting, 1 running, 2 success, 3 failed, 4 skipped / cancelled
@@ -455,6 +457,10 @@ public class LiveBoard extends LinearLayout {
                 if (s == null) continue;
                 StepRow row = (StepRow) steps.getChildAt(i + 1);
                 row.bind(s, i > 0, i < n - 1);
+                final int number = s.optInt("number", i + 1);
+                row.setOnClickListener(v -> {
+                    if (listener != null && job != null) listener.onStep(job, number);
+                });
                 states[i] = row.st;
             }
             bar.set(states);

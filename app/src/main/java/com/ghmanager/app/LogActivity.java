@@ -1,22 +1,15 @@
 package com.ghmanager.app;
 
-import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
-import android.text.style.LeadingMarginSpan;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -67,117 +60,6 @@ public class LogActivity extends BaseRepoActivity {
         }
     }
 
-    /** Draws the line number in a fixed gutter and indents wrapped lines under the text, like the website. */
-    private static final class NumSpan implements LeadingMarginSpan {
-        private final String label;
-        private final int gutter;
-        private final int color;
-        private final int pad;
-
-        NumSpan(int no, int gutter, int color, int pad) {
-            this.label = String.valueOf(no);
-            this.gutter = gutter;
-            this.color = color;
-            this.pad = pad;
-        }
-
-        @Override
-        public int getLeadingMargin(boolean first) {
-            return gutter;
-        }
-
-        @Override
-        public void drawLeadingMargin(Canvas c, Paint p, int x, int dir, int top, int baseline, int bottom,
-                                      CharSequence text, int start, int end, boolean first, Layout layout) {
-            if (!first) return;
-            Paint q = new Paint(p);
-            q.setColor(color);
-            q.setFakeBoldText(false);
-            q.setStyle(Paint.Style.FILL);
-            q.setTextAlign(Paint.Align.RIGHT);
-            c.drawText(label, x + gutter - pad, baseline, q);
-        }
-    }
-
-    private final class Header {
-        final FrameLayout root;
-        final LiveBoard.Dot dot;
-        final TextView name;
-        final TextView time;
-        final ImageView arrow;
-        long start;
-        int code;
-
-        Header() {
-            root = new FrameLayout(LogActivity.this);
-            root.setPadding(Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 3),
-                    Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 3));
-            LinearLayout row = new LinearLayout(LogActivity.this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setMinimumHeight(Ui.dp(LogActivity.this, 46));
-            row.setPadding(Ui.dp(LogActivity.this, 8), 0, Ui.dp(LogActivity.this, 12), 0);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Ui.color(LogActivity.this, R.color.surface_high));
-            bg.setCornerRadius(Ui.dp(LogActivity.this, 10));
-            row.setBackground(bg);
-            dot = new LiveBoard.Dot(LogActivity.this, 7, 23);
-            row.addView(dot, new LinearLayout.LayoutParams(Ui.dp(LogActivity.this, 26),
-                    Ui.dp(LogActivity.this, 46)));
-            name = new TextView(LogActivity.this);
-            name.setSingleLine(true);
-            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            name.setTextSize(14f);
-            name.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-            LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            nl.setMarginStart(Ui.dp(LogActivity.this, 6));
-            row.addView(name, nl);
-            time = new TextView(LogActivity.this);
-            time.setTextSize(12f);
-            time.setTypeface(Typeface.MONOSPACE);
-            time.setTextDirection(View.TEXT_DIRECTION_LTR);
-            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            tl.setMarginEnd(Ui.dp(LogActivity.this, 8));
-            row.addView(time, tl);
-            arrow = new ImageView(LogActivity.this);
-            arrow.setImageResource(R.drawable.ic_arrow_down);
-            arrow.setColorFilter(Ui.color(LogActivity.this, R.color.text_hint));
-            row.addView(arrow, new LinearLayout.LayoutParams(Ui.dp(LogActivity.this, 20),
-                    Ui.dp(LogActivity.this, 20)));
-            root.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            root.setTag(this);
-        }
-
-        void bind(StepLog.Step s, boolean open) {
-            code = s.code;
-            start = s.start;
-            dot.set(s.code, false, false);
-            name.setText(s.name);
-            name.setTextColor(Ui.color(LogActivity.this, s.code == 1 ? R.color.info
-                    : s.code == 3 ? R.color.bad : s.code == 2 ? R.color.text_primary : R.color.text_secondary));
-            name.setTypeface(s.code == 1 || s.code == 3 ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-            arrow.setRotation(open ? 180f : 0f);
-            if (s.code == 1 && s.start > 0) {
-                time.setText(LiveBoard.clock(System.currentTimeMillis() - s.start));
-                time.setTextColor(Ui.color(LogActivity.this, R.color.info));
-            } else if (s.start > 0 && s.end >= s.start) {
-                time.setText(Fmt.duration(s.end - s.start));
-                time.setTextColor(Ui.color(LogActivity.this, R.color.text_hint));
-            } else {
-                time.setText("");
-            }
-        }
-
-        void tick() {
-            if (code == 1 && start > 0) {
-                time.setText(LiveBoard.clock(System.currentTimeMillis() - start));
-            }
-        }
-    }
-
     /** Each row holds a handful of lines, so no single view is ever taller than the GPU can draw. */
     private final BaseAdapter adapter = new BaseAdapter() {
         @Override
@@ -209,12 +91,12 @@ public class LogActivity extends BaseRepoActivity {
         public View getView(int i, View v, ViewGroup parent) {
             Item it = items.get(i);
             if (it.type == 0) {
-                Header h;
+                StepHeader h;
                 if (v == null) {
-                    h = new Header();
+                    h = new StepHeader(LogActivity.this);
                     v = h.root;
                 } else {
-                    h = (Header) v.getTag();
+                    h = (StepHeader) v.getTag();
                 }
                 h.bind(it.step, isOpen(it.step));
                 return v;
@@ -266,7 +148,7 @@ public class LogActivity extends BaseRepoActivity {
             if (list != null) {
                 for (int i = 0; i < list.getChildCount(); i++) {
                     Object tag = list.getChildAt(i).getTag();
-                    if (tag instanceof Header) ((Header) tag).tick();
+                    if (tag instanceof StepHeader) ((StepHeader) tag).tick();
                 }
             }
             ui.postDelayed(this, 1000);
@@ -280,6 +162,7 @@ public class LogActivity extends BaseRepoActivity {
         jobId = getIntent().getLongExtra("jobId", 0);
         active = getIntent().getBooleanExtra("active", false);
         wantedStep = getIntent().getIntExtra("step", 0);
+        if (wantedStep > 0) expanded.put(wantedStep, true);
         String jn = getIntent().getStringExtra("jobName");
         jobName = jn == null ? "" : jn;
         bindHeader(jobName.isEmpty() ? getString(R.string.view_log) : jobName, getString(R.string.log_title));
@@ -343,7 +226,7 @@ public class LogActivity extends BaseRepoActivity {
         if (mode == 1) return true;
         Boolean b = expanded.get(s.number);
         if (b != null) return b;
-        return s.code == 1 || s.code == 3 || s.number == wantedStep;
+        return s.code == 1 || s.code == 3;
     }
 
     private void buildChips() {
@@ -456,7 +339,7 @@ public class LogActivity extends BaseRepoActivity {
             if (l.text.length() == 0) b.append(' ');
             else b.append(l.text);
             if (j < to - 1) b.append('\n');
-            b.setSpan(new NumSpan(l.no, gutter, hint, pad), st, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            b.setSpan(new LineNumberSpan(l.no, gutter, hint, pad), st, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return b;
     }
@@ -519,7 +402,12 @@ public class LogActivity extends BaseRepoActivity {
     }
 
     private String plain(int m) {
-        String s = LogFmt.format(this, raw, m, 0).toString().trim();
+        StringBuilder b = new StringBuilder();
+        for (LogFmt.Line l : LogFmt.parse(this, raw)) {
+            if (m == 1 && !l.err) continue;
+            b.append(l.plain).append('\n');
+        }
+        String s = b.toString().trim();
         return s.length() > MAX_CLIP_CHARS ? s.substring(s.length() - MAX_CLIP_CHARS) : s;
     }
 
