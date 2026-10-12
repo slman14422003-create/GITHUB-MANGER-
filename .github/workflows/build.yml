@@ -55,6 +55,8 @@ jobs:
       version_code: ${{ steps.meta.outputs.version_code }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       # Looks for mistakes (broken XML, missing resources / activities, unbalanced code, leaked secrets),
       # repairs the safe ones in this build's workspace, and FAILS the run on anything it cannot repair.

@@ -1,0 +1,196 @@
+name: Verify toolchain and release
+
+# Runs right after "Toolchain auto-update" (or by hand). It audits the new versions (stable only, consistent,
+# published, old enough, actions pinned), checks that the branch touches nothing but toolchain files, proves
+# that the project still builds with them, merges the pull request and only then orders the release build.
+on:
+  workflow_run:
+    workflows: ['Toolchain auto-update']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to audit (empty = the default branch, no merge)'
+        type: string
+        default: ''
+      release:
+        description: 'Order the release build when the audit passes'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-release
+  cancel-in-progress: false
+
+env:
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+jobs:
+  gate:
+    name: Read the updater result
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.info.outputs.go }}
+      ref: ${{ steps.info.outputs.ref }}
+      pr: ${{ steps.info.outputs.pr }}
+    steps:
+      - name: Download the updater result
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: toolchain-update-info
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: handover
+
+      - name: Decide what to audit
+        id: info
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          IN_BRANCH: ${{ inputs.branch }}
+        run: |
+          GO=false; REF="$DEFAULT_BRANCH"; PR=""
+          if [ "$EVENT" = "workflow_run" ]; then
+            read -r CHANGED BRANCH PR < <(python3 -c "import json;d=json.load(open('handover/update-info.json'));print(str(d['changed']).lower(), d.get('branch') or '-', d.get('pr') or '-')")
+            [ "$PR" = "-" ] && PR=""
+            if [ "$CHANGED" = "true" ]; then GO=true; REF="$BRANCH"; fi
+          else
+            GO=true
+            [ -n "$IN_BRANCH" ] && REF="$IN_BRANCH"
+          fi
+          # only the default branch or a bot update branch may be audited (nothing else reaches the checkout)
+          if [ "$REF" != "$DEFAULT_BRANCH" ] && ! [[ "$REF" =~ ^toolchain/auto-update-[0-9]{8}(-[0-9]+)?$ ]]; then
+            echo "::error::Refusing to audit branch '$REF'"; exit 1
+          fi
+          # a manually chosen update branch must have an open pull request, so the release is only ordered after a merge
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$REF" != "$DEFAULT_BRANCH" ]; then
+            PR="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open --json number -q '.[0].number')"
+            [ -z "$PR" ] && { echo "::error::No open pull request for '$REF'"; exit 1; }
+          fi
+          if [ "$GO" != "true" ]; then echo "Nothing changed, nothing to verify."; fi
+          { echo "go=$GO"; echo "ref=$REF"; echo "pr=$PR"; } >> "$GITHUB_OUTPUT"
+
+  audit:
+    name: Audit versions and prove the build
+    needs: gate
+    if: ${{ needs.gate.outputs.go == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      REF: ${{ needs.gate.outputs.ref }}
+      PR: ${{ needs.gate.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.gate.outputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Only toolchain files may differ from the default branch
+        if: ${{ needs.gate.outputs.ref != github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          BAD="$(git diff --name-only "origin/$DEFAULT_BRANCH...HEAD" | grep -Ev '^(gradle/wrapper/gradle-wrapper\.properties|build\.gradle|app/build\.gradle|\.github/workflows/[^/]+\.ya?ml)$' || true)"
+          if [ -n "$BAD" ]; then
+            echo "::error title=Unexpected files::The update branch changes files outside the toolchain:"
+            echo "$BAD"
+            exit 1
+          fi
+
+      - name: Audit the pinned versions
+        id: audit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MIN_AGE_DAYS: '3'
+        run: |
+          cd tools
+          python3 verify_toolchain.py .. --emit
+
+      - name: Project doctor (read only)
+        run: python3 tools/doctor.py --report "$RUNNER_TEMP/doctor-report.md" .
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;${{ steps.audit.outputs.build_tools }}'
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: ${{ steps.audit.outputs.gradle }}
+          cache-cleanup: on-success
+
+      - name: Resolve every release dependency
+        run: gradle :app:dependencies --configuration releaseRuntimeClasspath --warning-mode all
+
+      - name: Build check with the new toolchain
+        run: gradle assembleDebug --stacktrace --warning-mode all
+
+      - name: Tell the pull request why the audit failed
+        if: ${{ failure() && needs.gate.outputs.pr != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
+            --body "The toolchain audit failed, so nothing was merged and no release was ordered. Details: $RUN_URL"
+
+  release:
+    name: Merge and order the release build
+    needs: [gate, audit]
+    if: ${{ needs.audit.result == 'success' && (github.event_name == 'workflow_run' || inputs.release) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ needs.gate.outputs.pr }}
+    steps:
+      - name: Merge the verified update
+        id: merge
+        run: |
+          MERGED=true
+          if [ -n "$PR" ]; then
+            if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --delete-branch \
+                 --subject "chore(toolchain): verified stable update [skip release]"; then
+              echo "Pull request #$PR merged."
+            else
+              # branch protection may demand more checks: queue the merge and stop here
+              gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --auto \
+                --subject "chore(toolchain): verified stable update [skip release]" || true
+              echo "::warning title=Not merged yet::Pull request #$PR could not be merged now. Merge it, then run Build APK."
+              MERGED=false
+            fi
+          fi
+          echo "merged=$MERGED" >> "$GITHUB_OUTPUT"
+
+      - name: Order the release build
+        if: steps.merge.outputs.merged == 'true'
+        run: |
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" \
+            -f build_type=release -f publish_release=true -f prerelease=false -f seal_apk=true
+          {
+            echo "## Release build ordered"
+            echo ""
+            echo "The audited toolchain is on \`$DEFAULT_BRANCH\`; the Build APK workflow was started for a release."
+          } >> "$GITHUB_STEP_SUMMARY"

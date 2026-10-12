@@ -79,6 +79,21 @@ final class Integrity {
         }
     }
 
+    /**
+     * An APK that claims to be this app (same package name) is installable only when it carries our own
+     * certificate. APKs of other packages (opened from the file manager) are not restricted here.
+     */
+    static boolean safeToInstall(Context c, java.io.File apk) {
+        try {
+            PackageInfo pi = c.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+            if (pi == null) return false;
+            if (!c.getPackageName().equals(pi.packageName)) return true;
+            return sameSigner(c, apk);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static String hex(Signature sig) throws Exception {
         byte[] d = MessageDigest.getInstance("SHA-256").digest(sig.toByteArray());
         StringBuilder sb = new StringBuilder();

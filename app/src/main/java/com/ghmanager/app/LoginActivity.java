@@ -305,6 +305,10 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void openGithub(String uri) {
+        if (!SafeUrl.github(uri)) {
+            Toast.makeText(this, R.string.no_browser, Toast.LENGTH_SHORT).show();
+            return;
+        }
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(uri)));
         } catch (Exception e) {

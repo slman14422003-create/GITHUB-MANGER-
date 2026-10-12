@@ -120,6 +120,10 @@ public final class Perms {
                     .show();
             return;
         }
+        if (!Integrity.safeToInstall(a, apk)) {
+            android.widget.Toast.makeText(a, R.string.install_rejected, android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
         try {
             Uri uri = FileProvider.getUriForFile(a, a.getPackageName() + ".files", apk);
             Intent i = new Intent(Intent.ACTION_VIEW);

@@ -93,4 +93,5 @@
     <string name="live_no_steps">بانتظار بدء الخطوات…</string>
     <string name="live_log">السجل</string>
     <string name="live_jobs">خط التنفيذ المباشر</string>
+    <string name="install_rejected">رُفض التثبيت: هذا الملف يحمل اسم التطبيق لكنه موقّع بشهادة مختلفة.</string>
 </resources>

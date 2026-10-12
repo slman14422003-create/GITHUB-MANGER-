@@ -280,6 +280,10 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void openUrl(String url) {
+        if (!SafeUrl.https(url)) {
+            toast(R.string.no_browser);
+            return;
+        }
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception e) {

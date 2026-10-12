@@ -1,0 +1,95 @@
+name: Toolchain auto-update
+
+# Every 15 days (1st and 16th of the month) and on demand: looks for newer STABLE versions of the build
+# tools (Gradle, Android Gradle Plugin, androidx libraries, Android build-tools, GitHub Actions), rewrites
+# the files that pin them and opens a pull request. The "Verify toolchain and release" workflow starts when
+# this one finishes, audits the result and orders the release build.
+on:
+  schedule:
+    - cron: '0 3 1,16 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toolchain-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update build toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Look for newer stable versions and rewrite the pinned files
+        id: upd
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPDATE_INFO_PATH: ${{ runner.temp }}/update-raw.json
+          UPDATE_REPORT_PATH: ${{ runner.temp }}/update-report.md
+        run: |
+          cd tools
+          python3 toolchain_update.py ..
+          cat "$UPDATE_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+          CHANGED="$(python3 -c "import json,sys;print('true' if json.load(open(sys.argv[1]))['changed'] else 'false')" "$UPDATE_INFO_PATH")"
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Push the update branch and open a pull request
+        id: pr
+        if: steps.upd.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ runner.temp }}/update-report.md
+        run: |
+          BRANCH="toolchain/auto-update-$(date -u +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore(toolchain): update build tools to the newest stable versions [skip release]"
+          git push --force-with-lease origin "$BRANCH"
+          PR="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"
+          if [ -z "$PR" ]; then
+            gh pr create --base "$DEFAULT_BRANCH" --head "$BRANCH" \
+              --title "Toolchain update ($(date -u +%Y-%m-%d))" --body-file "$REPORT"
+            PR="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+
+      # Hand-over to the verifier (it reads this file from the finished run)
+      - name: Record the result for the verifier
+        if: always()
+        env:
+          CHANGED: ${{ steps.upd.outputs.changed || 'false' }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          PR: ${{ steps.pr.outputs.pr }}
+        run: |
+          mkdir -p handover
+          python3 - <<'PY' > handover/update-info.json
+          import json, os
+          print(json.dumps({
+              "changed": os.environ.get("CHANGED") == "true" and bool(os.environ.get("BRANCH")),
+              "branch": os.environ.get("BRANCH", ""),
+              "pr": os.environ.get("PR", ""),
+          }))
+          PY
+          cat handover/update-info.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: toolchain-update-info
+          path: handover/update-info.json
+          retention-days: 7
