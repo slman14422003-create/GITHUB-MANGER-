@@ -103,7 +103,7 @@ jobs:
         if: ${{ needs.gate.outputs.ref != github.event.repository.default_branch }}
         run: |
           git fetch --no-tags origin "$DEFAULT_BRANCH"
-          BAD="$(git diff --name-only "origin/$DEFAULT_BRANCH...HEAD" | grep -Ev '^(gradle/wrapper/gradle-wrapper\.properties|build\.gradle|app/build\.gradle|\.github/workflows/[^/]+\.ya?ml)$' || true)"
+          BAD="$(git diff --name-only "origin/$DEFAULT_BRANCH...HEAD" | grep -Ev '^(gradle/wrapper/gradle-wrapper\.properties|gradle/toolchain\.properties|build\.gradle|app/build\.gradle|\.github/workflows/[^/]+\.ya?ml)$' || true)"
           if [ -n "$BAD" ]; then
             echo "::error title=Unexpected files::The update branch changes files outside the toolchain:"
             echo "$BAD"
@@ -115,6 +115,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           MIN_AGE_DAYS: '3'
+          REQUIRE_PINNED: ${{ secrets.TOOLCHAIN_PAT != '' && '1' || '0' }}
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           cd tools
           python3 verify_toolchain.py .. --emit

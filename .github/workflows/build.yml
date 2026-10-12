@@ -135,6 +135,16 @@ jobs:
           echo "APP_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "Version: $TAG (code $VERSION_CODE) — publish release: $PUBLISH"
 
+      - name: Read the pinned toolchain versions
+        id: tc
+        run: |
+          G="$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' gradle/wrapper/gradle-wrapper.properties | head -n1)"
+          B="$(grep -oP '^buildTools=\K[0-9.]+' gradle/toolchain.properties | head -n1)"
+          [ -z "$G" ] && { echo "::error::Gradle version not found"; exit 1; }
+          [ -z "$B" ] && B="36.0.0"
+          echo "gradle=$G" >> "$GITHUB_OUTPUT"
+          echo "build_tools=$B" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -143,11 +153,11 @@ jobs:
       - name: Setup Android SDK (API 36 / Android 16)
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-36 build-tools;36.0.0'
+          packages: 'platforms;android-36 build-tools;${{ steps.tc.outputs.build_tools }}'
 
       - uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: '8.14.3'
+          gradle-version: ${{ steps.tc.outputs.gradle }}
           cache-cleanup: on-success
 
       - name: Prepare release signing

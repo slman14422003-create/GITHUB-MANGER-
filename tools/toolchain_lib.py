@@ -24,6 +24,7 @@ ROOT_AGP = re.compile(r"com\.android\.application'\s+version\s+'([\d.]+)'")
 DEP_APPCOMPAT = re.compile(r"androidx\.appcompat:appcompat:([\d.]+)")
 DEP_SPLASH = re.compile(r"androidx\.core:core-splashscreen:([\d.]+)")
 DEP_KOTLIN = re.compile(r"kotlin-bom:([\d.]+)")
+TOOLS_PROP = re.compile(r"^buildTools=([\d.]+)", re.M)
 
 
 def get(url, github=False):
@@ -108,6 +109,7 @@ def project_files(root):
     root = Path(root)
     return {
         "wrapper": root / "gradle/wrapper/gradle-wrapper.properties",
+        "toolchain": root / "gradle/toolchain.properties",
         "root_gradle": root / "build.gradle",
         "app_gradle": root / "app/build.gradle",
         "workflows": sorted((root / ".github/workflows").glob("*.y*ml")),
@@ -126,6 +128,8 @@ def current_versions(root):
         m = rx.search(app)
         out[key] = m.group(1) if m else None
     yaml_gradle, tools = set(), set()
+    if f["toolchain"].exists():
+        tools.update(TOOLS_PROP.findall(read(f["toolchain"])))
     for w in f["workflows"]:
         t = read(w)
         yaml_gradle.update(YAML_GRADLE.findall(t))

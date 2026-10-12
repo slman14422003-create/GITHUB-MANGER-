@@ -6,7 +6,7 @@ Hard failures (exit code 1):
   * Gradle in the wrapper and in the workflows disagree
   * a version that does not exist in its official repository (or Gradle's list of stable releases)
   * the Gradle wrapper checksum is missing or differs from the published one
-  * a GitHub Action that is not pinned to a full commit SHA
+  * a GitHub Action that is not pinned to a full commit SHA (only when REQUIRE_PINNED=1)
   * a release younger than MIN_AGE_DAYS (default 3): brand new releases are the ones that get pulled or abused
 
 Usage: verify_toolchain.py [project_root] [--emit]    (env OFFLINE=1 skips the network checks)
@@ -24,6 +24,7 @@ ROOT = Path(args[0] if args else ".").resolve()
 EMIT = "--emit" in sys.argv
 OFFLINE = os.environ.get("OFFLINE") == "1"
 MIN_AGE = float(os.environ.get("MIN_AGE_DAYS", "3"))
+REQUIRE_PINNED = os.environ.get("REQUIRE_PINNED") == "1"
 
 rows = []
 failed = False
@@ -59,7 +60,10 @@ def main():
                 continue
             if not L.SHA40.match(m.group("ref")):
                 unpinned.append("%s: %s@%s" % (w.name, m.group("path"), m.group("ref")))
-    check("every GitHub Action is pinned to a commit SHA", not unpinned, "; ".join(unpinned[:6]))
+    if REQUIRE_PINNED:
+        check("every GitHub Action is pinned to a commit SHA", not unpinned, "; ".join(unpinned[:6]))
+    elif unpinned:
+        rows.append(("GitHub Actions pinned to a commit SHA (advisory)", True, "%d not pinned" % len(unpinned)))
 
     wrapper = L.read(files["wrapper"])
     m = re.search(r"distributionSha256Sum=([0-9a-f]{64})", wrapper)

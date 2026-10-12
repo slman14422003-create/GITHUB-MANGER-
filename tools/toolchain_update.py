@@ -20,6 +20,8 @@ from pathlib import Path
 import toolchain_lib as L
 
 ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+# Workflow files can only be pushed with a token that has the "workflow" scope; the default GITHUB_TOKEN cannot.
+TOUCH_WORKFLOWS = os.environ.get("UPDATE_WORKFLOWS") == "1"
 changes = []
 notes = []
 
@@ -68,8 +70,9 @@ def update_gradle(files, cur):
         record("Gradle", cur["gradle"], latest)
     elif new != text:
         record("Gradle wrapper checksum", "-", "pinned")
-    for w in files["workflows"]:
-        replace_in(w, L.YAML_GRADLE, latest, "Gradle version in " + w.name)
+    if TOUCH_WORKFLOWS:
+        for w in files["workflows"]:
+            replace_in(w, L.YAML_GRADLE, latest, "Gradle version in " + w.name)
 
 
 def update_libs(files, cur):
@@ -92,13 +95,18 @@ def update_build_tools(files, cur):
     if not cur["build_tools"]:
         return
     stable = L.stable_build_tools(L.get(L.SDK_REPO).decode("utf-8"))
-    for w in files["workflows"]:
-        text = L.read(w)
-        for old in set(L.YAML_BUILD_TOOLS.findall(text)):
-            latest = L.newest_stable(stable, old)
-            if latest != old:
-                Path(w).write_text(L.read(w).replace("build-tools;" + old, "build-tools;" + latest), encoding="utf-8")
-                record("Build-tools in " + w.name, old, latest)
+    prop = files["toolchain"]
+    if prop.exists():
+        old = L.TOOLS_PROP.search(L.read(prop))
+        if old:
+            replace_in(prop, L.TOOLS_PROP, L.newest_stable(stable, old.group(1)), "Android build-tools")
+    if TOUCH_WORKFLOWS:
+        for w in files["workflows"]:
+            for old in set(L.YAML_BUILD_TOOLS.findall(L.read(w))):
+                latest = L.newest_stable(stable, old)
+                if latest != old:
+                    Path(w).write_text(L.read(w).replace("build-tools;" + old, "build-tools;" + latest), encoding="utf-8")
+                    record("Build-tools in " + w.name, old, latest)
 
 
 def latest_release(repo, major):
@@ -179,8 +187,14 @@ def main():
     if not cur["gradle"]:
         print("Gradle version not found in the wrapper properties", file=sys.stderr)
         return 1
-    for step in (lambda: update_gradle(files, cur), lambda: update_libs(files, cur),
-                 lambda: update_build_tools(files, cur), lambda: pin_actions(files)):
+    steps = [lambda: update_gradle(files, cur), lambda: update_libs(files, cur),
+             lambda: update_build_tools(files, cur)]
+    if TOUCH_WORKFLOWS:
+        steps.append(lambda: pin_actions(files))
+    else:
+        notes.append("GitHub Actions were not touched: add a repository secret TOOLCHAIN_PAT (a token with the "
+                     "'workflow' scope) to let the updater pin and update them.")
+    for step in steps:
         try:
             step()
         except Exception as e:

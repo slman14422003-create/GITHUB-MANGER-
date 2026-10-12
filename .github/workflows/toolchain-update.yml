@@ -26,16 +26,22 @@ jobs:
       pull-requests: write
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      # Optional secret TOOLCHAIN_PAT: a token with the "workflow" scope. Without it the updater changes only
+      # Gradle, AGP, libraries and build-tools; with it GitHub Actions are updated and pinned as well.
+      PUSH_TOKEN: ${{ secrets.TOOLCHAIN_PAT || github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
+          token: ${{ secrets.TOOLCHAIN_PAT || github.token }}
 
       - name: Look for newer stable versions and rewrite the pinned files
         id: upd
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          UPDATE_WORKFLOWS: ${{ secrets.TOOLCHAIN_PAT != '' && '1' || '0' }}
           UPDATE_INFO_PATH: ${{ runner.temp }}/update-raw.json
           UPDATE_REPORT_PATH: ${{ runner.temp }}/update-report.md
         run: |
@@ -49,14 +55,14 @@ jobs:
         id: pr
         if: steps.upd.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.TOOLCHAIN_PAT || github.token }}
           REPORT: ${{ runner.temp }}/update-report.md
         run: |
           BRANCH="toolchain/auto-update-$(date -u +%Y%m%d)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add -A
+          git add gradle build.gradle app/build.gradle .github/workflows
           git commit -m "chore(toolchain): update build tools to the newest stable versions [skip release]"
           git push --force-with-lease origin "$BRANCH"
           PR="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"

@@ -13,3 +13,5 @@ keystore.properties
 signing/
 /.cxx
 /captures
+__pycache__/
+*.pyc

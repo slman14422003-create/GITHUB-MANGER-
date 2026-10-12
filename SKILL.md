@@ -44,6 +44,7 @@ description: Progress log of the GITHUB-MANGER Android app (Java/Views, com.ghma
 # Workflows
 - toolchain-update.yml: cron 1st and 16th of each month (about every 15 days) plus manual run. tools/toolchain_update.py moves Gradle, AGP, androidx libs, Kotlin BOM patch, build-tools and Actions to the newest STABLE versions of the same major line, pins Actions by SHA, writes the wrapper checksum, pushes toolchain/auto-update-YYYYMMDD and opens a PR; result handed over as artifact toolchain-update-info.
 - verify-release.yml: starts when the updater finishes (or by hand). tools/verify_toolchain.py checks stable-only versions, Gradle consistency, existence in the official repositories, wrapper checksum, SHA pinning and a 3-day minimum release age; the branch may only touch toolchain files; dependencies resolve and assembleDebug builds; then the PR is merged ([skip release]) and build.yml is dispatched for a release.
+- GITHUB_TOKEN can never push changes to .github/workflows (GitHub refuses without the "workflows" permission). So build-tools live in gradle/toolchain.properties and Gradle comes from the wrapper; build.yml reads both. The updater touches workflow files (Actions updates, SHA pinning) only when the optional secret TOOLCHAIN_PAT (token with the workflow scope) exists; the verifier then also requires SHA pinning (REQUIRE_PINNED).
 - Needs once in the repo settings: Actions > General > "Allow GitHub Actions to create and approve pull requests". compileSdk/targetSdk and major version jumps stay manual.
 
 # Structure
