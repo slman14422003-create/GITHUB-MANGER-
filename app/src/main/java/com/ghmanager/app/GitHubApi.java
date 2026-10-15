@@ -1019,6 +1019,24 @@ public class GitHubApi {
         request("PUT", repo(o, r) + "/pulls/" + number + "/merge", b);
     }
 
+    // ------------------------------------------------------------------ code search / notifications
+
+    public JSONObject searchCode(String o, String r, String q, int page, int perPage) throws Exception {
+        return obj("/search/code?q=" + qe(q + " repo:" + o + "/" + r) + "&per_page=" + perPage + "&page=" + page);
+    }
+
+    public JSONArray listNotifications(boolean all, int page, int perPage) throws Exception {
+        return arr("/notifications?all=" + all + "&per_page=" + perPage + "&page=" + page);
+    }
+
+    public void markNotificationRead(String id) throws Exception {
+        request("PATCH", "/notifications/threads/" + seg(id), null);
+    }
+
+    public void markAllNotificationsRead() throws Exception {
+        request("PUT", "/notifications", new JSONObject());
+    }
+
     // ------------------------------------------------------------------ secrets (encrypted writes)
 
     public JSONObject secretsPublicKey(String o, String r) throws Exception {

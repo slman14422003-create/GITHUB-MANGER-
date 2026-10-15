@@ -78,6 +78,8 @@ public class SettingsActivity extends BaseRepoActivity {
 
         // ---- tools
         content.addView(Ui.sectionTitle(this, getString(R.string.app_tools)));
+        addRow(new Row(R.drawable.ic_info, true, getString(R.string.nt_title), getString(R.string.nt_sub_row), false, true),
+                v -> startActivity(new Intent(this, NotificationsActivity.class)));
         addRow(new Row(R.drawable.ic_folder, true, getString(R.string.fm_title), null, false, true),
                 v -> startActivity(new Intent(this, FileManagerActivity.class)));
         addRow(new Row(R.drawable.ic_shield, true, getString(R.string.perm_title), null, false, true),

@@ -29,6 +29,7 @@ public class EditorActivity extends BaseRepoActivity {
     private boolean suppress = false;
     private boolean editable = true;
     private EditText editor;
+    private CodeTools tools;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,6 +42,7 @@ public class EditorActivity extends BaseRepoActivity {
         bindHeader(name, path);
         statusView = findViewById(R.id.status);
         editor = findViewById(R.id.editor);
+        tools = new CodeTools(this);
 
         editor.addTextChangedListener(new TextWatcher() {
             @Override
@@ -69,6 +71,10 @@ public class EditorActivity extends BaseRepoActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                if (tools.findVisible()) {
+                    tools.hideFind();
+                    return;
+                }
                 if (dirty) {
                     confirm(getString(R.string.discard_title), getString(R.string.discard_msg),
                             R.string.discard, () -> {
@@ -94,11 +100,13 @@ public class EditorActivity extends BaseRepoActivity {
         editor.setText(t);
         suppress = false;
         dirty = false;
+        tools.onTextLoaded();
     }
 
     private void lockEditor(int msgRes) {
         editable = false;
         editor.setEnabled(false);
+        tools.setEditable(false);
         btnA1.setVisibility(View.GONE);
         showStatus(getString(msgRes));
     }
@@ -187,12 +195,17 @@ public class EditorActivity extends BaseRepoActivity {
     }
 
     private void moreMenu() {
-        String[] items = {getString(R.string.copy_content), getString(R.string.download),
+        String[] items = {getString(R.string.ed_find), getString(R.string.ed_goto),
+                getString(R.string.copy_content), getString(R.string.download),
                 getString(R.string.open_in_github)};
         choose(getString(R.string.more), items, (d, which) -> {
             if (which == 0) {
-                copy("file", editor.getText().toString());
+                tools.toggleFind();
             } else if (which == 1) {
+                tools.goToDialog();
+            } else if (which == 2) {
+                copy("file", editor.getText().toString());
+            } else if (which == 3) {
                 if (isNew) {
                     toast(R.string.save_first);
                     return;

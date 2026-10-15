@@ -132,6 +132,10 @@ public class RepoHomeActivity extends BaseRepoActivity {
                 getString(R.string.commits_sub), false, true),
                 v -> startActivity(repoIntent(CommitsActivity.class)));
 
+        addRow(new Row(R.drawable.ic_search, true, getString(R.string.cs_title),
+                getString(R.string.cs_sub), false, true),
+                v -> startActivity(repoIntent(CodeSearchActivity.class)));
+
         Row issues = new Row(R.drawable.ic_issue, true, getString(R.string.issues_prs),
                 getString(R.string.issues_sub), false, true);
         int open = repoJson.optInt("open_issues_count");

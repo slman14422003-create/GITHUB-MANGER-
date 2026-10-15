@@ -28,6 +28,7 @@ import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
 import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
@@ -44,6 +45,9 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -81,7 +85,7 @@ import java.util.zip.ZipOutputStream;
 public class FileManagerActivity extends AppCompatActivity {
 
     private static final int SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2, SORT_TYPE = 3;
-    private static final int M_DIR = 0, M_SEARCH = 1, M_FAV = 2, M_LARGEST = 3;
+    private static final int M_DIR = 0, M_SEARCH = 1, M_FAV = 2, M_LARGEST = 3, M_RECENT = 4;
     private static final int T_DIR = 0, T_IMG = 1, T_VID = 2, T_AUD = 3, T_ARC = 4, T_APK = 5,
             T_TXT = 6, T_PDF = 7, T_OTHER = 8;
     private static final int MAX_SEARCH = 300;
@@ -455,6 +459,9 @@ public class FileManagerActivity extends AppCompatActivity {
             case M_LARGEST:
                 showLargest();
                 break;
+            case M_RECENT:
+                showRecent();
+                break;
             default:
                 load();
                 break;
@@ -612,6 +619,45 @@ public class FileManagerActivity extends AppCompatActivity {
         }
     }
 
+    private void showRecent() {
+        final long my = ++gen;
+        final File dir = cur;
+        loading(true);
+        io.execute(() -> {
+            PriorityQueue<Entry> heap = new PriorityQueue<>(MAX_LARGEST + 1, (a, b) -> Long.compare(a.mod, b.mod));
+            int[] budget = {250000};
+            walkRecent(dir, heap, budget, my, 0);
+            final List<Entry> res = new ArrayList<>(heap);
+            Collections.sort(res, (a, b) -> Long.compare(b.mod, a.mod));
+            post(() -> {
+                if (my != gen) return;
+                listDenied = false;
+                setShown(res);
+                loading(false);
+            });
+        });
+    }
+
+    private void walkRecent(File dir, PriorityQueue<Entry> heap, int[] budget, long my, int depth) {
+        if (my != gen || budget[0] <= 0 || depth > 20) return;
+        File[] arr = dir.listFiles();
+        if (arr == null) return;
+        for (File f : arr) {
+            if (my != gen || budget[0] <= 0) return;
+            if (!showHidden && f.getName().startsWith(".")) continue;
+            budget[0]--;
+            if (f.isDirectory()) {
+                if (!isLink(f)) walkRecent(f, heap, budget, my, depth + 1);
+            } else {
+                long m = f.lastModified();
+                if (heap.size() < MAX_LARGEST || m > heap.peek().mod) {
+                    heap.add(new Entry(f));
+                    if (heap.size() > MAX_LARGEST) heap.poll();
+                }
+            }
+        }
+    }
+
     private void setShown(List<Entry> list) {
         shown.clear();
         shown.addAll(list);
@@ -663,6 +709,10 @@ public class FileManagerActivity extends AppCompatActivity {
                 break;
             case M_LARGEST:
                 titleView.setText(R.string.fm_largest);
+                setSubtitle(cur.getAbsolutePath());
+                break;
+            case M_RECENT:
+                titleView.setText(R.string.fm_recent);
                 setSubtitle(cur.getAbsolutePath());
                 break;
             default:
@@ -809,6 +859,14 @@ public class FileManagerActivity extends AppCompatActivity {
             refresh();
         });
         placesRow.addView(big);
+
+        TextView recent = Ui.chip(this, getString(R.string.fm_recent), mode == M_RECENT);
+        recent.setOnClickListener(v -> {
+            clearSelectionQuiet();
+            mode = M_RECENT;
+            refresh();
+        });
+        placesRow.addView(recent);
     }
 
     private void addPlace(String label, final File dir) {
@@ -1335,6 +1393,7 @@ public class FileManagerActivity extends AppCompatActivity {
         }
         add(labels, ids, getString(fav ? R.string.fm_unfavorite : R.string.fm_favorite), 10);
         add(labels, ids, getString(R.string.fm_copy_path), 11);
+        add(labels, ids, getString(R.string.fm_gh_upload), 13);
         add(labels, ids, getString(R.string.delete), 12);
         new Dlg(this).setTitle(e.name)
                 .setItems(labels.toArray(new String[0]), (d, which) -> {
@@ -1376,6 +1435,9 @@ public class FileManagerActivity extends AppCompatActivity {
                         case 11:
                             copyText(f.getAbsolutePath());
                             break;
+                        case 13:
+                            uploadToGithub(one);
+                            break;
                         default:
                             confirmDelete(one);
                             break;
@@ -1405,6 +1467,7 @@ public class FileManagerActivity extends AppCompatActivity {
         }
         add(labels, ids, getString(allFav ? R.string.fm_unfavorite : R.string.fm_favorite), 7);
         if (single) add(labels, ids, getString(R.string.fm_copy_path), 8);
+        add(labels, ids, getString(R.string.fm_gh_upload), 13);
 
         new Dlg(this).setTitle(getString(R.string.fm_selected_n, files.size()))
                 .setItems(labels.toArray(new String[0]), (d, which) -> {
@@ -1433,11 +1496,96 @@ public class FileManagerActivity extends AppCompatActivity {
                         case 7:
                             toggleFav(files, allFav);
                             break;
+                        case 13:
+                            uploadToGithub(files);
+                            break;
                         default:
                             copyText(one.getAbsolutePath());
                             break;
                     }
                 }).show();
+    }
+
+    // ------------------------------------------------------------------ upload straight to a repository
+
+    private void uploadToGithub(final List<File> files) {
+        if (files.isEmpty()) return;
+        JSONArray repos = RepoCache.load(this);
+        if (repos == null || repos.length() == 0 || Store.getToken(this) == null) {
+            toast(R.string.fm_gh_no_repos);
+            return;
+        }
+        final List<JSONObject> list = new ArrayList<>();
+        final List<String> names = new ArrayList<>();
+        for (int i = 0; i < repos.length(); i++) {
+            JSONObject r = repos.optJSONObject(i);
+            if (r == null || r.optString("full_name").indexOf('/') <= 0) continue;
+            list.add(r);
+            names.add(r.optString("full_name"));
+        }
+        if (list.isEmpty()) {
+            toast(R.string.fm_gh_no_repos);
+            return;
+        }
+        new Dlg(this).setTitle(R.string.fm_gh_pick_repo)
+                .setItems(names.toArray(new String[0]), (d, which) -> uploadDialog(files, list.get(which)))
+                .show();
+    }
+
+    private void uploadDialog(final List<File> files, JSONObject r) {
+        final String full = r.optString("full_name");
+        final int slash = full.indexOf('/');
+        final String owner = full.substring(0, slash);
+        final String name = full.substring(slash + 1);
+        String def = r.optString("default_branch", "main");
+        if (def.isEmpty() || "null".equals(def)) def = "main";
+
+        boolean anyDir = false;
+        for (File f : files) if (f.isDirectory()) anyDir = true;
+
+        LinearLayout box = Ui.box(this);
+        final EditText branch = Ui.edit(this, getString(R.string.branch_label), def);
+        branch.setTextDirection(View.TEXT_DIRECTION_LTR);
+        final EditText target = Ui.edit(this, getString(R.string.target_folder), "");
+        target.setTextDirection(View.TEXT_DIRECTION_LTR);
+        final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
+        final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
+        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, true);
+        box.addView(Ui.field(this, getString(R.string.branch_label), branch));
+        box.addView(Ui.field(this, getString(R.string.target_folder), target));
+        box.addView(Ui.field(this, getString(R.string.commit_message), msg));
+        if (anyDir) {
+            box.addView(includeRoot);
+            box.addView(skipJunk);
+        }
+        final boolean hasDir = anyDir;
+
+        new Dlg(this)
+                .setTitle(full)
+                .setView(box)
+                .setPositiveButton(R.string.upload, (d, w) -> {
+                    String b = branch.getText().toString().trim();
+                    if (b.isEmpty()) b = "main";
+                    String base = target.getText().toString().trim().replaceAll("^/+|/+$", "");
+                    String m = msg.getText().toString().trim();
+                    if (m.isEmpty()) m = getString(R.string.default_commit);
+                    GitHubApi api = new GitHubApi(Store.getToken(this));
+                    Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, name),
+                            "upload:" + owner + "/" + name,
+                            TransferTasks.upload(api, owner, name, b, base, m, new ArrayList<>(files),
+                                    !hasDir || includeRoot.isChecked(), hasDir && skipJunk.isChecked()),
+                            (job, ok, text) -> {
+                                String first = text == null ? "" : text;
+                                int nl = first.indexOf('\n');
+                                if (nl > 0) first = first.substring(0, nl);
+                                Toast.makeText(job.app, ok ? first
+                                        : job.app.getString(R.string.tr_failed) + ": " + first, Toast.LENGTH_LONG).show();
+                            });
+                    Toast.makeText(this, R.string.tr_started_bg, Toast.LENGTH_LONG).show();
+                    clearSelection();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     private static void add(List<String> labels, List<Integer> ids, String l, int id) {

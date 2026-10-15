@@ -4,7 +4,7 @@
     <string name="tr_channel_done">Finished tasks</string>
     <string name="tr_cancel">Cancel</string>
     <string name="tr_n_running">%1$d tasks running</string>
-    <string name="tr_started_bg">Started in the background. It keeps going even if you leave the app. Follow it in the notifications.</string>
+    <string name="tr_started_bg">Started in the background. It keeps going even if you leave the app. Follow it from the uploads button in the top bar or in the notifications.</string>
     <string name="tr_done">Task finished</string>
     <string name="tr_failed">Task failed</string>
     <string name="tr_download_title">Downloading: %1$s</string>
@@ -23,4 +23,11 @@
     <string name="dl_ask_location_sub">Off: everything is saved automatically to Download/GitHubManager/repo-name</string>
     <string name="dl_open_folder">Open the downloads folder</string>
     <string name="fm_github">GitHub</string>
+    <string name="tr_btn">Uploads and downloads</string>
+    <string name="tr_panel_title">Uploads</string>
+    <string name="tr_running_section">Running now</string>
+    <string name="tr_recent_section">Recent</string>
+    <string name="tr_none">No transfers right now</string>
+    <string name="tr_clear">Clear history</string>
+    <string name="tr_cancel_all">Cancel all</string>
 </resources>

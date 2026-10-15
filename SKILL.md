@@ -55,3 +55,14 @@ description: Progress log of the GITHUB-MANGER Android app (Java/Views, com.ghma
 # Next ideas
 - Collapsible ##[group] sections inside a step.
 - Build and test on a device: no Android SDK was available when these changes were written.
+
+# Session: top-bar transfers, editor, developer tools
+- TransferDock (rewritten): no more floating card at the bottom. Every screen gets a round "uploads" button in its header (inserted before btnRefresh, found through R.id.btnRefresh; floats in the top corner on a screen without the shared header). A ring around it shows the average progress (spinning while sizes are unknown), a badge counts parallel jobs, after the last job the ring keeps the result colour. Tap opens a panel under the header: running rows (percent, size, speed, time left, cancel) and recent results (tap opens the file or installer); Back closes it. Transfers.history() keeps the last 20 finished jobs of the session (in memory only).
+- Editors (EditorActivity, FileEditActivity share activity_editor.xml): the EditText (CodeEditText) now lives inside one ScrollView, so a drag or fling is handled by a single scroller; before, the EditText scrolled itself and cut the scroll. CodeTools adds: symbol bar, find and replace (literal, case toggle, highlight span, replace all), go to line, live line/column readout; CodeEditText keeps the previous line's indentation on Enter. Reached from the "more" menu of both editors; Back closes the find bar first.
+- GitHub: CodeSearchActivity (search/code in one repository, opens a hit in the editor; row in the repository home) and NotificationsActivity (unread / all, mark one or all as read, opens the issue or pull request; row in Settings > tools). The token scope "repo" already covers the notifications API.
+- File manager: "Recent" chip (newest files under the current folder, same walker as "Largest"); "Upload to GitHub" in the item menu and the selection menu: pick a repository from RepoCache, branch, target folder, commit message, then the normal background upload (shows in the top-bar button).
+- Rules from the owner: no README files; source files carry no Arabic text (Arabic only in res/values strings, English in res/values-en); write this progress file after every task.
+
+# Not verified
+- No Android SDK in the authoring environment: Java was only syntax-parsed and every resource reference cross-checked by script. Build and run on a device; first things to check: the header button on all screens, the panel position under the header, scrolling and typing in both editors with a large file, find and replace on Arabic and English text.
+

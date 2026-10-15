@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ed_find">Find and replace</string>
+    <string name="ed_goto">Go to line</string>
+    <string name="ed_goto_hint">Line number</string>
+    <string name="ed_info">Ln %1$d, Col %2$d · %3$d lines</string>
+    <string name="ed_find_hint">Find</string>
+    <string name="ed_replace_hint">Replace with</string>
+    <string name="ed_next">Next</string>
+    <string name="ed_prev">Previous</string>
+    <string name="ed_replace">Replace</string>
+    <string name="ed_replace_all">Replace all</string>
+    <string name="ed_matches">%1$d of %2$d</string>
+    <string name="ed_no_match">No matches</string>
+    <string name="ed_replaced_n">Replaced %d</string>
+    <string name="ed_match_case">Aa</string>
+    <string name="ed_close">Close</string>
+</resources>

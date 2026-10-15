@@ -4,7 +4,7 @@
     <string name="tr_channel_done">اكتمال العمليات</string>
     <string name="tr_cancel">إلغاء</string>
     <string name="tr_n_running">%1$d عمليات جارية</string>
-    <string name="tr_started_bg">بدأت العملية في الخلفية، وتكمل حتى لو خرجت من التطبيق. تابعها من الإشعارات.</string>
+    <string name="tr_started_bg">بدأت العملية في الخلفية وتكمل حتى لو خرجت من التطبيق. تابعها من زر عمليات الرفع في الشريط العلوي أو من الإشعارات.</string>
     <string name="tr_done">اكتملت العملية</string>
     <string name="tr_failed">فشلت العملية</string>
     <string name="tr_download_title">تحميل: %1$s</string>
@@ -23,4 +23,11 @@
     <string name="dl_ask_location_sub">مغلق: يُحفظ كل شيء تلقائياً في Download/GitHubManager/اسم-المستودع</string>
     <string name="dl_open_folder">فتح مجلد التحميلات</string>
     <string name="fm_github">GitHub</string>
+    <string name="tr_btn">عمليات الرفع والتحميل</string>
+    <string name="tr_panel_title">عمليات الرفع</string>
+    <string name="tr_running_section">جارية الآن</string>
+    <string name="tr_recent_section">الأخيرة</string>
+    <string name="tr_none">لا توجد عمليات الآن</string>
+    <string name="tr_clear">مسح السجل</string>
+    <string name="tr_cancel_all">إلغاء الكل</string>
 </resources>

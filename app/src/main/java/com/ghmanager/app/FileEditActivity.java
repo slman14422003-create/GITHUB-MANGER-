@@ -34,6 +34,7 @@ public class FileEditActivity extends AppCompatActivity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private File file;
     private EditText editor;
+    private CodeTools tools;
     private View loadingBar;
     private boolean dirty = false;
     private boolean suppress = false;
@@ -58,12 +59,19 @@ public class FileEditActivity extends AppCompatActivity {
         loadingBar = findViewById(R.id.loading);
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);
         editor = findViewById(R.id.editor);
+        tools = new CodeTools(this);
 
         ImageButton save = findViewById(R.id.btnA1);
         save.setImageResource(R.drawable.ic_check);
         save.setContentDescription(getString(R.string.save));
         save.setVisibility(View.VISIBLE);
         save.setOnClickListener(v -> save());
+
+        ImageButton more = findViewById(R.id.btnA2);
+        more.setImageResource(R.drawable.ic_more);
+        more.setContentDescription(getString(R.string.more));
+        more.setVisibility(View.VISIBLE);
+        more.setOnClickListener(v -> moreMenu());
 
         ImageButton reload = findViewById(R.id.btnRefresh);
         reload.setOnClickListener(v -> {
@@ -89,6 +97,10 @@ public class FileEditActivity extends AppCompatActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                if (tools.findVisible()) {
+                    tools.hideFind();
+                    return;
+                }
                 if (dirty) {
                     confirmDiscard(() -> {
                         dirty = false;
@@ -154,12 +166,40 @@ public class FileEditActivity extends AppCompatActivity {
                 dirty = false;
                 editable = file.canWrite();
                 editor.setEnabled(true);
+                tools.setEditable(editable);
+                tools.onTextLoaded();
                 if (!editable) {
                     editor.setKeyListener(null);
                     Toast.makeText(this, R.string.fm_read_only, Toast.LENGTH_SHORT).show();
                 }
             });
         });
+    }
+
+    private void moreMenu() {
+        CharSequence[] items = {getString(R.string.ed_find), getString(R.string.ed_goto),
+                getString(R.string.copy_content)};
+        new Dlg(this).setTitle(R.string.more).setItems(items, (d, which) -> {
+            if (which == 0) {
+                tools.toggleFind();
+            } else if (which == 1) {
+                tools.goToDialog();
+            } else {
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    android.content.ClipData clip = android.content.ClipData.newPlainText("file",
+                            Redact.text(editor.getText().toString()));
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        android.os.PersistableBundle pb = new android.os.PersistableBundle();
+                        pb.putBoolean("android.content.extra.IS_SENSITIVE", true);
+                        clip.getDescription().setExtras(pb);
+                    }
+                    cm.setPrimaryClip(clip);
+                    Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show();
+                }
+            }
+        }).show();
     }
 
     private void save() {

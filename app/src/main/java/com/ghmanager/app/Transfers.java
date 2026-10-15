@@ -70,6 +70,8 @@ public final class Transfers {
         public volatile String message = "";
         /** What a tap on the final notification opens (a folder, the installer ...). */
         public volatile Intent openIntent;
+        /** Wall clock time the job ended (0 while running). */
+        public volatile long endedAt;
 
         Job(Context app, int id, String title, String tag) {
             this.app = app;
@@ -159,6 +161,8 @@ public final class Transfers {
     private static final AtomicInteger FINISHED = new AtomicInteger(0);
     private static final CopyOnWriteArrayList<Job> JOBS = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<Listener> LISTENERS = new CopyOnWriteArrayList<>();
+    private static final CopyOnWriteArrayList<Job> HISTORY = new CopyOnWriteArrayList<>();
+    private static final int HISTORY_MAX = 20;
     private static final ExecutorService POOL = Executors.newFixedThreadPool(2);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
@@ -191,6 +195,11 @@ public final class Transfers {
         FINISHED.incrementAndGet();
         job.message = msg == null ? "" : msg;
         job.state = cancelled ? 3 : ok ? 1 : 2;
+        job.endedAt = System.currentTimeMillis();
+        if (!cancelled) {
+            HISTORY.add(0, job);
+            while (HISTORY.size() > HISTORY_MAX) HISTORY.remove(HISTORY.size() - 1);
+        }
         TransferService.finished(job.app, job, ok, cancelled);
         MAIN.post(() -> {
             try {
@@ -212,6 +221,15 @@ public final class Transfers {
 
     public static List<Job> snapshot() {
         return new ArrayList<>(JOBS);
+    }
+
+    /** Finished jobs of this session, newest first. */
+    public static List<Job> history() {
+        return new ArrayList<>(HISTORY);
+    }
+
+    public static void clearHistory() {
+        HISTORY.clear();
     }
 
     public static int activeCount() {

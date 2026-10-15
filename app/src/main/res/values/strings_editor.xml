@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ed_find">بحث واستبدال</string>
+    <string name="ed_goto">الانتقال إلى سطر</string>
+    <string name="ed_goto_hint">رقم السطر</string>
+    <string name="ed_info">سطر %1$d، عمود %2$d · %3$d سطر</string>
+    <string name="ed_find_hint">بحث</string>
+    <string name="ed_replace_hint">استبدال بـ</string>
+    <string name="ed_next">التالي</string>
+    <string name="ed_prev">السابق</string>
+    <string name="ed_replace">استبدال</string>
+    <string name="ed_replace_all">استبدال الكل</string>
+    <string name="ed_matches">%1$d من %2$d</string>
+    <string name="ed_no_match">لا توجد نتائج</string>
+    <string name="ed_replaced_n">تم استبدال %d</string>
+    <string name="ed_match_case">Aa</string>
+    <string name="ed_close">إغلاق</string>
+</resources>
