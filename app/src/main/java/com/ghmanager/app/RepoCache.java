@@ -20,8 +20,8 @@ public final class RepoCache {
     /** One cache entry per account, so a list is never shown under another account. */
     private static String key(Context c) {
         try {
-            String t = Store.getToken(c);
-            if (t == null || t.isEmpty()) return null;
+            String t = Accounts.activeId(c);
+            if (t.isEmpty()) return null;
             byte[] d = MessageDigest.getInstance("SHA-256").digest(t.getBytes(StandardCharsets.UTF_8));
             StringBuilder b = new StringBuilder("repos_");
             for (int i = 0; i < 8; i++) b.append(String.format("%02x", d[i]));

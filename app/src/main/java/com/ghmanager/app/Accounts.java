@@ -28,6 +28,12 @@ public final class Accounts {
         public String type = "token";
         /** Encrypted token (Store.encrypt). */
         String tok = "";
+        /** Encrypted refresh token (empty for tokens that never expire). */
+        String ref = "";
+        /** Wall-clock ms at which the access token expires (0 = never). */
+        long exp = 0;
+        /** Client ID the tokens were issued to. */
+        String cid = "";
 
         public String title() {
             if (!name.isEmpty()) return name;
@@ -64,6 +70,9 @@ public final class Accounts {
                 a.avatar = o.optString("avatar");
                 a.type = o.optString("type", "token");
                 a.tok = o.optString("tok");
+                a.ref = o.optString("ref");
+                a.exp = o.optLong("exp", 0);
+                a.cid = o.optString("cid");
                 if (!a.id.isEmpty() && !a.tok.isEmpty()) out.add(a);
             }
         } catch (Exception ignored) {
@@ -82,6 +91,9 @@ public final class Accounts {
                 o.put("avatar", a.avatar);
                 o.put("type", a.type);
                 o.put("tok", a.tok);
+                o.put("ref", a.ref);
+                o.put("exp", a.exp);
+                o.put("cid", a.cid);
                 arr.put(o);
             }
         } catch (Exception ignored) {
@@ -112,6 +124,11 @@ public final class Accounts {
 
     /** Adds (or replaces, when the same login exists) an account and makes it the active one. */
     public static void add(Context c, String token, JSONObject user, String type) {
+        add(c, token, user, type, "", 0);
+    }
+
+    /** Same as above, also keeping the refresh token so the session never has to end. */
+    public static void add(Context c, String token, JSONObject user, String type, String refresh, long expiresInSec) {
         List<Acc> list = read(c);
         String login = user == null ? "" : user.optString("login");
         String id = login.isEmpty() ? "t" + System.currentTimeMillis() : login.toLowerCase(Locale.ROOT);
@@ -133,7 +150,63 @@ public final class Accounts {
         target.avatar = user == null ? "" : user.optString("avatar_url");
         target.type = type == null ? "token" : type;
         target.tok = Store.encrypt(token);
+        String encRef = refresh == null || refresh.isEmpty() ? "" : Store.encrypt(refresh);
+        target.ref = encRef;
+        target.exp = !encRef.isEmpty() && expiresInSec > 0 ? System.currentTimeMillis() + expiresInSec * 1000L : 0;
+        target.cid = encRef.isEmpty() ? "" : Store.oauthClientId(c);
         write(c, list, id);
+    }
+
+    private static final Object REFRESH_LOCK = new Object();
+
+    /** Id of the active account ("" when nobody is signed in). */
+    public static String activeId(Context c) {
+        Acc a = active(c);
+        return a == null ? "" : a.id;
+    }
+
+    /** True when the account's access token is expired or about to expire and a refresh token exists. */
+    static boolean needsRefresh(Context c, String id) {
+        for (Acc a : read(c)) {
+            if (a.id.equals(id)) {
+                return !a.ref.isEmpty() && a.exp > 0 && a.exp - System.currentTimeMillis() < 300000L;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Gets a new access token with the stored refresh token. {@code stale} is the token the caller was
+     * using: when another thread already replaced it, that newer token is returned instead (refresh
+     * tokens are single-use, so two refreshes at once would burn the session). "" when it failed.
+     */
+    static String refresh(Context c, String id, String stale) {
+        synchronized (REFRESH_LOCK) {
+            List<Acc> list = read(c);
+            for (Acc a : list) {
+                if (!a.id.equals(id)) continue;
+                String cur = Store.decrypt(a.tok);
+                if (!cur.isEmpty() && !cur.equals(stale)) return cur;
+                String rt = Store.decrypt(a.ref);
+                String cid = a.cid.isEmpty() ? Store.oauthClientId(c) : a.cid;
+                if (rt.isEmpty() || cid.isEmpty()) return "";
+                try {
+                    DeviceFlow.Result r = DeviceFlow.refresh(cid, rt);
+                    if (r.token == null) return "";
+                    String encTok = Store.encrypt(r.token);
+                    if (encTok.isEmpty()) return "";
+                    a.tok = encTok;
+                    if (r.refresh != null && !r.refresh.isEmpty()) a.ref = Store.encrypt(r.refresh);
+                    a.exp = r.expiresIn > 0 ? System.currentTimeMillis() + r.expiresIn * 1000L : 0;
+                    a.cid = cid;
+                    write(c, list, Store.rawPref(c, K_ACTIVE));
+                    return r.token;
+                } catch (Exception e) {
+                    return "";
+                }
+            }
+            return "";
+        }
     }
 
     /** Refreshes the stored profile (name, avatar, login) of an account. */

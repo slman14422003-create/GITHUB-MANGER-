@@ -15,4 +15,5 @@
     <string name="select_all">Select all</string>
     <string name="deselect_all">Deselect all</string>
     <string name="sel_count">%1$d of %2$d selected</string>
+    <string name="delete_all">Delete all</string>
 </resources>

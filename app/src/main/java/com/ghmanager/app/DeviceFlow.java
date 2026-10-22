@@ -36,6 +36,8 @@ public final class DeviceFlow {
 
     public static final class Result {
         public String token;
+        public String refresh = "";
+        public long expiresIn;
         public boolean slowDown;
     }
 
@@ -64,6 +66,8 @@ public final class DeviceFlow {
         String tok = j.optString("access_token");
         if (!tok.isEmpty()) {
             r.token = tok;
+            r.refresh = j.optString("refresh_token");
+            r.expiresIn = j.optLong("expires_in", 0);
             return r;
         }
         String err = j.optString("error");
@@ -72,6 +76,24 @@ public final class DeviceFlow {
             r.slowDown = true;
             return r;
         }
+        throw new Fatal(err);
+    }
+
+    /** Trades a refresh token for a new access token (and a new refresh token). Fatal = refresh token refused. */
+    public static Result refresh(String clientId, String refreshToken) throws Exception {
+        String body = "client_id=" + GitHubApi.qe(clientId) + "&grant_type=refresh_token"
+                + "&refresh_token=" + GitHubApi.qe(refreshToken);
+        JSONObject j = new JSONObject(GitHubApi.postForm(TOKEN_URL, body));
+        Result r = new Result();
+        String tok = j.optString("access_token");
+        if (!tok.isEmpty()) {
+            r.token = tok;
+            r.refresh = j.optString("refresh_token");
+            r.expiresIn = j.optLong("expires_in", 0);
+            return r;
+        }
+        String err = j.optString("error");
+        if (err.isEmpty()) throw new Exception("GitHub");
         throw new Fatal(err);
     }
 

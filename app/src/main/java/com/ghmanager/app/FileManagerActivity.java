@@ -1569,7 +1569,7 @@ public class FileManagerActivity extends AppCompatActivity {
                     String base = target.getText().toString().trim().replaceAll("^/+|/+$", "");
                     String m = msg.getText().toString().trim();
                     if (m.isEmpty()) m = getString(R.string.default_commit);
-                    GitHubApi api = new GitHubApi(Store.getToken(this));
+                    GitHubApi api = new GitHubApi(this);
                     Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, name),
                             "upload:" + owner + "/" + name,
                             TransferTasks.upload(api, owner, name, b, base, m, new ArrayList<>(files),

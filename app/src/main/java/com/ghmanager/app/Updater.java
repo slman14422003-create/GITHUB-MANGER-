@@ -195,7 +195,7 @@ public final class Updater {
         final boolean pre = Store.updatePre(a);
         io.execute(() -> {
             try {
-                Info in = check(a, new GitHubApi(Store.getToken(a)), owner, repo, pre);
+                Info in = check(a, new GitHubApi(a), owner, repo, pre);
                 Store.setLastUpdateCheck(a, now);
                 if (in != null && in.newer && !in.tag.equals(Store.skippedVersion(a))) {
                     ui.post(() -> {

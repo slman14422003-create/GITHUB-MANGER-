@@ -219,6 +219,31 @@ public class Dlg extends AlertDialog.Builder {
         }
     }
 
+    /**
+     * Vertical container that never grows taller than {@code cap}. When the content is longer, the
+     * weighted body (scroll view / list) shrinks and scrolls, while the title and the button bar
+     * stay on screen (a long form can no longer push its Run / Save button out of view).
+     */
+    private static final class Column extends LinearLayout {
+        private final int cap;
+
+        Column(Context c, int cap) {
+            super(c);
+            this.cap = cap;
+        }
+
+        @Override
+        protected void onMeasure(int w, int h) {
+            int mode = View.MeasureSpec.getMode(h);
+            int size = View.MeasureSpec.getSize(h);
+            int limit = mode == View.MeasureSpec.UNSPECIFIED ? cap : Math.min(size, cap);
+            super.onMeasure(w, View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.AT_MOST));
+            if (getMeasuredHeight() >= limit) {
+                super.onMeasure(w, View.MeasureSpec.makeMeasureSpec(limit, View.MeasureSpec.EXACTLY));
+            }
+        }
+    }
+
     private static boolean padded(View v) {
         if (v == null) return false;
         if (v.getPaddingStart() + v.getPaddingEnd() > 0) return true;
@@ -234,7 +259,7 @@ public class Dlg extends AlertDialog.Builder {
         final boolean alert = listAdapter == null && customView == null;
         final boolean center = centerTitle || alert;
         android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
-        LinearLayout root = new LinearLayout(c);
+        LinearLayout root = new Column(c, (int) (dm.heightPixels * (sheet ? 0.9f : 0.86f)));
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPaddingRelative(Ui.dp(c, edge), Ui.dp(c, sheet ? 14 : 0), Ui.dp(c, edge), Ui.dp(c, edge));
 
@@ -602,6 +627,13 @@ public class Dlg extends AlertDialog.Builder {
         final TextView toggleAll = Ui.chip(c, c.getString(R.string.select_all), false);
         ((LinearLayout.LayoutParams) toggleAll.getLayoutParams()).setMarginEnd(0);
         head.addView(toggleAll);
+        final TextView delAll = danger && n > 0 ? Ui.chip(c, c.getString(R.string.delete_all), false) : null;
+        if (delAll != null) {
+            ((LinearLayout.LayoutParams) toggleAll.getLayoutParams()).setMarginEnd(Ui.dp(c, 6));
+            ((LinearLayout.LayoutParams) delAll.getLayoutParams()).setMarginEnd(0);
+            delAll.setTextColor(Ui.color(c, R.color.bad));
+            head.addView(delAll);
+        }
         col.addView(head, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -656,6 +688,15 @@ public class Dlg extends AlertDialog.Builder {
             for (CheckBox k : checks) k.setChecked(!all);
             refresh.run();
         });
+        if (delAll != null) {
+            // every item, in one tap; the caller still asks for a confirmation before deleting
+            delAll.setOnClickListener(v -> {
+                List<Integer> every = new ArrayList<>();
+                for (int i = 0; i < n; i++) every.add(i);
+                dialog.dismiss();
+                if (cb != null) cb.onChosen(every);
+            });
+        }
         dialog.setOnShowListener(x -> {
             size(dialog, false);
             refresh.run();

@@ -69,6 +69,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected ImageButton btnRefresh;
     protected View loadingBar;
     protected ListView listView;
+    protected androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipe;
     protected RowAdapter adapter;
     protected LinearLayout chipRow;
     protected View filterScroll;
@@ -102,7 +103,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         repo = i.getStringExtra("repo");
         branch = i.getStringExtra("branch");
         if (branch == null || branch.isEmpty()) branch = "main";
-        api = new GitHubApi(Store.getToken(this));
+        api = new GitHubApi(this);
         Perms.ensureNotifications(this);
     }
 
@@ -148,6 +149,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     protected void loading(boolean on) {
         if (loadingBar != null) loadingBar.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+        if (!on && swipe != null && swipe.isRefreshing()) swipe.setRefreshing(false);
     }
 
     protected void initList() {
@@ -158,6 +160,18 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         filterScroll = findViewById(R.id.filterScroll);
         adapter = new RowAdapter(this);
         listView.setAdapter(adapter);
+        swipe = findViewById(R.id.swipe);
+        if (swipe != null) {
+            final androidx.swiperefreshlayout.widget.SwipeRefreshLayout sw = swipe;
+            sw.setColorSchemeColors(Ui.color(this, R.color.accent));
+            sw.setProgressBackgroundColorSchemeColor(Ui.color(this, R.color.surface_high));
+            sw.setOnRefreshListener(() -> {
+                // same action as the refresh button, so every screen keeps its own reload logic
+                if (btnRefresh != null && btnRefresh.isEnabled()) btnRefresh.performClick();
+                // safety net: a screen that never calls loading(false) must not leave the spinner running
+                sw.postDelayed(() -> sw.setRefreshing(false), 10000);
+            });
+        }
     }
 
     protected void showStatus(String text) {

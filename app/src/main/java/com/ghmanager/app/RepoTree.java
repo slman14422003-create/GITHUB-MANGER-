@@ -59,8 +59,8 @@ public final class RepoTree {
     private static String key(Context c, String o, String r, String b) {
         String acct = "";
         try {
-            String t = Store.getToken(c);
-            if (t != null) {
+            String t = Accounts.activeId(c);
+            if (!t.isEmpty()) {
                 byte[] d = MessageDigest.getInstance("SHA-256").digest(t.getBytes(StandardCharsets.UTF_8));
                 StringBuilder sb = new StringBuilder();
                 for (int i = 0; i < 6; i++) sb.append(String.format("%02x", d[i]));

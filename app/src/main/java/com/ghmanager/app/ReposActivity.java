@@ -40,6 +40,7 @@ public class ReposActivity extends AppCompatActivity {
     private ListView listView;
     private View skeleton;
     private View refreshBtn;
+    private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipe;
     private GhStatusCard statusCard;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -74,13 +75,24 @@ public class ReposActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_repos);
         BottomNav.attach(this, BottomNav.REPOS);
-        api = new GitHubApi(Store.getToken(this));
+        api = new GitHubApi(this);
         status = findViewById(R.id.status);
         count = findViewById(R.id.count);
         chipRow = findViewById(R.id.chipRow);
         ListView list = findViewById(R.id.list);
         listView = list;
         refreshBtn = findViewById(R.id.btnRefresh);
+        swipe = findViewById(R.id.swipe);
+        if (swipe != null) {
+            swipe.setColorSchemeColors(Ui.color(this, R.color.accent));
+            swipe.setProgressBackgroundColorSchemeColor(Ui.color(this, R.color.surface_high));
+            swipe.setOnRefreshListener(() -> {
+                refreshBtn.performClick();
+                swipe.postDelayed(() -> {
+                    if (swipe != null) swipe.setRefreshing(false);
+                }, 10000);
+            });
+        }
         // GitHub server status: a button in the top bar (its dot shows the state), details open on tap
         statusCard = new GhStatusCard(this, findViewById(R.id.btnStatus), findViewById(R.id.statusDot));
         adapter = new RowAdapter(this);
@@ -350,12 +362,14 @@ public class ReposActivity extends AppCompatActivity {
                     }
                     showSkeleton(false);
                     Ui.spin(refreshBtn, false);
+                    if (swipe != null) swipe.setRefreshing(false);
                     status.setVisibility(View.GONE);
                 });
             } catch (final Exception e) {
                 ui.post(() -> {
                     if (isFinishing()) return;
                     Ui.spin(refreshBtn, false);
+                    if (swipe != null) swipe.setRefreshing(false);
                     showSkeleton(false);
                     boolean rejected = e instanceof GitHubApi.ApiException && ((GitHubApi.ApiException) e).code == 401;
                     String msg = rejected ? getString(R.string.token_rejected_msg) : String.valueOf(e.getMessage());

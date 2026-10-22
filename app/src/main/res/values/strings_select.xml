@@ -12,4 +12,5 @@
     <string name="sel_delete_progress">جارٍ حذف %d عنصر…</string>
     <string name="sel_delete_msg_commit">Delete %d items</string>
     <string name="sel_nothing">لم يتم تحديد أي عنصر</string>
+    <string name="delete_all">Delete all</string>
 </resources>

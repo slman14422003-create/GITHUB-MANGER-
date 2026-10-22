@@ -1,5 +1,6 @@
 package com.ghmanager.app;
 
+import android.content.Context;
 import android.util.Base64;
 
 import org.json.JSONArray;
@@ -21,6 +22,8 @@ public class GitHubApi {
 
     public static class ApiException extends Exception {
         public final int code;
+        /** Milliseconds GitHub asked us to wait (rate limit), 0 when not applicable. */
+        public long waitMs = 0;
 
         public ApiException(int code, String msg) {
             super(msg);
@@ -62,10 +65,39 @@ public class GitHubApi {
     private static final String BASE = "https://api.github.com";
     private static final String UPLOAD_BASE = "https://uploads.github.com";
     private static final String JSON = "application/vnd.github+json";
-    private final String token;
+    private volatile String token;
+    private final Context ctx;
+    private final String accId;
 
+    /** Fixed token, never refreshed (sign-in check, personal access tokens typed by hand). */
     public GitHubApi(String token) {
         this.token = token;
+        this.ctx = null;
+        this.accId = "";
+    }
+
+    /** Active account: the access token is renewed silently with the refresh token whenever it expires. */
+    public GitHubApi(Context c) {
+        this.ctx = c.getApplicationContext();
+        Accounts.Acc a = Accounts.active(this.ctx);
+        this.accId = a == null ? "" : a.id;
+        this.token = a == null ? "" : Accounts.tokenOf(a);
+    }
+
+    private String bearer() {
+        if (ctx != null && !accId.isEmpty() && Accounts.needsRefresh(ctx, accId)) {
+            String t = Accounts.refresh(ctx, accId, token);
+            if (!t.isEmpty()) token = t;
+        }
+        return token;
+    }
+
+    private boolean renew() {
+        if (ctx == null || accId.isEmpty()) return false;
+        String t = Accounts.refresh(ctx, accId, token);
+        if (t.isEmpty() || t.equals(token)) return false;
+        token = t;
+        return true;
     }
 
     // ------------------------------------------------------------------ helpers
@@ -140,7 +172,7 @@ public class GitHubApi {
             c.setRequestProperty("X-Mirror-Key", Mirror.key());
         }
         if (api) {
-            c.setRequestProperty("Authorization", "Bearer " + token);
+            c.setRequestProperty("Authorization", "Bearer " + bearer());
             c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
         }
         c.setRequestProperty("Accept", accept);
@@ -171,15 +203,94 @@ public class GitHubApi {
     }
 
     private String request(String method, String path, JSONObject body) throws IOException, ApiException {
+        try {
+            return requestOnce(method, path, body);
+        } catch (ApiException e) {
+            if (e.code == 401 && renew()) return requestOnce(method, path, body);
+            throw e;
+        }
+    }
+
+    private static final android.util.LruCache<String, String[]> ETAGS = new android.util.LruCache<>(80);
+
+    private static void pause(long ms) throws IOException {
+        try {
+            Thread.sleep(ms + (long) (Math.random() * 250));
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted");
+        }
+    }
+
+    /** How long GitHub wants us to wait after a 403/429 rate-limit answer (0 = not a rate limit). */
+    private static long rateWait(HttpURLConnection c) {
+        try {
+            String ra = c.getHeaderField("Retry-After");
+            if (ra != null && !ra.trim().isEmpty()) return Math.max(1, Long.parseLong(ra.trim())) * 1000L;
+            if ("0".equals(c.getHeaderField("X-RateLimit-Remaining"))) {
+                String reset = c.getHeaderField("X-RateLimit-Reset");
+                if (reset != null) return Math.max(1000L, Long.parseLong(reset.trim()) * 1000L - System.currentTimeMillis() + 1000L);
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    /** Retries reads on network hiccups and 5xx with a growing pause, and waits out short rate limits. */
+    private String requestOnce(String method, String path, JSONObject body) throws IOException, ApiException {
+        boolean read = method.equals("GET");
+        int tries = 0;
+        boolean waited = false;
+        for (; ; ) {
+            try {
+                return exchange(method, path, body);
+            } catch (ApiException e) {
+                boolean server = e.code == 500 || e.code == 502 || e.code == 503 || e.code == 504;
+                if (read && server && tries < 2) {
+                    pause(600L << tries++);
+                    continue;
+                }
+                if (e.waitMs > 0) {
+                    if (e.waitMs <= 20000L && !waited) {
+                        waited = true;
+                        pause(e.waitMs);
+                        continue;
+                    }
+                    ApiException r = new ApiException(e.code, "Rate limit reached. Try again in "
+                            + Math.max(1, e.waitMs / 1000L) + " s");
+                    r.waitMs = e.waitMs;
+                    throw r;
+                }
+                throw e;
+            } catch (IOException e) {
+                String m = e.getMessage() == null ? "" : e.getMessage();
+                if (m.startsWith("Blocked") || m.startsWith("Response too large") || m.equals("Interrupted")) throw e;
+                if (read && tries < 2) {
+                    pause(600L << tries++);
+                    continue;
+                }
+                if (e instanceof java.net.UnknownHostException || e instanceof java.net.ConnectException) {
+                    throw new IOException("No internet connection");
+                }
+                throw e;
+            }
+        }
+    }
+
+    private String exchange(String method, String path, JSONObject body) throws IOException, ApiException {
         boolean needsBody = method.equals("POST") || method.equals("PUT") || method.equals("PATCH");
         if (body == null && needsBody) body = new JSONObject();
         byte[] data = body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8);
         String url = BASE + path;
+        final boolean isGet = method.equals("GET");
+        final String ckey = accId + "|" + path;
+        final String[] hit = isGet ? ETAGS.get(ckey) : null;
         // Redirects are followed by hand: every hop is checked against the allowed hosts again, so the
         // token can never be forwarded to another site by a redirect.
         for (int hop = 0; ; hop++) {
             HttpURLConnection c = open(method, url, JSON, true);
             c.setInstanceFollowRedirects(false);
+            if (hit != null && hop == 0) c.setRequestProperty("If-None-Match", hit[0]);
             boolean reusable = false;
             try {
                 if (data != null) {
@@ -197,9 +308,28 @@ public class GitHubApi {
                     url = new URL(new URL(url), loc).toString();
                     continue;
                 }
+                if (code == 304 && hit != null) {
+                    // unchanged since the last answer: GitHub sends no body and does not count it as a request
+                    try {
+                        c.getInputStream().close();
+                    } catch (Exception ignored) {
+                    }
+                    reusable = true;
+                    return hit[1];
+                }
                 InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
                 String resp = is == null ? "" : readAll(is);
-                if (code >= 400) throw toException(code, resp);
+                if (code >= 400) {
+                    ApiException ex = toException(code, resp);
+                    if (code == 403 || code == 429) ex.waitMs = rateWait(c);
+                    throw ex;
+                }
+                if (isGet) {
+                    String tag = c.getHeaderField("ETag");
+                    if (tag != null && !tag.isEmpty() && resp.length() < 512 * 1024) {
+                        ETAGS.put(ckey, new String[]{tag, resp});
+                    }
+                }
                 reusable = true;
                 return resp;
             } finally {

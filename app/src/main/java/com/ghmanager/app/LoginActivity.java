@@ -244,7 +244,7 @@ public class LoginActivity extends AppCompatActivity {
                         polling = false;
                         DeviceFlow.clear(this);
                     });
-                    complete(r.token, "oauth");
+                    complete(r.token, "oauth", r.refresh, r.expiresIn);
                     return;
                 }
                 if (r.slowDown) interval += 5;
@@ -325,6 +325,10 @@ public class LoginActivity extends AppCompatActivity {
 
     /** Checks the token against GitHub, saves the account and opens the repositories. */
     private void complete(final String token, final String type) {
+        complete(token, type, "", 0);
+    }
+
+    private void complete(final String token, final String type, final String refresh, final long expiresIn) {
         final android.content.Context app = getApplicationContext();
         io.execute(() -> {
             Exception last = null;
@@ -354,7 +358,7 @@ public class LoginActivity extends AppCompatActivity {
                             + (err == null ? "" : err.getMessage()), Toast.LENGTH_LONG).show();
                     return;
                 }
-                Accounts.add(app, token, u, type);
+                Accounts.add(app, token, u, type, refresh, expiresIn);
                 DeviceFlow.clear(this);
                 if (destroyed) return;
                 if (Store.getToken(this).isEmpty()) {
