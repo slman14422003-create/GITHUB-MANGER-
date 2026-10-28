@@ -54,6 +54,7 @@ public class BrowserActivity extends BaseRepoActivity {
     private View hintRow, selBar, uploadBar, deleteBar;
     private TextView selCount, selAll, chipSelect;
     private Button btnDeleteSel;
+    private Button btnDownloadSel;
     private android.widget.ImageButton btnNew;
 
     private ActivityResultLauncher<Intent> pickLauncher;
@@ -99,6 +100,9 @@ public class BrowserActivity extends BaseRepoActivity {
         selCount = findViewById(R.id.selCount);
         selAll = findViewById(R.id.selAll);
         btnDeleteSel = findViewById(R.id.btnDeleteSel);
+        btnDownloadSel = findViewById(R.id.btnDownloadSel);
+        Ui.press(this, btnDownloadSel);
+        btnDownloadSel.setOnClickListener(v -> downloadSelected());
         chipSelect = Ui.chip(this, getString(R.string.sel_mode), false);
         ((LinearLayout.LayoutParams) chipSelect.getLayoutParams()).setMarginEnd(0);
         ((LinearLayout) hintRow).addView(chipSelect);
@@ -464,6 +468,9 @@ public class BrowserActivity extends BaseRepoActivity {
         selCount.setText(n == 0 ? getString(R.string.sel_hint)
                 : getString(R.string.sel_count, n, items.size()));
         selAll.setText(n > 0 && n == items.size() ? R.string.deselect_all : R.string.select_all);
+        btnDownloadSel.setText(getString(R.string.dl_sel_btn, n));
+        btnDownloadSel.setEnabled(n > 0);
+        btnDownloadSel.setAlpha(n > 0 ? 1f : 0.45f);
         btnDeleteSel.setText(getString(R.string.sel_delete_btn, n));
         btnDeleteSel.setEnabled(n > 0);
         btnDeleteSel.setAlpha(n > 0 ? 1f : 0.45f);
@@ -479,6 +486,7 @@ public class BrowserActivity extends BaseRepoActivity {
         labels.add(getString(R.string.sel_mode));
         if (!dir) labels.add(getString(R.string.view_edit));
         if (!dir) labels.add(getString(R.string.download));
+        if (dir) labels.add(getString(R.string.dl_folder));
         labels.add(getString(R.string.rename_move));
         labels.add(getString(R.string.copy_path));
         labels.add(getString(R.string.copy_link));
@@ -493,6 +501,8 @@ public class BrowserActivity extends BaseRepoActivity {
             } else if (chosen.equals(getString(R.string.download))) {
                 saveAs(name, () -> api.openDownload(api.contentRawPath(owner, repo, p, branch),
                         "application/vnd.github.raw"));
+            } else if (chosen.equals(getString(R.string.dl_folder))) {
+                downloadPaths(java.util.Collections.singletonList(p), name);
             } else if (chosen.equals(getString(R.string.rename_move))) {
                 renameDialog(o);
             } else if (chosen.equals(getString(R.string.copy_path))) {
@@ -583,6 +593,35 @@ public class BrowserActivity extends BaseRepoActivity {
                 .show();
     }
 
+    private void downloadSelected() {
+        final List<String> chosen = new ArrayList<>();
+        for (JSONObject o : items) if (selected.contains(o.optString("path"))) chosen.add(o.optString("path"));
+        if (chosen.isEmpty()) {
+            toast(R.string.sel_nothing);
+            return;
+        }
+        downloadPaths(chosen, chosen.size() == 1 ? chosen.get(0).substring(chosen.get(0).lastIndexOf('/') + 1) : repo);
+        exitSelect();
+    }
+
+    private void downloadPaths(final List<String> paths, String label) {
+        String safe = label.replaceAll("[\\\\/:*?\"<>|]", "_");
+        if (safe.isEmpty()) safe = repo;
+        final java.io.File dest = new java.io.File(TransferTasks.saveDir(repo), safe);
+        final String b = branch;
+        Transfers.start(getApplicationContext(), getString(R.string.dl_job_title, safe),
+                "download:" + owner + "/" + repo,
+                TransferTasks.downloadRepoPaths(api, owner, repo, b, new ArrayList<>(paths), dest),
+                (job, ok, msg) -> {
+                    String first = msg == null ? "" : msg;
+                    int nl = first.indexOf('\n');
+                    if (nl > 0) first = first.substring(0, nl);
+                    Toast.makeText(job.app, ok ? first : job.app.getString(R.string.tr_failed) + ": " + first,
+                            Toast.LENGTH_LONG).show();
+                });
+        Toast.makeText(this, R.string.tr_started_bg, Toast.LENGTH_LONG).show();
+    }
+
     // ---------- upload ----------
 
     private void askUploadOptions(final Uri tree, final List<Uri> files) {
@@ -623,10 +662,52 @@ public class BrowserActivity extends BaseRepoActivity {
         pickedRoots = null;
         if (roots == null || roots.isEmpty()) return;
         final String b = branch;
+        final boolean incRoot = folderPick ? includeRoot : true;
+        runPreview(roots, base, message, b, incRoot, skipJunk);
+    }
+
+    private volatile boolean previewCancel;
+
+    private void runPreview(final List<java.io.File> roots, final String base, final String message, final String b,
+                            final boolean incRoot, final boolean skipJunk) {
+        previewCancel = false;
+        showProgress(getString(R.string.fm_preview_scanning));
+        io.execute(() -> {
+            try {
+                final TransferTasks.Preview p = TransferTasks.preview(api, getContentResolver(), owner, repo, b, base,
+                        roots, incRoot, skipJunk, () -> previewCancel);
+                post(() -> {
+                    hideProgress();
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(getString(R.string.fm_pv_files, p.files, Fmt.size(p.bytes))).append('\n');
+                    sb.append(getString(R.string.fm_pv_states, p.fresh, p.changed, p.same)).append('\n');
+                    sb.append(getString(R.string.fm_pv_upload, p.fresh + p.changed, Fmt.size(p.uploadBytes)));
+                    if (p.ignored > 0 || p.tooBig > 0) {
+                        sb.append('\n').append(getString(R.string.fm_pv_skipped, p.ignored, p.tooBig));
+                    }
+                    Dlg d = new Dlg(BrowserActivity.this);
+                    d.setTitle(R.string.fm_pv_title);
+                    d.setMessage(sb.toString());
+                    if (p.fresh + p.changed > 0) {
+                        d.setPositiveButton(R.string.upload, (x, w) -> beginUpload(roots, base, message, b, incRoot,
+                                skipJunk));
+                        d.setNegativeButton(R.string.cancel, null);
+                    } else {
+                        d.setPositiveButton(R.string.close, null);
+                    }
+                    d.show();
+                });
+            } catch (final Exception e) {
+                showError(e, () -> runPreview(roots, base, message, b, incRoot, skipJunk));
+            }
+        });
+    }
+
+    private void beginUpload(final List<java.io.File> roots, final String base, final String message, final String b,
+                             final boolean incRoot, final boolean skipJunk) {
         Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, repo),
                 "upload:" + owner + "/" + repo,
-                TransferTasks.upload(api, owner, repo, b, base, message, roots, folderPick ? includeRoot : true,
-                        skipJunk),
+                TransferTasks.upload(api, owner, repo, b, base, message, roots, incRoot, skipJunk),
                 (job, ok, msg) -> {
                     android.content.Context app = job.app;
                     String first = msg == null ? "" : msg;

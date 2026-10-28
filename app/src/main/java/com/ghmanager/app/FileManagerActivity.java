@@ -23,10 +23,12 @@ import android.os.StatFs;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.LruCache;
+import android.content.res.Configuration;
+import android.os.SystemClock;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
-import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -34,7 +36,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -45,6 +46,10 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
+import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.SimpleItemAnimator;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -59,6 +64,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,6 +78,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -85,13 +92,21 @@ import java.util.zip.ZipOutputStream;
 public class FileManagerActivity extends AppCompatActivity {
 
     private static final int SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2, SORT_TYPE = 3;
-    private static final int M_DIR = 0, M_SEARCH = 1, M_FAV = 2, M_LARGEST = 3, M_RECENT = 4;
+    private static final int M_DIR = 0, M_SEARCH = 1, M_FAV = 2, M_LARGEST = 3, M_RECENT = 4, M_TRASH = 5;
     private static final int T_DIR = 0, T_IMG = 1, T_VID = 2, T_AUD = 3, T_ARC = 4, T_APK = 5,
             T_TXT = 6, T_PDF = 7, T_OTHER = 8;
-    private static final int MAX_SEARCH = 300;
+    private static final int PAGE = 300;
+    private static final int MAX_SEARCH_ALL = 20000;
     private static final int MAX_LARGEST = 60;
 
     /** One row of the list, with everything precomputed off the UI thread. */
+    private Set<String> favSnap;
+
+    private void changed() {
+        favSnap = null;
+        if (adapter != null && !shown.isEmpty()) adapter.notifyItemRangeChanged(0, shown.size());
+    }
+
     private static class Entry {
         final File f;
         final String name;
@@ -100,8 +115,27 @@ public class FileManagerActivity extends AppCompatActivity {
         final long mod;
         final int kids;
         final String ext;
+        final String trashId;
+        final String origin;
+        final int left;
+
+        Entry(Trash.Item t) {
+            this.f = t.stored;
+            this.name = t.name;
+            this.dir = t.dir;
+            this.mod = t.deletedAt;
+            this.kids = 0;
+            this.size = t.size;
+            this.ext = t.dir ? "" : extOf(t.name);
+            this.trashId = t.id;
+            this.origin = t.origin;
+            this.left = t.daysLeft();
+        }
 
         Entry(File f) {
+            this.trashId = null;
+            this.origin = null;
+            this.left = 0;
             this.f = f;
             this.name = f.getName();
             this.dir = f.isDirectory();
@@ -153,7 +187,15 @@ public class FileManagerActivity extends AppCompatActivity {
     private final List<File> clip = new ArrayList<>();
     private boolean clipCut = false;
 
-    private ListView listView;
+    private RecyclerView listView;
+    private GridLayoutManager gridLm;
+    private boolean gridMode;
+    private String listKey = "";
+    private SearchSession session;
+    private boolean pageLoading;
+    private View undoBar;
+    private TextView undoText;
+    private final List<String> lastTrash = new ArrayList<>();
     private FileAdapter adapter;
     private TextView titleView, subtitleView, statusView, emptyView, selCount, pasteText, storageText;
     private ImageButton btnA1, btnA2, btnRefresh;
@@ -225,17 +267,27 @@ public class FileManagerActivity extends AppCompatActivity {
         listView = findViewById(R.id.list);
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);
 
+        gridMode = prefs.getBoolean("grid", false);
         adapter = new FileAdapter();
+        gridLm = new GridLayoutManager(this, 1);
+        listView.setLayoutManager(gridLm);
         listView.setAdapter(adapter);
-        listView.setOnItemClickListener((p, v, pos, id) -> onItemClick(pos));
-        listView.setFastScrollEnabled(true);
-        listView.setOnItemLongClickListener((p, v, pos, id) -> {
-            if ("folder".equals(pickMode) || "save".equals(pickMode)) return true;
-            // while choosing files to upload only files can be ticked, not folders
-            if ("files".equals(pickMode) && pos >= 0 && pos < shown.size() && shown.get(pos).dir) return true;
-            toggleSelect(pos);
-            return true;
+        applyLayout();
+        RecyclerView.ItemAnimator anim = listView.getItemAnimator();
+        if (anim instanceof SimpleItemAnimator) ((SimpleItemAnimator) anim).setSupportsChangeAnimations(false);
+        listView.addOnItemTouchListener(dragTouch);
+        listView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView rv, int dx, int dy) {
+                if (dy > 0) maybeLoadMore();
+            }
         });
+        undoBar = findViewById(R.id.undoBar);
+        undoText = findViewById(R.id.undoText);
+        findViewById(R.id.undoGo).setOnClickListener(v -> undoTrash());
+        io.execute(() -> Trash.purgeOld(getApplicationContext()));
+        Transfers.addListener(finishListener);
+        loadBadgePrefs();
 
         pickMode = getIntent().getStringExtra("pick");
         pickBar = findViewById(R.id.pickBar);
@@ -260,6 +312,10 @@ public class FileManagerActivity extends AppCompatActivity {
         findViewById(R.id.selCopy).setOnClickListener(v -> toClipboard(false));
         findViewById(R.id.selCut).setOnClickListener(v -> toClipboard(true));
         findViewById(R.id.selDelete).setOnClickListener(v -> deleteSelected());
+        findViewById(R.id.selUpload).setOnClickListener(v -> {
+            List<File> up = selectedFiles();
+            if (!up.isEmpty()) uploadToGithub(up);
+        });
         findViewById(R.id.selMore).setOnClickListener(v -> moreMenu());
         findViewById(R.id.pasteGo).setOnClickListener(v -> paste());
         findViewById(R.id.pasteCancel).setOnClickListener(v -> {
@@ -340,8 +396,11 @@ public class FileManagerActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         ui.removeCallbacksAndMessages(null);
+        Transfers.removeListener(finishListener);
+        if (session != null) session.close();
         io.shutdownNow();
         thumbIo.shutdownNow();
+        badgeIo.shutdownNow();
     }
 
     private void action(ImageButton b, int icon, int desc, View.OnClickListener l) {
@@ -411,7 +470,7 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private void navigate(File dir) {
         if (mode == M_DIR && cur != null && listView != null && !cur.equals(dir)) {
-            scrollPos.put(cur.getAbsolutePath(), listView.getFirstVisiblePosition());
+            scrollPos.put(cur.getAbsolutePath(), gridLm.findFirstVisibleItemPosition());
         }
         resetScroll = !dir.equals(cur);
         // choosing files to upload keeps the ticks while moving between folders
@@ -461,6 +520,9 @@ public class FileManagerActivity extends AppCompatActivity {
                 break;
             case M_RECENT:
                 showRecent();
+                break;
+            case M_TRASH:
+                showTrash();
                 break;
             default:
                 load();
@@ -519,14 +581,107 @@ public class FileManagerActivity extends AppCompatActivity {
         });
     }
 
+    private boolean useIndex() {
+        return prefs.getBoolean("use_index", false);
+    }
+
+    private final class SearchSession {
+        final String q;
+        final boolean hidden;
+        final String prefix;
+        final ArrayDeque<File> stack = new ArrayDeque<>();
+        final File root;
+        java.io.BufferedReader idx;
+        boolean started;
+        volatile boolean done;
+        int total;
+
+        SearchSession(File root, String q, boolean hidden, boolean useIdx) {
+            this.root = root;
+            this.q = q;
+            this.hidden = hidden;
+            String rp = root.getAbsolutePath();
+            this.prefix = rp.endsWith("/") ? rp : rp + "/";
+            if (useIdx) {
+                try {
+                    idx = FmIndex.open(FileManagerActivity.this);
+                } catch (IOException e) {
+                    idx = null;
+                }
+            }
+        }
+
+        void close() {
+            try {
+                if (idx != null) idx.close();
+            } catch (IOException ignored) {
+            }
+        }
+
+        void fill(List<Entry> out, int want, long my) {
+            int found = 0;
+            if (idx != null) {
+                try {
+                    boolean eof = false;
+                    while (found < want) {
+                        String line = idx.readLine();
+                        if (line == null) {
+                            eof = true;
+                            break;
+                        }
+                        if (my != gen) return;
+                        if (!line.startsWith(prefix)) continue;
+                        String rel = line.substring(prefix.length());
+                        if (!hidden && (rel.startsWith(".") || rel.contains("/."))) continue;
+                        int sl = line.lastIndexOf('/');
+                        String name = sl >= 0 ? line.substring(sl + 1) : line;
+                        if (!name.toLowerCase(Locale.ROOT).contains(q)) continue;
+                        File f = new File(line);
+                        if (!f.exists()) continue;
+                        out.add(new Entry(f));
+                        found++;
+                    }
+                    if (eof) done = true;
+                } catch (IOException e) {
+                    done = true;
+                }
+                total += found;
+                return;
+            }
+            if (!started) {
+                started = true;
+                stack.push(root);
+            }
+            while (!stack.isEmpty() && found < want) {
+                if (my != gen) return;
+                File d = stack.pop();
+                File[] arr = d.listFiles();
+                if (arr == null) continue;
+                for (File f : arr) {
+                    String n = f.getName();
+                    if (!hidden && n.startsWith(".")) continue;
+                    if (n.toLowerCase(Locale.ROOT).contains(q)) {
+                        out.add(new Entry(f));
+                        found++;
+                    }
+                    if (f.isDirectory() && !isLink(f)) stack.push(f);
+                }
+            }
+            if (stack.isEmpty()) done = true;
+            total += found;
+        }
+    }
+
     private void runSearch() {
         final long my = ++gen;
-        final File dir = cur;
-        final String q = query;
+        if (session != null) session.close();
+        final SearchSession ss = new SearchSession(cur, query, showHidden, useIndex() && FmIndex.covers(this, cur));
+        session = ss;
+        pageLoading = false;
         loading(true);
         io.execute(() -> {
             List<Entry> out = new ArrayList<>();
-            walkSearch(dir, q, out, my, 0);
+            ss.fill(out, PAGE, my);
             Collections.sort(out, comparator());
             final List<Entry> res = out;
             post(() -> {
@@ -538,17 +693,45 @@ public class FileManagerActivity extends AppCompatActivity {
         });
     }
 
-    private void walkSearch(File dir, String q, List<Entry> out, long my, int depth) {
-        if (my != gen || out.size() >= MAX_SEARCH || depth > 14) return;
-        File[] arr = dir.listFiles();
-        if (arr == null) return;
-        for (File f : arr) {
-            if (my != gen || out.size() >= MAX_SEARCH) return;
-            String n = f.getName();
-            if (!showHidden && n.startsWith(".")) continue;
-            if (n.toLowerCase(Locale.ROOT).contains(q)) out.add(new Entry(f));
-            if (f.isDirectory() && !isLink(f)) walkSearch(f, q, out, my, depth + 1);
-        }
+    private void maybeLoadMore() {
+        final SearchSession ss = session;
+        if (mode != M_SEARCH || ss == null || ss.done || pageLoading || ss.total >= MAX_SEARCH_ALL) return;
+        if (gridLm.findLastVisibleItemPosition() < shown.size() - 15) return;
+        pageLoading = true;
+        final long my = gen;
+        loading(true);
+        io.execute(() -> {
+            final List<Entry> more = new ArrayList<>();
+            ss.fill(more, PAGE, my);
+            Collections.sort(more, comparator());
+            post(() -> {
+                pageLoading = false;
+                loading(false);
+                if (my != gen || ss != session || mode != M_SEARCH) return;
+                if (!more.isEmpty()) {
+                    int start = shown.size();
+                    shown.addAll(more);
+                    adapter.notifyItemRangeInserted(start, more.size());
+                }
+                updateChrome();
+            });
+        });
+    }
+
+    private void showTrash() {
+        final long my = ++gen;
+        loading(true);
+        io.execute(() -> {
+            List<Trash.Item> items = Trash.list(getApplicationContext());
+            final List<Entry> out = new ArrayList<>();
+            for (Trash.Item t : items) out.add(new Entry(t));
+            post(() -> {
+                if (my != gen) return;
+                listDenied = false;
+                setShown(out);
+                loading(false);
+            });
+        });
     }
 
     private static boolean isLink(File f) {
@@ -658,23 +841,60 @@ public class FileManagerActivity extends AppCompatActivity {
         }
     }
 
+    private void scrollTo(int pos) {
+        gridLm.scrollToPositionWithOffset(Math.max(0, pos), 0);
+    }
+
     private void setShown(List<Entry> list) {
+        final List<Entry> old = new ArrayList<>(shown);
+        final List<Entry> now = new ArrayList<>(list);
         shown.clear();
-        shown.addAll(list);
-        // drop selections that no longer exist
+        shown.addAll(now);
         if (!"files".equals(pickMode)) {
             Set<String> alive = new LinkedHashSet<>();
             for (Entry e : shown) alive.add(e.f.getAbsolutePath());
             selected.retainAll(alive);
         }
-        adapter.notifyDataSetChanged();
+        String key = mode + "|" + (cur == null ? "" : cur.getAbsolutePath()) + "|" + query;
+        boolean sameList = key.equals(listKey) && !resetScroll && !old.isEmpty() && !now.isEmpty();
+        listKey = key;
+        favSnap = null;
+        if (sameList) {
+            DiffUtil.DiffResult dr = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+                @Override
+                public int getOldListSize() {
+                    return old.size();
+                }
+
+                @Override
+                public int getNewListSize() {
+                    return now.size();
+                }
+
+                @Override
+                public boolean areItemsTheSame(int o, int n) {
+                    return old.get(o).f.getAbsolutePath().equals(now.get(n).f.getAbsolutePath());
+                }
+
+                @Override
+                public boolean areContentsTheSame(int o, int n) {
+                    Entry a = old.get(o);
+                    Entry b = now.get(n);
+                    return a.name.equals(b.name) && a.size == b.size && a.mod == b.mod && a.kids == b.kids
+                            && a.dir == b.dir && a.left == b.left;
+                }
+            }, false);
+            dr.dispatchUpdatesTo(adapter);
+        } else {
+            adapter.notifyDataSetChanged();
+        }
         if (resetScroll) {
-            listView.setSelection(0);
+            scrollTo(0);
             resetScroll = false;
         }
         if (mode == M_DIR && cur != null) {
             Integer sp = scrollPos.remove(cur.getAbsolutePath());
-            if (sp != null && !shown.isEmpty()) listView.setSelection(Math.min(sp, shown.size() - 1));
+            if (sp != null && !shown.isEmpty()) scrollTo(Math.min(sp, shown.size() - 1));
         }
         updateChrome();
         boolean empty = shown.isEmpty();
@@ -683,10 +903,156 @@ public class FileManagerActivity extends AppCompatActivity {
             int msg;
             if (mode == M_SEARCH) msg = R.string.fm_no_results;
             else if (mode == M_FAV) msg = R.string.fm_no_favs;
+            else if (mode == M_TRASH) msg = R.string.fm_trash_empty;
             else if (listDenied) msg = R.string.fm_denied;
             else msg = R.string.fm_empty;
             emptyView.setText(msg);
         }
+    }
+
+    private void applyLayout() {
+        int cols = 1;
+        int pad = 0;
+        if (gridMode) {
+            int w = getResources().getDisplayMetrics().widthPixels;
+            cols = Math.max(3, w / Ui.dp(this, 118));
+            pad = Ui.dp(this, 10);
+        }
+        gridLm.setSpanCount(cols);
+        listView.setPadding(pad, listView.getPaddingTop(), pad, listView.getPaddingBottom());
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration c) {
+        super.onConfigurationChanged(c);
+        if (gridLm != null) applyLayout();
+    }
+
+    private void setGridMode(boolean on) {
+        gridMode = on;
+        prefs.edit().putBoolean("grid", on).apply();
+        applyLayout();
+        adapter.notifyDataSetChanged();
+    }
+
+    private boolean dragging;
+    private int dragAnchor = -1;
+    private float dragX, dragY;
+    private int dragScroll;
+    private final Set<String> dragAdded = new LinkedHashSet<>();
+
+    private final Runnable dragRun = new Runnable() {
+        @Override
+        public void run() {
+            if (!dragging || dragScroll == 0) return;
+            listView.scrollBy(0, dragScroll);
+            View v = listView.findChildViewUnder(dragX, dragY);
+            if (v != null) {
+                int pos = listView.getChildAdapterPosition(v);
+                if (pos != RecyclerView.NO_POSITION) applyDragRange(pos);
+            }
+            ui.postDelayed(this, 16);
+        }
+    };
+
+    private final RecyclerView.OnItemTouchListener dragTouch = new RecyclerView.OnItemTouchListener() {
+        @Override
+        public boolean onInterceptTouchEvent(RecyclerView rv, MotionEvent e) {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) {
+                endDrag();
+                return false;
+            }
+            if (!dragging) return false;
+            if (a == MotionEvent.ACTION_MOVE) {
+                dragMove(rv, e);
+                return true;
+            }
+            if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) endDrag();
+            return false;
+        }
+
+        @Override
+        public void onTouchEvent(RecyclerView rv, MotionEvent e) {
+            if (!dragging) return;
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_MOVE) dragMove(rv, e);
+            else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) endDrag();
+        }
+
+        @Override
+        public void onRequestDisallowInterceptTouchEvent(boolean disallow) {
+        }
+    };
+
+    private void startDrag(int pos) {
+        if (pos < 0 || pos >= shown.size()) return;
+        dragging = true;
+        dragAnchor = pos;
+        dragAdded.clear();
+        dragAdded.add(shown.get(pos).f.getAbsolutePath());
+    }
+
+    private void endDrag() {
+        dragging = false;
+        dragScroll = 0;
+        dragAnchor = -1;
+        dragAdded.clear();
+        ui.removeCallbacks(dragRun);
+    }
+
+    private void dragMove(RecyclerView rv, MotionEvent e) {
+        dragX = e.getX();
+        dragY = e.getY();
+        View v = rv.findChildViewUnder(dragX, dragY);
+        if (v != null) {
+            int pos = rv.getChildAdapterPosition(v);
+            if (pos != RecyclerView.NO_POSITION) applyDragRange(pos);
+        }
+        int edge = Ui.dp(this, 72);
+        int step = Ui.dp(this, 14);
+        int before = dragScroll;
+        if (dragY < edge) dragScroll = -step;
+        else if (dragY > rv.getHeight() - edge) dragScroll = step;
+        else dragScroll = 0;
+        if (dragScroll != 0 && before == 0) ui.post(dragRun);
+    }
+
+    private void applyDragRange(int pos) {
+        if (dragAnchor < 0) return;
+        int lo = Math.min(dragAnchor, pos);
+        int hi = Math.min(Math.max(dragAnchor, pos), shown.size() - 1);
+        boolean filesOnly = "files".equals(pickMode);
+        Set<String> now = new LinkedHashSet<>();
+        for (int i = lo; i <= hi; i++) {
+            Entry e = shown.get(i);
+            if (filesOnly && e.dir) continue;
+            now.add(e.f.getAbsolutePath());
+        }
+        boolean changedSel = false;
+        for (String p : dragAdded) {
+            if (!now.contains(p) && selected.remove(p)) changedSel = true;
+        }
+        for (String p : now) {
+            if (selected.add(p)) changedSel = true;
+        }
+        dragAdded.clear();
+        dragAdded.addAll(now);
+        if (changedSel) updateSelectionChrome();
+    }
+
+    private void updateSelectionChrome() {
+        if (pickMode != null) updatePickBar();
+        boolean sel = !selected.isEmpty() && pickMode == null;
+        selBar.setVisibility(sel ? View.VISIBLE : View.GONE);
+        searchView.setVisibility(sel ? View.GONE : View.VISIBLE);
+        if (sel) {
+            long total = 0;
+            for (Entry e : shown) if (!e.dir && selected.contains(e.f.getAbsolutePath())) total += e.size;
+            String t = getString(R.string.fm_selected_n, selected.size());
+            selCount.setText(total > 0 ? t + " · " + Fmt.size(total) : t);
+        }
+        changed();
     }
 
     // ------------------------------------------------------------------ header / chrome
@@ -700,8 +1066,13 @@ public class FileManagerActivity extends AppCompatActivity {
     private void updateChrome() {
         switch (mode) {
             case M_SEARCH:
-                titleView.setText(getString(R.string.fm_search_results, shown.size()));
+                titleView.setText(getString(R.string.fm_search_results, shown.size())
+                        + (session != null && !session.done ? "+" : ""));
                 setSubtitle(cur.getAbsolutePath());
+                break;
+            case M_TRASH:
+                titleView.setText(R.string.fm_trash);
+                setSubtitle(getString(R.string.fm_trash_hint));
                 break;
             case M_FAV:
                 titleView.setText(R.string.fm_favorites);
@@ -744,7 +1115,7 @@ public class FileManagerActivity extends AppCompatActivity {
         }
         updatePermBanner();
         updatePasteBar();
-        adapter.notifyDataSetChanged();
+        changed();
     }
 
     private void setSubtitle(String s) {
@@ -867,6 +1238,16 @@ public class FileManagerActivity extends AppCompatActivity {
             refresh();
         });
         placesRow.addView(recent);
+
+        TextView trash = Ui.chip(this, getString(R.string.fm_trash), mode == M_TRASH);
+        trash.setOnClickListener(v -> openTrash());
+        placesRow.addView(trash);
+    }
+
+    private void openTrash() {
+        clearSelectionQuiet();
+        mode = M_TRASH;
+        refresh();
     }
 
     private void addPlace(String label, final File dir) {
@@ -965,87 +1346,313 @@ public class FileManagerActivity extends AppCompatActivity {
 
     // ------------------------------------------------------------------ list adapter
 
-    private class FileAdapter extends BaseAdapter {
+    private class FileAdapter extends RecyclerView.Adapter<FileAdapter.VH> {
+        class VH extends RecyclerView.ViewHolder {
+            final ImageView icon, thumb, check, fav;
+            final TextView title, sub, badge;
+            final View more, chevron;
+
+            VH(View v) {
+                super(v);
+                icon = v.findViewById(R.id.icon);
+                thumb = v.findViewById(R.id.thumb);
+                check = v.findViewById(R.id.check);
+                fav = v.findViewById(R.id.fav);
+                title = v.findViewById(R.id.title);
+                sub = v.findViewById(R.id.sub);
+                badge = v.findViewById(R.id.badge);
+                more = v.findViewById(R.id.more);
+                chevron = v.findViewById(R.id.chevron);
+            }
+        }
+
         @Override
-        public int getCount() {
+        public int getItemCount() {
             return shown.size();
         }
 
         @Override
-        public Object getItem(int position) {
-            return shown.get(position);
+        public int getItemViewType(int position) {
+            return gridMode ? 1 : 0;
         }
 
         @Override
-        public long getItemId(int position) {
-            return position;
+        public VH onCreateViewHolder(ViewGroup parent, int viewType) {
+            View v = getLayoutInflater().inflate(viewType == 1 ? R.layout.item_file_grid : R.layout.item_file,
+                    parent, false);
+            final VH h = new VH(v);
+            v.setOnClickListener(x -> {
+                int p = h.getBindingAdapterPosition();
+                if (p != RecyclerView.NO_POSITION) onItemClick(p);
+            });
+            v.setOnLongClickListener(x -> {
+                int p = h.getBindingAdapterPosition();
+                return p != RecyclerView.NO_POSITION && onItemLong(p);
+            });
+            if (h.more != null) {
+                h.more.setOnClickListener(x -> {
+                    int p = h.getBindingAdapterPosition();
+                    if (p != RecyclerView.NO_POSITION && p < shown.size()) itemMenu(shown.get(p));
+                });
+            }
+            return h;
         }
 
         @Override
-        public View getView(int pos, View v, ViewGroup parent) {
-            if (v == null) v = getLayoutInflater().inflate(R.layout.item_file, parent, false);
+        public void onBindViewHolder(VH h, int pos) {
+            if (pos < 0 || pos >= shown.size()) return;
             final Entry e = shown.get(pos);
             final String path = e.f.getAbsolutePath();
             boolean sel = selected.contains(path);
             int type = typeOf(e);
             int color = Ui.color(FileManagerActivity.this, colorFor(type));
 
-            ImageView icon = v.findViewById(R.id.icon);
-            ImageView thumb = v.findViewById(R.id.thumb);
-            icon.setImageResource(iconFor(type));
-            icon.setImageTintList(ColorStateList.valueOf(color));
+            h.icon.setImageResource(iconFor(type));
+            h.icon.setImageTintList(ColorStateList.valueOf(color));
             GradientDrawable g = new GradientDrawable();
             g.setCornerRadius(Ui.radius(FileManagerActivity.this, R.dimen.radius_s));
             g.setColor((color & 0x00FFFFFF) | 0x26000000);
-            icon.setBackground(g);
-            thumb.setBackground(g);
-            thumb.setClipToOutline(true);
-            thumb.setTag(path);
+            h.icon.setBackground(g);
+            h.thumb.setBackground(g);
+            h.thumb.setClipToOutline(true);
+            h.thumb.setTag(path);
             Bitmap cached = (type == T_IMG || type == T_APK) ? thumbs.get(path + "|" + e.mod) : null;
             if (cached != null) {
-                thumb.setImageBitmap(cached);
-                thumb.setVisibility(View.VISIBLE);
-                icon.setVisibility(View.INVISIBLE);
+                h.thumb.setImageBitmap(cached);
+                h.thumb.setVisibility(View.VISIBLE);
+                h.icon.setVisibility(View.INVISIBLE);
             } else {
-                thumb.setVisibility(View.GONE);
-                icon.setVisibility(View.VISIBLE);
-                if (type == T_IMG || type == T_APK) loadThumb(e, type, thumb, icon);
+                h.thumb.setVisibility(View.GONE);
+                h.icon.setVisibility(View.VISIBLE);
+                if (type == T_IMG || type == T_APK) loadThumb(e, type, h.thumb, h.icon);
             }
 
-            ((TextView) v.findViewById(R.id.title)).setText(e.name);
+            h.title.setText(e.name);
             StringBuilder sub = new StringBuilder();
             if (e.dir) {
-                sub.append(e.kids < 0 ? getString(R.string.fm_unreadable) : getString(R.string.fm_items_n, e.kids));
+                if (e.trashId != null) sub.append(Fmt.size(e.size));
+                else sub.append(e.kids < 0 ? getString(R.string.fm_unreadable) : getString(R.string.fm_items_n, e.kids));
             } else {
                 sub.append(Fmt.size(e.size));
             }
-            if (mode == M_DIR) {
+            if (e.trashId != null) {
+                sub.append(" · ").append(getString(R.string.fm_trash_left, e.left));
+            } else if (mode == M_DIR) {
                 sub.append(" · ").append(dateFmt.format(new Date(e.mod)));
             } else {
                 File p = e.f.getParentFile();
                 if (p != null) sub.append(" · ").append(p.getAbsolutePath());
             }
-            ((TextView) v.findViewById(R.id.sub)).setText(sub.toString());
+            h.sub.setText(sub.toString());
+            bindBadge(h, e);
 
-            v.findViewById(R.id.fav).setVisibility(favs().contains(path) ? View.VISIBLE : View.GONE);
-            // while selecting, every row shows a tick circle (filled when chosen) so it is clear
-            // that a tap toggles the row; folders cannot be ticked when choosing files to upload
+            if (favSnap == null) favSnap = favs();
+            h.fav.setVisibility(favSnap.contains(path) ? View.VISIBLE : View.GONE);
             boolean pickFiles = "files".equals(pickMode);
             boolean selecting = (!selected.isEmpty() && pickMode == null) || pickFiles;
             boolean showCheck = selecting && !(pickFiles && e.dir);
-            ImageView ck = v.findViewById(R.id.check);
-            ck.setVisibility(showCheck ? View.VISIBLE : View.GONE);
-            ck.setImageResource(sel ? R.drawable.ic_check_circle : R.drawable.ic_circle_outline);
-            ck.setImageTintList(ColorStateList.valueOf(Ui.color(FileManagerActivity.this,
+            h.check.setVisibility(showCheck ? View.VISIBLE : View.GONE);
+            h.check.setImageResource(sel ? R.drawable.ic_check_circle : R.drawable.ic_circle_outline);
+            h.check.setImageTintList(ColorStateList.valueOf(Ui.color(FileManagerActivity.this,
                     sel ? R.color.accent_text : R.color.text_hint)));
-            v.findViewById(R.id.chevron).setVisibility(!showCheck && e.dir ? View.VISIBLE : View.GONE);
-            View more = v.findViewById(R.id.more);
-            more.setVisibility(pickMode == null && selected.isEmpty() ? View.VISIBLE : View.GONE);
-            more.setOnClickListener(x -> itemMenu(e));
-            Ui.shapeRow(FileManagerActivity.this, v, pos == 0, pos == shown.size() - 1,
-                    sel ? R.color.accent_soft : R.color.surface);
-            return v;
+            if (h.chevron != null) h.chevron.setVisibility(!showCheck && e.dir ? View.VISIBLE : View.GONE);
+            if (h.more != null) {
+                h.more.setVisibility(pickMode == null && selected.isEmpty() ? View.VISIBLE : View.GONE);
+            }
+            Ui.shapeRow(FileManagerActivity.this, h.itemView, gridMode || pos == 0,
+                    gridMode || pos == shown.size() - 1, sel ? R.color.accent_soft : R.color.surface);
         }
+    }
+
+    private String badgeRepo = "";
+    private String badgeBranch = "";
+    private String badgeRoot = "";
+    private volatile java.util.Map<String, String> remoteShas;
+    private volatile int badgeVer;
+    private final java.util.concurrent.ConcurrentHashMap<String, Integer> badgeCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private final Set<String> badgePending = Collections.synchronizedSet(new java.util.HashSet<String>());
+    private final ExecutorService badgeIo = Executors.newSingleThreadExecutor();
+    private final Runnable badgeRefresh = this::changed;
+    private final Runnable undoHide = () -> {
+        if (undoBar != null) undoBar.setVisibility(View.GONE);
+    };
+    private final Transfers.Listener finishListener = job -> {
+        if (badgesOn() && job.tag != null && job.tag.equals("upload:" + badgeRepo)) reloadRemote();
+    };
+
+    private boolean badgesOn() {
+        return !badgeRepo.isEmpty() && !badgeRoot.isEmpty();
+    }
+
+    private String relPath(File f) {
+        String ap = f.getAbsolutePath();
+        String root = badgeRoot;
+        if (root.isEmpty() || !ap.startsWith(root + "/")) return null;
+        return ap.substring(root.length() + 1);
+    }
+
+    private int badgeStatus(Entry e) {
+        final java.util.Map<String, String> remote = remoteShas;
+        if (remote == null) return -1;
+        final String rel = relPath(e.f);
+        if (rel == null) return -1;
+        final String key = e.f.getAbsolutePath() + "|" + e.mod + "|" + e.size;
+        Integer c = badgeCache.get(key);
+        if (c != null) return c;
+        if (e.size > 25L * 1024 * 1024) return -1;
+        if (badgePending.add(key)) {
+            final int ver = badgeVer;
+            final File f = e.f;
+            badgeIo.execute(() -> {
+                String local = TransferTasks.gitSha(f);
+                String r = remote.get(rel);
+                int st = r == null ? 0 : (r.equals(local) ? 2 : 1);
+                if (local != null && ver == badgeVer) badgeCache.put(key, st);
+                badgePending.remove(key);
+                ui.removeCallbacks(badgeRefresh);
+                ui.postDelayed(badgeRefresh, 250);
+            });
+        }
+        return -1;
+    }
+
+    private void bindBadge(FileAdapter.VH h, Entry e) {
+        if (h.badge == null) return;
+        if (!badgesOn() || e.dir || e.trashId != null) {
+            h.badge.setVisibility(View.GONE);
+            return;
+        }
+        int st = badgeStatus(e);
+        if (st < 0) {
+            h.badge.setVisibility(View.GONE);
+            return;
+        }
+        int colorRes = st == 2 ? R.color.ok : st == 1 ? R.color.warn : R.color.info;
+        int c = Ui.color(this, colorRes);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(Ui.dp(this, 10));
+        g.setColor((c & 0x00FFFFFF) | 0x26000000);
+        h.badge.setBackground(g);
+        h.badge.setTextColor(c);
+        h.badge.setText(st == 2 ? R.string.fm_b_up : st == 1 ? R.string.fm_b_changed : R.string.fm_b_new);
+        h.badge.setVisibility(View.VISIBLE);
+    }
+
+    private void loadBadgePrefs() {
+        badgeRepo = prefs.getString("bd_repo", "");
+        badgeBranch = prefs.getString("bd_branch", "");
+        badgeRoot = prefs.getString("bd_root", "");
+        if (badgesOn()) reloadRemote();
+    }
+
+    private void reloadRemote() {
+        final String repo = badgeRepo;
+        final String br = badgeBranch;
+        final int slash = repo.indexOf('/');
+        if (slash <= 0 || Store.getToken(this) == null) return;
+        badgeVer++;
+        badgeCache.clear();
+        remoteShas = null;
+        io.execute(() -> {
+            try {
+                java.util.Map<String, String> m = new GitHubApi(this).blobShaMap(repo.substring(0, slash),
+                        repo.substring(slash + 1), br);
+                post(() -> {
+                    if (!repo.equals(badgeRepo)) return;
+                    remoteShas = m;
+                    changed();
+                });
+            } catch (final Exception e) {
+                if (e instanceof GitHubApi.ApiException
+                        && (((GitHubApi.ApiException) e).code == 404 || ((GitHubApi.ApiException) e).code == 409)) {
+                    post(() -> {
+                        remoteShas = new java.util.HashMap<>();
+                        changed();
+                    });
+                    return;
+                }
+                final String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+                post(() -> Dlg.error(FileManagerActivity.this, getString(R.string.error), msg, e, this::reloadRemote));
+            }
+        });
+    }
+
+    private void badgesMenu() {
+        if (badgesOn()) {
+            String[] items = {getString(R.string.fm_badges_refresh), getString(R.string.fm_badges_change),
+                    getString(R.string.fm_badges_off)};
+            new Dlg(this).setTitle(getString(R.string.fm_badges_title) + " · " + badgeRepo)
+                    .setItems(items, (d, which) -> {
+                        if (which == 0) {
+                            reloadRemote();
+                        } else if (which == 1) {
+                            pickBadgeRepo();
+                        } else {
+                            prefs.edit().remove("bd_repo").remove("bd_branch").remove("bd_root").apply();
+                            badgeRepo = "";
+                            badgeBranch = "";
+                            badgeRoot = "";
+                            remoteShas = null;
+                            badgeCache.clear();
+                            changed();
+                        }
+                    }).show();
+        } else {
+            pickBadgeRepo();
+        }
+    }
+
+    private void pickBadgeRepo() {
+        JSONArray repos = RepoCache.load(this);
+        if (repos == null || repos.length() == 0 || Store.getToken(this) == null) {
+            toast(R.string.fm_gh_no_repos);
+            return;
+        }
+        final List<JSONObject> list = new ArrayList<>();
+        final List<String> names = new ArrayList<>();
+        for (int i = 0; i < repos.length(); i++) {
+            JSONObject r = repos.optJSONObject(i);
+            if (r == null || r.optString("full_name").indexOf('/') <= 0) continue;
+            list.add(r);
+            names.add(r.optString("full_name"));
+        }
+        if (list.isEmpty()) {
+            toast(R.string.fm_gh_no_repos);
+            return;
+        }
+        new Dlg(this).setTitle(R.string.fm_gh_pick_repo)
+                .setItems(names.toArray(new String[0]), (d, which) -> {
+                    final JSONObject r = list.get(which);
+                    final String full = r.optString("full_name");
+                    String def = r.optString("default_branch", "main");
+                    if (def.isEmpty() || "null".equals(def)) def = "main";
+                    final String saved = prefs.getString("up_branch:" + full, "");
+                    final String branch = saved.isEmpty() ? def : saved;
+                    final File root = cur;
+                    new Dlg(this).setTitle(R.string.fm_badges_title)
+                            .setMessage(getString(R.string.fm_badges_confirm, root.getAbsolutePath(), full, branch))
+                            .setPositiveButton(R.string.ok, (d2, w) -> {
+                                prefs.edit().putString("bd_repo", full).putString("bd_branch", branch)
+                                        .putString("bd_root", root.getAbsolutePath()).apply();
+                                loadBadgePrefs();
+                            })
+                            .setNegativeButton(R.string.cancel, null)
+                            .show();
+                }).show();
+    }
+
+    private boolean onItemLong(int pos) {
+        if ("folder".equals(pickMode) || "save".equals(pickMode)) return true;
+        if (pos < 0 || pos >= shown.size()) return true;
+        if ("files".equals(pickMode) && shown.get(pos).dir) return true;
+        String path = shown.get(pos).f.getAbsolutePath();
+        if (!selected.contains(path)) {
+            selected.add(path);
+            updateChrome();
+        }
+        startDrag(pos);
+        return true;
     }
 
     private void loadThumb(final Entry e, final int type, final ImageView thumb, final ImageView icon) {
@@ -1104,6 +1711,10 @@ public class FileManagerActivity extends AppCompatActivity {
             return;
         }
         Entry e = shown.get(pos);
+        if (e.trashId != null) {
+            trashItemMenu(e);
+            return;
+        }
         if (e.dir) {
             navigate(e.f);
         } else if ("files".equals(pickMode)) {
@@ -1206,6 +1817,7 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void toClipboard(boolean cut) {
+        if (mode == M_TRASH) return;
         List<File> files = selectedFiles();
         if (files.isEmpty()) return;
         clip.clear();
@@ -1303,8 +1915,42 @@ public class FileManagerActivity extends AppCompatActivity {
         for (int i = 0; i < names.length; i++) items.add((i == sortMode ? "● " : "○ ") + names[i]);
         items.add(getString(sortDesc ? R.string.fm_order_desc : R.string.fm_order_asc));
         items.add(getString(showHidden ? R.string.fm_hide_hidden : R.string.fm_show_hidden));
+        items.add(getString(gridMode ? R.string.fm_view_list : R.string.fm_view_grid));
+        items.add(getString(R.string.fm_trash));
+        items.add(getString(badgesOn() ? R.string.fm_badges_on : R.string.fm_badges_menu));
+        items.add(getString(useIndex() ? R.string.fm_index_off : R.string.fm_index_on));
+        long it = FmIndex.time(this);
+        items.add(getString(R.string.fm_index_build) + (it > 0 ? " · " + dateFmt.format(new Date(it)) : ""));
         new Dlg(this).setTitle(R.string.fm_sort)
                 .setItems(items.toArray(new String[0]), (d, which) -> {
+                    if (which == 6) {
+                        setGridMode(!gridMode);
+                        return;
+                    }
+                    if (which == 7) {
+                        openTrash();
+                        return;
+                    }
+                    if (which == 8) {
+                        badgesMenu();
+                        return;
+                    }
+                    if (which == 9) {
+                        if (useIndex()) {
+                            prefs.edit().putBoolean("use_index", false).apply();
+                            toast(R.string.fm_index_disabled);
+                        } else if (FmIndex.root(this).isEmpty()) {
+                            buildIndex();
+                        } else {
+                            prefs.edit().putBoolean("use_index", true).apply();
+                            toast(R.string.fm_index_enabled);
+                        }
+                        return;
+                    }
+                    if (which == 10) {
+                        buildIndex();
+                        return;
+                    }
                     if (which < 4) {
                         sortMode = which;
                     } else if (which == 4) {
@@ -1318,7 +1964,30 @@ public class FileManagerActivity extends AppCompatActivity {
                 }).show();
     }
 
+    private void buildIndex() {
+        final File root = lastGranted ? Environment.getExternalStorageDirectory() : cur;
+        runTask(getString(R.string.fm_index_building), () -> {
+            final AtomicBoolean stop = new AtomicBoolean(false);
+            int n;
+            try {
+                n = FmIndex.build(getApplicationContext(), root, stop, c -> {
+                    if (cancelled) stop.set(true);
+                    setBusy(getString(R.string.fm_index_count, c));
+                });
+            } catch (IOException e) {
+                if (cancelled) throw new Cancel();
+                throw e;
+            }
+            prefs.edit().putBoolean("use_index", true).apply();
+            return getString(R.string.fm_index_done, n);
+        });
+    }
+
     private void newMenu() {
+        if (mode == M_TRASH) {
+            emptyTrashDialog();
+            return;
+        }
         String[] items = {getString(R.string.fm_new_folder), getString(R.string.fm_new_file),
                 getString(R.string.fm_import_files)};
         new Dlg(this).setTitle(R.string.fm_new).setItems(items, (d, which) -> {
@@ -1372,6 +2041,10 @@ public class FileManagerActivity extends AppCompatActivity {
     /** Actions for one row, opened from its "more" button (no need to know about long-press). */
     private void itemMenu(final Entry e) {
         if (pickMode != null) return;
+        if (e.trashId != null) {
+            trashItemMenu(e);
+            return;
+        }
         final File f = e.f;
         final List<File> one = new ArrayList<>();
         one.add(f);
@@ -1446,6 +2119,10 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void moreMenu() {
+        if (mode == M_TRASH) {
+            trashSelMenu();
+            return;
+        }
         final List<File> files = selectedFiles();
         if (files.isEmpty()) return;
         final boolean single = files.size() == 1;
@@ -1509,7 +2186,7 @@ public class FileManagerActivity extends AppCompatActivity {
     // ------------------------------------------------------------------ upload straight to a repository
 
     private void uploadToGithub(final List<File> files) {
-        if (files.isEmpty()) return;
+        if (files.isEmpty() || mode == M_TRASH) return;
         JSONArray repos = RepoCache.load(this);
         if (repos == null || repos.length() == 0 || Store.getToken(this) == null) {
             toast(R.string.fm_gh_no_repos);
@@ -1527,6 +2204,12 @@ public class FileManagerActivity extends AppCompatActivity {
             toast(R.string.fm_gh_no_repos);
             return;
         }
+        final String lastRepo = prefs.getString("up_repo", "");
+        int lastAt = names.indexOf(lastRepo);
+        if (lastAt > 0) {
+            list.add(0, list.remove(lastAt));
+            names.add(0, names.remove(lastAt));
+        }
         new Dlg(this).setTitle(R.string.fm_gh_pick_repo)
                 .setItems(names.toArray(new String[0]), (d, which) -> uploadDialog(files, list.get(which)))
                 .show();
@@ -1539,6 +2222,9 @@ public class FileManagerActivity extends AppCompatActivity {
         final String name = full.substring(slash + 1);
         String def = r.optString("default_branch", "main");
         if (def.isEmpty() || "null".equals(def)) def = "main";
+        String savedBranch = prefs.getString("up_branch:" + full, "");
+        if (!savedBranch.isEmpty()) def = savedBranch;
+        String savedTarget = prefs.getString("up_target:" + full, "");
 
         boolean anyDir = false;
         for (File f : files) if (f.isDirectory()) anyDir = true;
@@ -1546,7 +2232,7 @@ public class FileManagerActivity extends AppCompatActivity {
         LinearLayout box = Ui.box(this);
         final EditText branch = Ui.edit(this, getString(R.string.branch_label), def);
         branch.setTextDirection(View.TEXT_DIRECTION_LTR);
-        final EditText target = Ui.edit(this, getString(R.string.target_folder), "");
+        final EditText target = Ui.edit(this, getString(R.string.target_folder), savedTarget);
         target.setTextDirection(View.TEXT_DIRECTION_LTR);
         final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
         final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
@@ -1569,23 +2255,74 @@ public class FileManagerActivity extends AppCompatActivity {
                     String base = target.getText().toString().trim().replaceAll("^/+|/+$", "");
                     String m = msg.getText().toString().trim();
                     if (m.isEmpty()) m = getString(R.string.default_commit);
-                    GitHubApi api = new GitHubApi(this);
-                    Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, name),
-                            "upload:" + owner + "/" + name,
-                            TransferTasks.upload(api, owner, name, b, base, m, new ArrayList<>(files),
-                                    !hasDir || includeRoot.isChecked(), hasDir && skipJunk.isChecked()),
-                            (job, ok, text) -> {
-                                String first = text == null ? "" : text;
-                                int nl = first.indexOf('\n');
-                                if (nl > 0) first = first.substring(0, nl);
-                                Toast.makeText(job.app, ok ? first
-                                        : job.app.getString(R.string.tr_failed) + ": " + first, Toast.LENGTH_LONG).show();
-                            });
-                    Toast.makeText(this, R.string.tr_started_bg, Toast.LENGTH_LONG).show();
-                    clearSelection();
+                    prefs.edit().putString("up_repo", full).putString("up_branch:" + full, b)
+                            .putString("up_target:" + full, base).apply();
+                    previewThenUpload(new GitHubApi(this), owner, name, b, base, m, new ArrayList<>(files),
+                            !hasDir || includeRoot.isChecked(), hasDir && skipJunk.isChecked());
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    private void previewThenUpload(final GitHubApi api, final String owner, final String name, final String b,
+                                   final String base, final String m, final List<File> files,
+                                   final boolean incRoot, final boolean skip) {
+        showBusy(getString(R.string.fm_preview_scanning), false);
+        io.execute(() -> {
+            try {
+                final TransferTasks.Preview p = TransferTasks.preview(api, getContentResolver(), owner, name, b, base,
+                        files, incRoot, skip, () -> cancelled);
+                post(() -> {
+                    hideBusy();
+                    showPreview(p, () -> {
+                        Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, name),
+                                "upload:" + owner + "/" + name,
+                                TransferTasks.upload(api, owner, name, b, base, m, files, incRoot, skip),
+                                (job, ok, text) -> {
+                                    String first = text == null ? "" : text;
+                                    int nl = first.indexOf('\n');
+                                    if (nl > 0) first = first.substring(0, nl);
+                                    Toast.makeText(job.app, ok ? first
+                                            : job.app.getString(R.string.tr_failed) + ": " + first,
+                                            Toast.LENGTH_LONG).show();
+                                });
+                        Toast.makeText(this, R.string.tr_started_bg, Toast.LENGTH_LONG).show();
+                        clearSelection();
+                    });
+                });
+            } catch (final Exception e) {
+                post(() -> {
+                    hideBusy();
+                    if (e instanceof Transfers.Cancelled) {
+                        toast(R.string.fm_cancelled);
+                        return;
+                    }
+                    String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+                    Dlg.error(FileManagerActivity.this, getString(R.string.error), msg, e,
+                            () -> previewThenUpload(api, owner, name, b, base, m, files, incRoot, skip));
+                });
+            }
+        });
+    }
+
+    private void showPreview(TransferTasks.Preview p, final Runnable go) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getString(R.string.fm_pv_files, p.files, Fmt.size(p.bytes))).append('\n');
+        sb.append(getString(R.string.fm_pv_states, p.fresh, p.changed, p.same)).append('\n');
+        sb.append(getString(R.string.fm_pv_upload, p.fresh + p.changed, Fmt.size(p.uploadBytes)));
+        if (p.ignored > 0 || p.tooBig > 0) {
+            sb.append('\n').append(getString(R.string.fm_pv_skipped, p.ignored, p.tooBig));
+        }
+        Dlg d = new Dlg(this);
+        d.setTitle(R.string.fm_pv_title);
+        d.setMessage(sb.toString());
+        if (p.fresh + p.changed > 0) {
+            d.setPositiveButton(R.string.upload, (x, w) -> go.run());
+            d.setNegativeButton(R.string.cancel, null);
+        } else {
+            d.setPositiveButton(R.string.close, null);
+        }
+        d.show();
     }
 
     private static void add(List<String> labels, List<Integer> ids, String l, int id) {
@@ -1625,23 +2362,76 @@ public class FileManagerActivity extends AppCompatActivity {
     // ------------------------------------------------------------------ operations
 
     private void error(Exception e) {
+        error(e, null);
+    }
+
+    private void error(Exception e, Runnable retry) {
         if (e instanceof Cancel) {
             toast(R.string.fm_cancelled);
             return;
         }
         String m = e.getMessage() == null ? e.toString() : e.getMessage();
-        info(getString(R.string.error), m);
+        Dlg.error(this, getString(R.string.error), m, e, retry);
     }
 
+    private int opCount;
+
+    private static final class Op {
+        volatile long total;
+        volatile long done;
+        long lastUi;
+        long lastT;
+        long lastD;
+        float speed;
+    }
+
+    private Op op;
+    private ProgressBar opBar;
+    private TextView opDetail;
+
     private void showBusy(String text) {
+        showBusy(text, false);
+    }
+
+    private void showBusy(String text, boolean progress) {
         hideBusy();
         cancelled = false;
-        IosSpinner wheel = new IosSpinner(this);
+        opCount = 0;
         busyText = new TextView(this);
         busyText.setText(text);
         busyText.setSingleLine(true);
         busyText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-        LinearLayout box = Ui.busyBox(this, wheel, busyText);
+        LinearLayout box;
+        if (progress) {
+            op = new Op();
+            op.lastT = SystemClock.elapsedRealtime();
+            box = Ui.box(this);
+            busyText.setTextColor(Ui.color(this, R.color.text_primary));
+            busyText.setTextSize(14);
+            opBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            opBar.setMax(1000);
+            opBar.setIndeterminate(true);
+            Ui.tint(this, opBar);
+            opDetail = new TextView(this);
+            opDetail.setTextColor(Ui.color(this, R.color.text_secondary));
+            opDetail.setTextSize(12);
+            opDetail.setText(R.string.fm_op_preparing);
+            box.addView(busyText);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    Ui.dp(this, 8));
+            lp.topMargin = Ui.dp(this, 14);
+            box.addView(opBar, lp);
+            LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            dl.topMargin = Ui.dp(this, 10);
+            box.addView(opDetail, dl);
+        } else {
+            op = null;
+            opBar = null;
+            opDetail = null;
+            IosSpinner wheel = new IosSpinner(this);
+            box = Ui.busyBox(this, wheel, busyText);
+        }
         busy = new Dlg(this).centered().setTitle(R.string.working).setView(box)
                 .setCancelable(false)
                 .setNegativeButton(R.string.cancel, (d, w) -> cancelled = true)
@@ -1655,6 +2445,55 @@ public class FileManagerActivity extends AppCompatActivity {
         });
     }
 
+    private void setOpTotal(long t) {
+        Op o = op;
+        if (o != null) o.total = t;
+    }
+
+    private static String clock(long sec) {
+        if (sec < 3600) return String.format(Locale.US, "%d:%02d", sec / 60, sec % 60);
+        return String.format(Locale.US, "%d:%02d:%02d", sec / 3600, (sec % 3600) / 60, sec % 60);
+    }
+
+    private void tick(long n, String name) {
+        final Op o = op;
+        if (o == null) return;
+        o.done += n;
+        long now = SystemClock.elapsedRealtime();
+        if (now - o.lastUi < 200) return;
+        o.lastUi = now;
+        if (now - o.lastT >= 500) {
+            float inst = (o.done - o.lastD) * 1000f / (now - o.lastT);
+            o.speed = o.speed <= 0 ? inst : o.speed * 0.6f + inst * 0.4f;
+            o.lastT = now;
+            o.lastD = o.done;
+        }
+        final long d = o.done;
+        final long t = o.total;
+        final float sp = o.speed;
+        final String nm = name;
+        post(() -> showOp(o, d, t, sp, nm));
+    }
+
+    private void showOp(Op o, long d, long t, float speed, String name) {
+        if (op != o || opBar == null || opDetail == null) return;
+        if (name != null && busyText != null) busyText.setText(name);
+        StringBuilder sb = new StringBuilder();
+        if (t > 0) {
+            int pm = (int) Math.min(1000, d * 1000 / t);
+            if (opBar.isIndeterminate()) opBar.setIndeterminate(false);
+            Ui.progress(opBar, pm);
+            sb.append(pm / 10).append('%').append("  ·  ").append(Fmt.size(d)).append(" / ").append(Fmt.size(t));
+        } else {
+            sb.append(Fmt.size(d));
+        }
+        if (speed > 0) {
+            sb.append("  ·  ").append(Fmt.size((long) speed)).append("/s");
+            if (t > d) sb.append("  ·  ").append(getString(R.string.fm_op_eta, clock((long) ((t - d) / speed))));
+        }
+        opDetail.setText(sb.toString());
+    }
+
     private void hideBusy() {
         if (busy != null) {
             try {
@@ -1664,10 +2503,17 @@ public class FileManagerActivity extends AppCompatActivity {
             busy = null;
         }
         busyText = null;
+        op = null;
+        opBar = null;
+        opDetail = null;
     }
 
     private void runTask(String text, final Work w) {
-        showBusy(text);
+        runTask(text, false, w);
+    }
+
+    private void runTask(final String text, final boolean progress, final Work w) {
+        showBusy(text, progress);
         io.execute(() -> {
             String msg = null;
             Exception err = null;
@@ -1680,7 +2526,7 @@ public class FileManagerActivity extends AppCompatActivity {
             final Exception er = err;
             post(() -> {
                 hideBusy();
-                if (er != null) error(er);
+                if (er != null) error(er, () -> runTask(text, progress, w));
                 else if (m != null) toast(m);
                 refresh();
             });
@@ -1719,15 +2565,18 @@ public class FileManagerActivity extends AppCompatActivity {
             File[] kids = src.listFiles();
             if (kids != null) for (File k : kids) copyTree(k, new File(dst, k.getName()));
         } else {
-            setBusy(src.getName());
+            if (op == null) setBusy(src.getName() + "  ·  " + (++opCount));
+            else tick(0, src.getName());
             try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
                 byte[] buf = new byte[64 * 1024];
                 int n;
                 while ((n = in.read(buf)) != -1) {
                     if (cancelled) throw new Cancel();
                     out.write(buf, 0, n);
+                    tick(n, src.getName());
                 }
             }
+            dst.setLastModified(src.lastModified());
         }
     }
 
@@ -1737,7 +2586,7 @@ public class FileManagerActivity extends AppCompatActivity {
             File[] kids = f.listFiles();
             if (kids != null) for (File k : kids) deleteTree(k);
         }
-        setBusy(f.getName());
+        setBusy(f.getName() + "  ·  " + (++opCount));
         if (!f.delete() && f.exists()) throw new IOException(getString(R.string.fm_err_delete, f.getName()));
     }
 
@@ -1746,24 +2595,59 @@ public class FileManagerActivity extends AppCompatActivity {
         final File dest = cur;
         final boolean cut = clipCut;
         final List<File> src = new ArrayList<>(clip);
+        final Set<File> doneSrc = new java.util.HashSet<>();
         clip.clear();
         updatePasteBar();
-        runTask(getString(cut ? R.string.fm_moving : R.string.fm_copying), () -> {
+        runTask(getString(cut ? R.string.fm_moving : R.string.fm_copying), true, () -> {
+            final long[] sizes = new long[src.size()];
+            long total = 0;
+            for (int i = 0; i < src.size(); i++) {
+                long[] t = new long[3];
+                if (src.get(i).exists()) sizeOf(src.get(i), t);
+                sizes[i] = t[0];
+                total += t[0];
+            }
+            setOpTotal(total);
+            if (!cut) {
+                long free = dest.getUsableSpace();
+                if (free > 0 && free < total + 1024L * 1024) {
+                    throw new IOException(getString(R.string.fm_err_no_space, Fmt.size(total)));
+                }
+            }
             int ok = 0;
-            for (File f : src) {
+            for (int i = 0; i < src.size(); i++) {
+                File f = src.get(i);
                 if (cancelled) throw new Cancel();
+                if (doneSrc.contains(f)) continue;
                 if (!f.exists()) continue;
                 if (f.isDirectory() && isInside(dest, f)) throw new IOException(getString(R.string.fm_err_into_self));
                 if (cut && dest.equals(f.getParentFile())) continue;
                 File target = unique(dest, f.getName());
                 if (cut) {
-                    if (!f.renameTo(target)) {
-                        copyTree(f, target);
+                    if (f.renameTo(target)) {
+                        tick(sizes[i], f.getName());
+                    } else {
+                        long free = dest.getUsableSpace();
+                        if (free > 0 && free < sizes[i] + 1024L * 1024) {
+                            throw new IOException(getString(R.string.fm_err_no_space, Fmt.size(sizes[i])));
+                        }
+                        try {
+                            copyTree(f, target);
+                        } catch (IOException ex) {
+                            Trash.deleteTree(target);
+                            throw ex;
+                        }
                         deleteTree(f);
                     }
                 } else {
-                    copyTree(f, target);
+                    try {
+                        copyTree(f, target);
+                    } catch (IOException ex) {
+                        Trash.deleteTree(target);
+                        throw ex;
+                    }
                 }
+                doneSrc.add(f);
                 ok++;
             }
             return getString(R.string.fm_done_n, ok);
@@ -1771,24 +2655,195 @@ public class FileManagerActivity extends AppCompatActivity {
     }
 
     private void deleteSelected() {
+        if (mode == M_TRASH) {
+            foreverEntries(selectedEntries());
+            return;
+        }
         confirmDelete(selectedFiles());
     }
 
     private void confirmDelete(final List<File> files) {
-        if (files.isEmpty()) return;
+        if (files.isEmpty() || mode == M_TRASH) return;
         String msg = files.size() == 1
-                ? getString(R.string.delete_msg_local, files.get(0).getName())
-                : getString(R.string.delete_msg_local_n, files.size());
-        new Dlg(this).setTitle(R.string.delete_title).setMessage(msg)
+                ? getString(R.string.fm_trash_msg, files.get(0).getName())
+                : getString(R.string.fm_trash_msg_n, files.size());
+        LinearLayout box = Ui.box(this);
+        box.addView(Ui.body(this, msg, 15, R.color.text_secondary));
+        final CheckBox perm = Ui.check(this, R.string.fm_delete_forever, false);
+        box.addView(perm);
+        new Dlg(this).setTitle(R.string.delete_title).setView(box)
+                .setPositiveButton(R.string.delete, (d, w) -> {
+                    final boolean forever = perm.isChecked();
+                    selected.clear();
+                    if (forever) {
+                        runTask(getString(R.string.fm_deleting), () -> {
+                            for (File f : files) deleteTree(f);
+                            Set<String> fv = favs();
+                            if (fv.removeAll(paths(files))) prefs.edit().putStringSet("fav", fv).apply();
+                            return getString(R.string.fm_done_n, files.size());
+                        });
+                    } else {
+                        trashFiles(files);
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private Trash.Tick trashTick(final AtomicBoolean stop) {
+        return (n, name) -> {
+            tick(n, name);
+            if (cancelled) stop.set(true);
+        };
+    }
+
+    private void trashFiles(final List<File> files) {
+        final List<String> ids = new ArrayList<>();
+        runTask(getString(R.string.fm_trashing), true, () -> {
+            long total = 0;
+            for (File f : files) {
+                long[] t = new long[3];
+                if (f.exists()) sizeOf(f, t);
+                total += t[0];
+            }
+            setOpTotal(total);
+            final AtomicBoolean stop = new AtomicBoolean(false);
+            Trash.Tick tk = trashTick(stop);
+            for (File f : files) {
+                if (cancelled) throw new Cancel();
+                if (!f.exists()) continue;
+                try {
+                    ids.add(Trash.put(getApplicationContext(), f, tk, stop));
+                } catch (IOException ex) {
+                    if (cancelled) throw new Cancel();
+                    throw ex;
+                }
+            }
+            Set<String> fv = favs();
+            if (fv.removeAll(paths(files))) prefs.edit().putStringSet("fav", fv).apply();
+            final List<String> got = new ArrayList<>(ids);
+            post(() -> showUndo(got));
+            return null;
+        });
+    }
+
+    private void showUndo(List<String> ids) {
+        lastTrash.clear();
+        lastTrash.addAll(ids);
+        if (ids.isEmpty() || undoBar == null) return;
+        undoText.setText(getString(R.string.fm_trashed_n, ids.size()));
+        undoBar.setVisibility(View.VISIBLE);
+        ui.removeCallbacks(undoHide);
+        ui.postDelayed(undoHide, 10000);
+    }
+
+    private void undoTrash() {
+        final List<String> ids = new ArrayList<>(lastTrash);
+        lastTrash.clear();
+        ui.removeCallbacks(undoHide);
+        undoBar.setVisibility(View.GONE);
+        if (ids.isEmpty()) return;
+        runTask(getString(R.string.fm_restoring), true, () -> restoreIds(ids));
+    }
+
+    private String restoreIds(List<String> ids) throws IOException {
+        long total = 0;
+        List<Trash.Item> items = new ArrayList<>();
+        for (String id : ids) {
+            Trash.Item it = Trash.find(getApplicationContext(), id);
+            if (it == null) continue;
+            items.add(it);
+            total += it.size;
+        }
+        setOpTotal(total);
+        final AtomicBoolean stop = new AtomicBoolean(false);
+        Trash.Tick tk = trashTick(stop);
+        int n = 0;
+        for (Trash.Item it : items) {
+            if (cancelled) throw new Cancel();
+            try {
+                Trash.restore(getApplicationContext(), it, tk, stop);
+            } catch (IOException ex) {
+                if (cancelled) throw new Cancel();
+                throw ex;
+            }
+            n++;
+        }
+        return getString(R.string.fm_restored_n, n);
+    }
+
+    private List<Entry> selectedEntries() {
+        List<Entry> out = new ArrayList<>();
+        for (Entry e : shown) if (selected.contains(e.f.getAbsolutePath())) out.add(e);
+        return out;
+    }
+
+    private void trashItemMenu(final Entry e) {
+        String[] items = {getString(R.string.fm_restore), getString(R.string.fm_delete_forever),
+                getString(R.string.fm_select)};
+        new Dlg(this).setTitle(e.name).setItems(items, (d, which) -> {
+            final List<Entry> one = new ArrayList<>();
+            one.add(e);
+            if (which == 0) {
+                restoreEntries(one);
+            } else if (which == 1) {
+                foreverEntries(one);
+            } else {
+                selected.add(e.f.getAbsolutePath());
+                updateChrome();
+            }
+        }).show();
+    }
+
+    private void trashSelMenu() {
+        final List<Entry> es = selectedEntries();
+        if (es.isEmpty()) return;
+        String[] items = {getString(R.string.fm_restore), getString(R.string.fm_delete_forever)};
+        new Dlg(this).setTitle(getString(R.string.fm_selected_n, es.size())).setItems(items, (d, which) -> {
+            if (which == 0) restoreEntries(es);
+            else foreverEntries(es);
+        }).show();
+    }
+
+    private void restoreEntries(List<Entry> es) {
+        final List<String> ids = new ArrayList<>();
+        for (Entry e : es) if (e.trashId != null) ids.add(e.trashId);
+        selected.clear();
+        if (ids.isEmpty()) return;
+        runTask(getString(R.string.fm_restoring), true, () -> restoreIds(ids));
+    }
+
+    private void foreverEntries(List<Entry> es) {
+        final List<String> ids = new ArrayList<>();
+        for (Entry e : es) if (e.trashId != null) ids.add(e.trashId);
+        if (ids.isEmpty()) return;
+        new Dlg(this).setTitle(R.string.delete_title)
+                .setMessage(getString(R.string.fm_forever_msg, ids.size()))
                 .setPositiveButton(R.string.delete, (d, w) -> {
                     selected.clear();
                     runTask(getString(R.string.fm_deleting), () -> {
-                        for (File f : files) deleteTree(f);
-                        Set<String> fv = favs();
-                        if (fv.removeAll(paths(files))) prefs.edit().putStringSet("fav", fv).apply();
-                        return getString(R.string.fm_done_n, files.size());
+                        int n = 0;
+                        for (String id : ids) {
+                            Trash.Item it = Trash.find(getApplicationContext(), id);
+                            if (it != null) {
+                                Trash.remove(getApplicationContext(), it);
+                                n++;
+                            }
+                        }
+                        return getString(R.string.fm_done_n, n);
                     });
                 })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void emptyTrashDialog() {
+        new Dlg(this).setTitle(R.string.fm_trash)
+                .setMessage(getString(R.string.fm_empty_trash_msg))
+                .setPositiveButton(R.string.fm_empty_trash, (d, w) -> runTask(getString(R.string.fm_deleting), () -> {
+                    int n = Trash.empty(getApplicationContext());
+                    return getString(R.string.fm_done_n, n);
+                }))
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
@@ -1842,7 +2897,14 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private void doCompress(final List<File> files, final File out) {
         selected.clear();
-        runTask(getString(R.string.fm_compressing), () -> {
+        runTask(getString(R.string.fm_compressing), true, () -> {
+            long total = 0;
+            for (File f : files) {
+                long[] t = new long[3];
+                sizeOf(f, t);
+                total += t[0];
+            }
+            setOpTotal(total);
             boolean ok = false;
             try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(out)))) {
                 for (File f : files) addToZip(zos, f, f.getName(), out);
@@ -1863,7 +2925,8 @@ public class FileManagerActivity extends AppCompatActivity {
             File[] kids = f.listFiles();
             if (kids != null) for (File k : kids) addToZip(zos, k, entry + "/" + k.getName(), outFile);
         } else {
-            setBusy(f.getName());
+            if (op == null) setBusy(f.getName());
+            else tick(0, f.getName());
             zos.putNextEntry(new ZipEntry(entry));
             try (InputStream in = new FileInputStream(f)) {
                 byte[] buf = new byte[64 * 1024];
@@ -1871,6 +2934,7 @@ public class FileManagerActivity extends AppCompatActivity {
                 while ((n = in.read(buf)) != -1) {
                     if (cancelled) throw new Cancel();
                     zos.write(buf, 0, n);
+                    tick(n, f.getName());
                 }
             }
             zos.closeEntry();
@@ -1882,8 +2946,24 @@ public class FileManagerActivity extends AppCompatActivity {
         File parent = zip.getParentFile();
         if (parent == null) parent = cur;
         final File dest = intoFolder ? unique(parent, stripExt(zip.getName())) : parent;
-        runTask(getString(R.string.fm_extracting), () -> {
+        runTask(getString(R.string.fm_extracting), true, () -> {
             if (!dest.exists() && !dest.mkdirs()) throw new IOException(getString(R.string.fm_err_mkdir, dest.getName()));
+            long unpacked = 0;
+            try (ZipFile zf = new ZipFile(zip)) {
+                Enumeration<? extends ZipEntry> en = zf.entries();
+                while (en.hasMoreElements()) {
+                    ZipEntry ze = en.nextElement();
+                    long sz = ze.getSize();
+                    unpacked += sz >= 0 ? sz : Math.max(0, ze.getCompressedSize());
+                }
+            } catch (IOException ignored) {
+                unpacked = 0;
+            }
+            setOpTotal(unpacked);
+            long free = dest.getUsableSpace();
+            if (unpacked > 0 && free > 0 && free < unpacked + 1024L * 1024) {
+                throw new IOException(getString(R.string.fm_err_no_space, Fmt.size(unpacked)));
+            }
             String root = dest.getCanonicalPath() + File.separator;
             int count = 0;
             try (ZipInputStream zin = new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))) {
@@ -1901,12 +2981,14 @@ public class FileManagerActivity extends AppCompatActivity {
                     }
                     File p = out.getParentFile();
                     if (p != null) p.mkdirs();
-                    setBusy(e.getName());
+                    if (op == null) setBusy(e.getName());
+                    else tick(0, e.getName());
                     try (OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
                         int r;
                         while ((r = zin.read(buf)) != -1) {
                             if (cancelled) throw new Cancel();
                             os.write(buf, 0, r);
+                            tick(r, e.getName());
                         }
                     }
                     count++;
@@ -1918,14 +3000,23 @@ public class FileManagerActivity extends AppCompatActivity {
 
     private void importUris(final List<Uri> uris) {
         final File dest = cur;
-        runTask(getString(R.string.fm_importing), () -> {
+        final Set<Uri> doneUri = new java.util.HashSet<>();
+        runTask(getString(R.string.fm_importing), true, () -> {
+            long total = 0;
+            for (Uri u : uris) {
+                long sz = FileScanner.size(getContentResolver(), u);
+                if (sz > 0) total += sz;
+            }
+            setOpTotal(total);
             int ok = 0;
             for (Uri u : uris) {
                 if (cancelled) throw new Cancel();
+                if (doneUri.contains(u)) continue;
                 String n = FileScanner.displayName(getContentResolver(), u);
                 if (n == null || !validName(n)) n = "file-" + System.currentTimeMillis();
                 File t = unique(dest, n);
-                setBusy(t.getName());
+                if (op == null) setBusy(t.getName());
+                else tick(0, t.getName());
                 try (InputStream in = getContentResolver().openInputStream(u);
                      OutputStream out = new FileOutputStream(t)) {
                     if (in == null) throw new IOException(n);
@@ -1938,8 +3029,10 @@ public class FileManagerActivity extends AppCompatActivity {
                             throw new Cancel();
                         }
                         out.write(buf, 0, r);
+                        tick(r, t.getName());
                     }
                 }
+                doneUri.add(u);
                 ok++;
             }
             return getString(R.string.fm_done_n, ok);

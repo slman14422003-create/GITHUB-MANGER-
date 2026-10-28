@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
@@ -77,6 +78,15 @@
             android:layout_marginEnd="4dp"
             android:contentDescription="@string/delete"
             android:src="@drawable/ic_delete" />
+
+        <ImageButton
+            android:id="@+id/selUpload"
+            style="@style/IconButton"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="@string/fm_gh_upload"
+            android:src="@drawable/ic_upload" />
 
         <ImageButton
             android:id="@+id/selMore"
@@ -263,6 +273,52 @@
             android:src="@drawable/ic_cancel" />
     </LinearLayout>
 
+    <!-- undo bar (after a delete to the in-app trash) -->
+    <LinearLayout
+        android:id="@+id/undoBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/bg_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_delete"
+            android:tint="@color/accent_text" />
+
+        <TextView
+            android:id="@+id/undoText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:singleLine="true"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/undoGo"
+            style="@style/BtnPrimary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:text="@string/fm_undo"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/status"
         android:layout_width="match_parent"
@@ -280,17 +336,19 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <ListView
+        <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/list"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:divider="@null"
-            android:dividerHeight="0dp"
-            android:listSelector="@android:color/transparent"
             android:paddingTop="8dp"
             android:paddingBottom="24dp"
-            android:scrollbars="none" />
+            android:scrollbars="none"
+            app:fastScrollEnabled="true"
+            app:fastScrollHorizontalThumbDrawable="@drawable/fm_fast_thumb"
+            app:fastScrollHorizontalTrackDrawable="@drawable/fm_fast_track"
+            app:fastScrollVerticalThumbDrawable="@drawable/fm_fast_thumb"
+            app:fastScrollVerticalTrackDrawable="@drawable/fm_fast_track" />
 
         <TextView
             android:id="@+id/empty"

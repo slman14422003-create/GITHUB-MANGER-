@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <set xmlns:android="http://schemas.android.com/apk/res/android"
-    android:interpolator="@android:interpolator/decelerate_quint">
-    <translate android:duration="@integer/motion_slow" android:fromYDelta="100%p" android:toYDelta="0" />
-    <alpha android:duration="@integer/motion_base" android:fromAlpha="0.4" android:toAlpha="1" />
+    android:interpolator="@android:interpolator/decelerate_cubic">
+    <translate android:duration="@integer/motion_base" android:fromYDelta="18%" android:toYDelta="0" />
+    <alpha android:duration="@integer/motion_fast" android:fromAlpha="0" android:toAlpha="1" />
 </set>

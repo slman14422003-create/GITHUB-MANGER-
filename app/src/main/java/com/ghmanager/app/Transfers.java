@@ -58,12 +58,16 @@ public final class Transfers {
         volatile long done;
         volatile long total;
         volatile boolean cancelled;
+        volatile boolean paused;
+        Task task;
+        Done doneCb;
         /** done/total are byte counts (otherwise item counts). */
         volatile boolean bytes;
         /** Smoothed transfer speed in bytes per second. */
         volatile float speed;
         private long sampleT;
         private long sampleD;
+        private volatile long lastRefresh;
         /** 0 running, 1 finished ok, 2 failed, 3 cancelled. */
         public volatile int state;
         /** Result text shown in the final notification. */
@@ -107,7 +111,11 @@ public final class Transfers {
             }
             done = d;
             total = tot;
-            TransferService.refresh();
+            long nowR = SystemClock.elapsedRealtime();
+            if (nowR - lastRefresh >= 350 || (tot > 0 && d >= tot)) {
+                lastRefresh = nowR;
+                TransferService.refresh();
+            }
         }
 
         /** 0..1, or -1 while the size is not known yet. */
@@ -122,6 +130,30 @@ public final class Transfers {
 
         public void cancel() {
             cancelled = true;
+            paused = false;
+        }
+
+        public void pause() {
+            if (state == 0) paused = true;
+        }
+
+        public void resume() {
+            paused = false;
+        }
+
+        public boolean isPaused() {
+            return paused;
+        }
+
+        private void waitWhilePaused() {
+            try {
+                while (paused && !cancelled) Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            sampleT = 0;
+            speed = 0f;
+            if (cancelled) throw new Cancelled();
         }
 
         /** "42%  ·  12 MB / 29 MB  ·  1.2 MB/s  ·  14s left" (items instead of bytes for uploads). */
@@ -129,6 +161,7 @@ public final class Transfers {
             long d = done;
             long t = total;
             StringBuilder sb = new StringBuilder();
+            if (paused) sb.append(app.getString(R.string.tr_paused)).append("  ·  ");
             if (t > 0) sb.append(Math.min(100, d * 100 / t)).append('%');
             if (bytes) {
                 if (sb.length() > 0) sb.append("  ·  ");
@@ -154,11 +187,13 @@ public final class Transfers {
 
         public void check() {
             if (cancelled) throw new Cancelled();
+            if (paused) waitWhilePaused();
         }
     }
 
     private static final AtomicInteger NEXT = new AtomicInteger(1);
     private static final AtomicInteger FINISHED = new AtomicInteger(0);
+    private static final java.util.concurrent.atomic.AtomicBoolean CLEANED = new java.util.concurrent.atomic.AtomicBoolean(false);
     private static final CopyOnWriteArrayList<Job> JOBS = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<Listener> LISTENERS = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<Job> HISTORY = new CopyOnWriteArrayList<>();
@@ -169,7 +204,10 @@ public final class Transfers {
     public static Job start(Context c, String title, String tag, Task task, Done done) {
         final Context app = c.getApplicationContext();
         final Job job = new Job(app, NEXT.getAndIncrement(), title, tag);
+        job.task = task;
+        job.doneCb = done;
         JOBS.add(job);
+        if (CLEANED.compareAndSet(false, true)) POOL.execute(TransferTasks::cleanParts);
         TransferService.begin(app);
         POOL.execute(() -> {
             if (job.cancelled) {
@@ -213,6 +251,26 @@ public final class Transfers {
                 }
             }
         });
+    }
+
+    public static Job retry(Job old) {
+        if (old == null || old.task == null) return null;
+        HISTORY.remove(old);
+        return start(old.app, old.title, old.tag, old.task, old.doneCb);
+    }
+
+    public static int failedCount() {
+        int n = 0;
+        for (Job j : HISTORY) if (j.state == 2 && j.task != null) n++;
+        return n;
+    }
+
+    public static int retryFailed() {
+        int n = 0;
+        for (Job j : new ArrayList<>(HISTORY)) {
+            if (j.state == 2 && j.task != null && retry(j) != null) n++;
+        }
+        return n;
     }
 
     public static void cancelAll() {

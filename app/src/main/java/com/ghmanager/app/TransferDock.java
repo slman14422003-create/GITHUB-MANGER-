@@ -148,6 +148,7 @@ final class TransferDock implements Transfers.Listener {
         final TextView pct;
         final ProgressBar bar;
         final TextView detail;
+        final ImageView pauseBtn;
         boolean indeterminate;
 
         Item(Transfers.Job j) {
@@ -181,6 +182,21 @@ final class TransferDock implements Transfers.Listener {
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             pl.setMarginStart(Ui.dp(act, 8));
             head.addView(pct, pl);
+
+            pauseBtn = new ImageView(act);
+            pauseBtn.setImageResource(R.drawable.ic_pause);
+            pauseBtn.setColorFilter(Ui.color(act, R.color.text_secondary));
+            pauseBtn.setScaleType(ImageView.ScaleType.CENTER);
+            pauseBtn.setBackgroundResource(R.drawable.bg_icon_btn);
+            pauseBtn.setContentDescription(act.getString(R.string.tr_pause));
+            pauseBtn.setClickable(true);
+            pauseBtn.setOnClickListener(v -> {
+                if (job.isPaused()) job.resume();
+                else job.pause();
+                bind();
+            });
+            Ui.press(act, pauseBtn);
+            head.addView(pauseBtn, new LinearLayout.LayoutParams(Ui.dp(act, 40), Ui.dp(act, 40)));
 
             ImageView cancel = new ImageView(act);
             cancel.setImageResource(R.drawable.ic_cancel);
@@ -221,6 +237,9 @@ final class TransferDock implements Transfers.Listener {
 
         /** Live numbers of a running transfer. */
         void bind() {
+            boolean paused = job.isPaused();
+            pauseBtn.setImageResource(paused ? R.drawable.ic_play : R.drawable.ic_pause);
+            pauseBtn.setContentDescription(act.getString(paused ? R.string.tr_resume : R.string.tr_pause));
             float f = job.fraction();
             setIndeterminate(f < 0f);
             if (f >= 0f) {
@@ -288,6 +307,27 @@ final class TransferDock implements Transfers.Listener {
         dl.topMargin = Ui.dp(act, 4);
         root.addView(detail, dl);
 
+        if (!ok) {
+            LinearLayout acts = new LinearLayout(act);
+            acts.setOrientation(LinearLayout.HORIZONTAL);
+            TextView copy = Ui.chip(act, act.getString(R.string.err_copy), false);
+            copy.setOnClickListener(v -> Dlg.copyDetails(act, j.title, msg, null));
+            acts.addView(copy);
+            if (j.task != null) {
+                TextView again = Ui.chip(act, act.getString(R.string.err_retry), true);
+                again.setOnClickListener(v -> {
+                    Transfers.retry(j);
+                    sig = "";
+                    tickNow();
+                });
+                acts.addView(again);
+            }
+            LinearLayout.LayoutParams al = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            al.topMargin = Ui.dp(act, 8);
+            root.addView(acts, al);
+        }
+
         if (ok && j.openIntent != null) {
             root.setClickable(true);
             root.setBackgroundResource(R.drawable.bg_card_ripple);
@@ -331,6 +371,7 @@ final class TransferDock implements Transfers.Listener {
     private LinearLayout card;
     private LinearLayout list;
     private TextView clearBtn;
+    private TextView retryAll;
     private String sig = "";
     private boolean running = false;
     private boolean buttonShown = false;
@@ -564,6 +605,21 @@ final class TransferDock implements Transfers.Listener {
         title.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         title.setTextColor(Ui.color(act, R.color.text_primary));
         top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        retryAll = new TextView(act);
+        retryAll.setText(R.string.tr_retry_failed);
+        retryAll.setTextSize(13);
+        retryAll.setTypeface(Typeface.DEFAULT_BOLD);
+        retryAll.setTextColor(Ui.color(act, R.color.accent_text));
+        retryAll.setPadding(Ui.dp(act, 12), Ui.dp(act, 8), Ui.dp(act, 12), Ui.dp(act, 8));
+        retryAll.setClickable(true);
+        retryAll.setVisibility(View.GONE);
+        retryAll.setOnClickListener(v -> {
+            Transfers.retryFailed();
+            sig = "";
+            tickNow();
+        });
+        top.addView(retryAll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         clearBtn = new TextView(act);
         clearBtn.setTextSize(13);
         clearBtn.setTypeface(Typeface.DEFAULT_BOLD);
@@ -632,6 +688,7 @@ final class TransferDock implements Transfers.Listener {
         card = null;
         list = null;
         clearBtn = null;
+        retryAll = null;
         items.clear();
         sig = "";
         if (animate && Motion.enabled() && p.getParent() != null) {
@@ -684,6 +741,7 @@ final class TransferDock implements Transfers.Listener {
                     list.addView(resultRow(hist.get(i)));
                 }
             }
+            if (retryAll != null) retryAll.setVisibility(Transfers.failedCount() > 0 ? View.VISIBLE : View.GONE);
             if (clearBtn != null) {
                 clearBtn.setText(run.isEmpty() ? R.string.tr_clear : R.string.tr_cancel_all);
                 clearBtn.setVisibility(run.isEmpty() && hist.isEmpty() ? View.GONE : View.VISIBLE);

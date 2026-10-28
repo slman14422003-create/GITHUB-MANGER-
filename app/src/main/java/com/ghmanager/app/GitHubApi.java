@@ -20,6 +20,22 @@ import java.util.List;
 
 public class GitHubApi {
 
+    public static final class HeadMoved extends ApiException {
+        public HeadMoved(String msg) {
+            super(409, msg);
+        }
+    }
+
+    public static final class Addition {
+        public final String path;
+        public final byte[] data;
+
+        public Addition(String path, byte[] data) {
+            this.path = path;
+            this.data = data;
+        }
+    }
+
     public static class ApiException extends Exception {
         public final int code;
         /** Milliseconds GitHub asked us to wait (rate limit), 0 when not applicable. */
@@ -399,9 +415,25 @@ public class GitHubApi {
      * Opens a download. The first hop carries the token; any redirect (logs, artifacts,
      * assets, zipballs) is followed WITHOUT the token because the target URL is pre-signed.
      */
+    private static final ThreadLocal<Long> RANGE_FROM = new ThreadLocal<>();
+
+    public static void rangeFrom(long from) {
+        if (from > 0) RANGE_FROM.set(from);
+        else RANGE_FROM.remove();
+    }
+
+    private static void applyRange(HttpURLConnection c) {
+        Long f = RANGE_FROM.get();
+        if (f != null && f > 0) {
+            c.setRequestProperty("Range", "bytes=" + f + "-");
+            c.setRequestProperty("Accept-Encoding", "identity");
+        }
+    }
+
     public HttpURLConnection openDownload(String path, String accept) throws Exception {
         HttpURLConnection c = open("GET", BASE + path, accept, true);
         c.setInstanceFollowRedirects(false);
+        applyRange(c);
         int code = c.getResponseCode();
         int hops = 0;
         while (code >= 300 && code < 400 && hops < 5) {
@@ -410,6 +442,7 @@ public class GitHubApi {
             if (loc == null) throw new ApiException(code, "Redirect without Location");
             c = open("GET", loc, "*/*", false);
             c.setInstanceFollowRedirects(false);
+            applyRange(c);
             code = c.getResponseCode();
             hops++;
         }
@@ -770,6 +803,68 @@ public class GitHubApi {
         return new JSONObject(request("POST", repo(o, r) + "/git/blobs", b)).getString("sha");
     }
 
+    private static ApiException graphqlError(JSONArray errs) {
+        JSONObject e = errs.optJSONObject(0);
+        String msg = e == null ? "GraphQL error" : e.optString("message", "GraphQL error");
+        String type = e == null ? "" : e.optString("type", "");
+        if ("STALE_DATA".equals(type) || msg.contains("Expected branch to point")) {
+            return new HeadMoved(Redact.text(msg));
+        }
+        if ("RATE_LIMITED".equals(type)) {
+            ApiException x = new ApiException(429, Redact.text(msg));
+            x.waitMs = 60000L;
+            return x;
+        }
+        int code = "NOT_FOUND".equals(type) ? 404
+                : ("FORBIDDEN".equals(type) || "INSUFFICIENT_SCOPES".equals(type)) ? 403 : 422;
+        return new ApiException(code, Redact.text(msg));
+    }
+
+    public String createCommitOnBranch(String o, String r, String branch, String expectedHead, String message,
+                                       List<Addition> adds) throws Exception {
+        JSONArray arr = new JSONArray();
+        for (Addition a : adds) {
+            JSONObject j = new JSONObject();
+            j.put("path", a.path);
+            j.put("contents", Base64.encodeToString(a.data, Base64.NO_WRAP));
+            arr.put(j);
+        }
+        String head = message;
+        String rest = "";
+        int nl = message.indexOf('\n');
+        if (nl > 0) {
+            head = message.substring(0, nl);
+            rest = message.substring(nl + 1).trim();
+        }
+        JSONObject msg = new JSONObject();
+        msg.put("headline", head);
+        if (!rest.isEmpty()) msg.put("body", rest);
+        JSONObject br = new JSONObject();
+        br.put("repositoryNameWithOwner", o + "/" + r);
+        br.put("branchName", branch);
+        JSONObject changes = new JSONObject();
+        changes.put("additions", arr);
+        JSONObject input = new JSONObject();
+        input.put("branch", br);
+        input.put("message", msg);
+        input.put("fileChanges", changes);
+        input.put("expectedHeadOid", expectedHead);
+        JSONObject vars = new JSONObject();
+        vars.put("input", input);
+        JSONObject body = new JSONObject();
+        body.put("query", "mutation($input: CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}");
+        body.put("variables", vars);
+        JSONObject res = new JSONObject(request("POST", "/graphql", body));
+        JSONArray errs = res.optJSONArray("errors");
+        if (errs != null && errs.length() > 0) throw graphqlError(errs);
+        JSONObject data = res.optJSONObject("data");
+        JSONObject c = data == null ? null : data.optJSONObject("createCommitOnBranch");
+        JSONObject commit = c == null ? null : c.optJSONObject("commit");
+        String oid = commit == null ? "" : commit.optString("oid", "");
+        if (oid.isEmpty()) throw new ApiException(422, "GraphQL: empty answer");
+        return oid;
+    }
+
     /** Used only to initialize an empty repository (no branch exists yet). */
     public void putFile(String o, String r, String path, byte[] data, String message) throws Exception {
         JSONObject b = new JSONObject();
@@ -782,9 +877,9 @@ public class GitHubApi {
     public String commitEntries(String o, String r, String branch, List<TreeEntry> entries, String message) throws Exception {
         String headSha = getBranchSha(o, r, branch);
         String tree = getCommitTree(o, r, headSha);
-        for (int i = 0; i < entries.size(); i += 100) {
+        for (int i = 0; i < entries.size(); i += 400) {
             JSONArray arr = new JSONArray();
-            for (int j = i; j < Math.min(i + 100, entries.size()); j++) {
+            for (int j = i; j < Math.min(i + 400, entries.size()); j++) {
                 TreeEntry t = entries.get(j);
                 JSONObject e = new JSONObject();
                 e.put("path", t.path);
@@ -827,6 +922,20 @@ public class GitHubApi {
         return out;
     }
 
+    /** path -> blob sha for every file of the branch (lets an upload skip what is already there). */
+    public java.util.Map<String, String> blobShaMap(String o, String r, String branch) throws Exception {
+        String headSha = getBranchSha(o, r, branch);
+        String tree = getCommitTree(o, r, headSha);
+        String res = request("GET", repo(o, r) + "/git/trees/" + tree + "?recursive=1", null);
+        JSONArray arr = new JSONObject(res).getJSONArray("tree");
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject e = arr.getJSONObject(i);
+            if ("blob".equals(e.optString("type"))) out.put(e.getString("path"), e.getString("sha"));
+        }
+        return out;
+    }
+
     /** All file paths under a folder (recursive). */
     public List<String> listFilesUnder(String o, String r, String branch, String folder) throws Exception {
         List<String> out = new ArrayList<>();
@@ -838,10 +947,16 @@ public class GitHubApi {
     public static final class BlobInfo {
         public final String path;
         public final long size;
+        public final String sha;
 
         BlobInfo(String path, long size) {
+            this(path, size, "");
+        }
+
+        BlobInfo(String path, long size, String sha) {
             this.path = path;
             this.size = size;
+            this.sha = sha == null ? "" : sha;
         }
     }
 
@@ -856,7 +971,7 @@ public class GitHubApi {
         for (int i = 0; i < arr.length(); i++) {
             JSONObject e = arr.getJSONObject(i);
             if ("blob".equals(e.optString("type"))) {
-                out.add(new BlobInfo(e.getString("path"), e.optLong("size", 0)));
+                out.add(new BlobInfo(e.getString("path"), e.optLong("size", 0), e.optString("sha", "")));
             }
         }
         return out;

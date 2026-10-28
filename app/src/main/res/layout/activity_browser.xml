@@ -203,10 +203,25 @@
         android:visibility="gone">
 
         <Button
+            android:id="@+id/btnDownloadSel"
+            style="@style/BtnPrimary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:layout_weight="1"
+            android:drawableStart="@drawable/ic_download"
+            android:drawablePadding="8dp"
+            android:drawableTint="@color/on_accent"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/on_accent" />
+
+        <Button
             android:id="@+id/btnDeleteSel"
             style="@style/BtnPrimary"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:background="@drawable/btn_danger"
             android:drawableStart="@drawable/ic_delete"
             android:drawablePadding="8dp"

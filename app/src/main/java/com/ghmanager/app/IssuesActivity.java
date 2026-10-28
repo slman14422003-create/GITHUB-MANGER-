@@ -87,10 +87,24 @@ public class IssuesActivity extends BaseRepoActivity {
         final int pg = page;
         final String st = STATES[stateIdx];
         final int myGen = ++gen;
+        final String cacheKey = "issues:" + owner + "/" + repo + ":" + st;
+        if (pg == 1 && all.isEmpty()) {
+            ListCache.Hit hit = ListCache.get(this, cacheKey);
+            if (hit != null) {
+                try {
+                    for (int i = 0; i < hit.data.length(); i++) all.add(hit.data.getJSONObject(i));
+                    hasMore = all.size() >= PER_PAGE;
+                    render();
+                } catch (Exception ignored) {
+                    all.clear();
+                }
+            }
+        }
         loading(true);
         io.execute(() -> {
             try {
                 JSONArray arr = api.listIssues(owner, repo, st, pg, PER_PAGE);
+                if (pg == 1) ListCache.put(getApplicationContext(), cacheKey, arr);
                 final List<JSONObject> tmp = new ArrayList<>();
                 for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
                 post(() -> {

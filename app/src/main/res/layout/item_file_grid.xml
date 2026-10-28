@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="4dp">
+
+    <LinearLayout
+        android:id="@+id/card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_card_ripple"
+        android:duplicateParentState="true"
+        android:gravity="center_horizontal"
+        android:minHeight="128dp"
+        android:orientation="vertical"
+        android:paddingStart="6dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="8dp">
+
+        <FrameLayout
+            android:layout_width="64dp"
+            android:layout_height="64dp">
+
+            <ImageView
+                android:id="@+id/thumb"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:importantForAccessibility="no"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/icon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:importantForAccessibility="no"
+                android:padding="14dp" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:ellipsize="middle"
+            android:gravity="center_horizontal"
+            android:maxLines="2"
+            android:textColor="@color/text_primary"
+            android:textDirection="locale"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/sub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center_horizontal"
+            android:singleLine="true"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:paddingStart="8dp"
+            android:paddingTop="1dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="1dp"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/fav"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="10dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_star"
+        android:tint="@color/warn"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/check"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="10dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_check_circle"
+        android:tint="@color/accent_text"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/more"
+        style="@style/IconButton"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_gravity="top|end"
+        android:contentDescription="@string/more"
+        android:focusable="false"
+        android:src="@drawable/ic_more" />
+</FrameLayout>

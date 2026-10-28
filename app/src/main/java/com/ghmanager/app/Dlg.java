@@ -455,7 +455,7 @@ public class Dlg extends AlertDialog.Builder {
             }
         }
         final boolean alertSize = listAdapter == null && customView == null;
-        d.setOnShowListener(x -> size(d, sheet, alertSize));
+        size(d, sheet, alertSize);
         return d;
     }
 
@@ -510,8 +510,7 @@ public class Dlg extends AlertDialog.Builder {
         }
     }
 
-    /** A centered result dialog with a big status icon (success or error). */
-    public static AlertDialog result(Context c, boolean ok, CharSequence title, CharSequence message) {
+    private static LinearLayout resultBox(Context c, boolean ok, CharSequence title, CharSequence message) {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -553,8 +552,59 @@ public class Dlg extends AlertDialog.Builder {
         ml.topMargin = Ui.dp(c, 8);
         ml.bottomMargin = Ui.dp(c, 8);
         box.addView(m, ml);
+        return box;
+    }
 
+    /** A centered result dialog with a big status icon (success or error). */
+    public static AlertDialog result(Context c, boolean ok, CharSequence title, CharSequence message) {
+        LinearLayout box = resultBox(c, ok, title, message);
         return new Dlg(c).setView(box).setPositiveButton(android.R.string.ok, null).show();
+    }
+
+    public static String detailsOf(Context c, CharSequence title, CharSequence message, Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(title).append('\n').append(Redact.text(String.valueOf(message))).append("\n---\n");
+        if (t != null) {
+            sb.append(t.getClass().getName()).append('\n');
+            Throwable cause = t.getCause();
+            if (cause != null && cause != t) {
+                sb.append("cause: ").append(cause.getClass().getName()).append(": ")
+                        .append(Redact.text(String.valueOf(cause.getMessage()))).append('\n');
+            }
+            if (t instanceof GitHubApi.ApiException) sb.append("HTTP ").append(((GitHubApi.ApiException) t).code).append('\n');
+        }
+        sb.append("app ").append(BuildConfig.VERSION_NAME).append(" / Android ").append(android.os.Build.VERSION.SDK_INT)
+                .append(" / ").append(android.os.Build.MODEL).append('\n');
+        sb.append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date()));
+        return sb.toString();
+    }
+
+    public static void copyDetails(Context c, CharSequence title, CharSequence message, Throwable t) {
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                    c.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("error", detailsOf(c, title, message, t)));
+                android.widget.Toast.makeText(c, R.string.err_copied, android.widget.Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static AlertDialog error(final Context c, final CharSequence title, final CharSequence message,
+                                    final Throwable t, final Runnable retry) {
+        LinearLayout box = resultBox(c, false, title, message);
+        Dlg d = new Dlg(c);
+        d.setView(box);
+        if (retry != null) {
+            d.setPositiveButton(R.string.err_retry, (dd, w) -> retry.run());
+            d.setNeutralButton(R.string.err_copy, (dd, w) -> copyDetails(c, title, message, t));
+            d.setNegativeButton(R.string.close, null);
+        } else {
+            d.setPositiveButton(R.string.err_copy, (dd, w) -> copyDetails(c, title, message, t));
+            d.setNegativeButton(R.string.close, null);
+        }
+        return d.show();
     }
 
     private static EditText firstEdit(View v) {

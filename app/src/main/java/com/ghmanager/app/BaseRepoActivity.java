@@ -176,6 +176,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     protected void showStatus(String text) {
         if (statusView == null) return;
+        if (errorBar != null) errorBar.setVisibility(View.GONE);
         if (text == null || text.isEmpty()) {
             statusView.setVisibility(View.GONE);
         } else {
@@ -204,12 +205,16 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             try {
                 job.run();
             } catch (Exception e) {
-                showError(e);
+                showError(e, () -> bg(job));
             }
         });
     }
 
     protected void showError(Exception e) {
+        showError(e, null);
+    }
+
+    protected void showError(final Exception e, final Runnable retry) {
         if (e instanceof GitHubApi.ApiException && ((GitHubApi.ApiException) e).code == 401) {
             post(this::relogin);
             return;
@@ -218,8 +223,40 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         post(() -> {
             hideProgress();
             loading(false);
-            Dlg.result(BaseRepoActivity.this, false, getString(R.string.error), msg);
+            Runnable again = retry;
+            if (again == null && btnRefresh != null && btnRefresh.isEnabled()) {
+                again = () -> btnRefresh.performClick();
+            }
+            Dlg.error(BaseRepoActivity.this, getString(R.string.error), msg, e, again);
         });
+    }
+
+    private LinearLayout errorBar;
+
+    private void showErrorBar(final Exception e, final String msg) {
+        if (statusView == null) return;
+        android.view.ViewParent pr = statusView.getParent();
+        if (!(pr instanceof LinearLayout)) return;
+        LinearLayout parent = (LinearLayout) pr;
+        if (errorBar == null) {
+            errorBar = new LinearLayout(this);
+            errorBar.setOrientation(LinearLayout.HORIZONTAL);
+            errorBar.setPaddingRelative(Ui.dp(this, 22), 0, Ui.dp(this, 22), Ui.dp(this, 6));
+            parent.addView(errorBar, parent.indexOfChild(statusView) + 1,
+                    new LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        errorBar.removeAllViews();
+        TextView copy = Ui.chip(this, getString(R.string.err_copy), false);
+        copy.setOnClickListener(v -> Dlg.copyDetails(this, getString(R.string.error), msg, e));
+        TextView retry = Ui.chip(this, getString(R.string.err_retry), true);
+        retry.setOnClickListener(v -> {
+            showStatus(null);
+            if (btnRefresh != null) btnRefresh.performClick();
+        });
+        errorBar.addView(copy);
+        errorBar.addView(retry);
+        errorBar.setVisibility(View.VISIBLE);
     }
 
     /** Inline error for list screens (keeps the screen usable). */
@@ -237,6 +274,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
             loading(false);
             hideProgress();
             showStatus(msg);
+            showErrorBar(e, msg);
         });
     }
 

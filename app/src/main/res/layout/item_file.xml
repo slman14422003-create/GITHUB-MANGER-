@@ -69,6 +69,18 @@
                 android:textAlignment="viewStart"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:paddingStart="8dp"
+                android:paddingTop="1dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="1dp"
+                android:textSize="10sp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <ImageView

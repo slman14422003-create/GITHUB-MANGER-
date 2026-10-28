@@ -45,10 +45,24 @@ public class CommitsActivity extends BaseRepoActivity {
         final int pg = page;
         final String b = branch;
         final int myGen = ++gen;
+        final String cacheKey = "commits:" + owner + "/" + repo + "@" + b;
+        if (pg == 1 && items.isEmpty()) {
+            ListCache.Hit hit = ListCache.get(this, cacheKey);
+            if (hit != null) {
+                try {
+                    for (int i = 0; i < hit.data.length(); i++) items.add(hit.data.getJSONObject(i));
+                    hasMore = items.size() >= PER_PAGE;
+                    render();
+                } catch (Exception ignored) {
+                    items.clear();
+                }
+            }
+        }
         loading(true);
         io.execute(() -> {
             try {
                 JSONArray arr = api.listCommits(owner, repo, b, pg, PER_PAGE);
+                if (pg == 1) ListCache.put(getApplicationContext(), cacheKey, arr);
                 final List<JSONObject> tmp = new ArrayList<>();
                 for (int i = 0; i < arr.length(); i++) tmp.add(arr.getJSONObject(i));
                 post(() -> {
