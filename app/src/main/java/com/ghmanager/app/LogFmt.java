@@ -31,6 +31,8 @@ final class LogFmt {
         int no;
         boolean marker;
         boolean err;
+        int group;
+        int gid;
         SpannableStringBuilder text;
         String plain = "";
     }
@@ -45,6 +47,8 @@ final class LogFmt {
         final int info = Ui.color(c, R.color.info);
         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         List<Line> out = new ArrayList<>();
+        boolean inGroup = false;
+        int gid = 0;
         for (String l : raw.split("\n", -1)) {
             String line = l;
             if (line.endsWith("\r")) line = line.substring(0, line.length() - 1);
@@ -69,7 +73,10 @@ final class LogFmt {
                 line = line.substring(m.end());
             }
             line = ANSI.matcher(line).replaceAll("");
-            if (line.startsWith("##[endgroup]")) continue;
+            if (line.startsWith("##[endgroup]")) {
+                inGroup = false;
+                continue;
+            }
             if (line.isEmpty() && l.isEmpty()) continue;
 
             Line ln = new Line();
@@ -82,6 +89,9 @@ final class LogFmt {
             if (line.startsWith("##[group]")) {
                 line = "\u25B6 " + line.substring(9);
                 bold = true;
+                ln.group = 1;
+                ln.gid = ++gid;
+                inGroup = true;
             } else if (line.startsWith("##[error]")) {
                 line = "\u2716 " + line.substring(9);
                 color = bad;
@@ -93,6 +103,10 @@ final class LogFmt {
             } else if (line.startsWith("##[command]")) {
                 line = "$ " + line.substring(11);
                 color = info;
+            }
+            if (ln.group == 0 && inGroup) {
+                ln.group = 2;
+                ln.gid = gid;
             }
             ln.err = isError || looksLikeError(line.toLowerCase(Locale.ROOT));
             ln.plain = line;

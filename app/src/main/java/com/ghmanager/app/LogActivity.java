@@ -16,7 +16,9 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +33,9 @@ public class LogActivity extends BaseRepoActivity {
     private static final int MAX_CLIP_CHARS = 150000;
     private static final long POLL_MS = 3000;
     private static final int LINES_PER_ROW = 10;
+    private static final int MAX_TOTAL = 24 * 1024 * 1024;
+    private static final int OVERLAP = 64;
+    private static final String ACCEPT = "application/vnd.github+json";
 
     private long jobId;
     private String jobName = "";
@@ -47,16 +52,27 @@ public class LogActivity extends BaseRepoActivity {
     private final List<Item> items = new ArrayList<>();
     private final Map<Integer, Boolean> expanded = new HashMap<>();
     private int wantedStep = 0;
+    private final Object logLock = new Object();
+    private volatile byte[] rawBytes = new byte[0];
+    private final Map<String, Boolean> groupOpen = new HashMap<>();
 
     private static final class Item {
-        final int type;   // 0 step header, 1 block of lines, 2 note
+        final int type;
         final StepLog.Step step;
         final CharSequence text;
+        final String key;
+        final boolean open;
 
         Item(int type, StepLog.Step step, CharSequence text) {
+            this(type, step, text, null, false);
+        }
+
+        Item(int type, StepLog.Step step, CharSequence text, String key, boolean open) {
             this.type = type;
             this.step = step;
             this.text = text;
+            this.key = key;
+            this.open = open;
         }
     }
 
@@ -79,7 +95,7 @@ public class LogActivity extends BaseRepoActivity {
 
         @Override
         public int getViewTypeCount() {
-            return 3;
+            return 4;
         }
 
         @Override
@@ -111,7 +127,14 @@ public class LogActivity extends BaseRepoActivity {
                 t.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
                 t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
                 t.setTextDirection(View.TEXT_DIRECTION_LTR);
-                if (it.type == 1) {
+                if (it.type == 3) {
+                    t.setTextSize(12f);
+                    t.setTextColor(Ui.color(LogActivity.this, R.color.info));
+                    t.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+                    t.setBackgroundColor(Ui.color(LogActivity.this, R.color.field));
+                    t.setPadding(Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 8),
+                            Ui.dp(LogActivity.this, 10), Ui.dp(LogActivity.this, 8));
+                } else if (it.type == 1) {
                     t.setTextSize(12f);
                     t.setTextColor(Ui.color(LogActivity.this, R.color.text_primary));
                     t.setBackgroundColor(Ui.color(LogActivity.this, R.color.field));
@@ -172,6 +195,11 @@ public class LogActivity extends BaseRepoActivity {
         list.setOnItemClickListener((p, v, pos, id) -> {
             if (pos < 0 || pos >= items.size() || mode == 1) return;
             Item it = items.get(pos);
+            if (it.type == 3) {
+                groupOpen.put(it.key, !it.open);
+                rebuild(false);
+                return;
+            }
             if (it.type != 0) return;
             expanded.put(it.step.number, !isOpen(it.step));
             rebuild(false);
@@ -251,6 +279,44 @@ public class LogActivity extends BaseRepoActivity {
         return out;
     }
 
+    private byte[] fetchLog() throws Exception {
+        synchronized (logLock) {
+            String path = api.jobLogsPath(owner, repo, jobId);
+            byte[] base = rawBytes;
+            if (base.length >= MAX_TOTAL) return base;
+            if (base.length > 0) {
+                int overlap = Math.min(base.length, OVERLAP);
+                int from = base.length - overlap;
+                try {
+                    GitHubApi.Piece p = api.readFrom(path, ACCEPT, from);
+                    if (!p.ranged) {
+                        rawBytes = p.data;
+                        return p.data;
+                    }
+                    if (p.data.length >= overlap && sameTail(base, p.data, overlap)) {
+                        byte[] all = new byte[from + p.data.length];
+                        System.arraycopy(base, 0, all, 0, from);
+                        System.arraycopy(p.data, 0, all, from, p.data.length);
+                        rawBytes = all;
+                        return all;
+                    }
+                } catch (GitHubApi.ApiException e) {
+                    if (e.code != 416) throw e;
+                }
+            }
+            GitHubApi.Piece full = api.readFrom(path, ACCEPT, 0);
+            rawBytes = full.data;
+            return full.data;
+        }
+    }
+
+    private static boolean sameTail(byte[] base, byte[] data, int overlap) {
+        for (int i = 0; i < overlap; i++) {
+            if (base[base.length - overlap + i] != data[i]) return false;
+        }
+        return true;
+    }
+
     private void load(final boolean silent) {
         if (!silent) loading(true);
         io.execute(() -> {
@@ -258,10 +324,10 @@ public class LogActivity extends BaseRepoActivity {
             boolean cut = false;
             Exception err = null;
             try {
-                final GitHubApi.TextResult r = api.readTail(api.jobLogsPath(owner, repo, jobId),
-                        "application/vnd.github+json", MAX_BYTES);
-                newRaw = r.text;
-                cut = r.truncated;
+                byte[] all = fetchLog();
+                cut = all.length > MAX_BYTES;
+                byte[] shown = cut ? Arrays.copyOfRange(all, all.length - MAX_BYTES, all.length) : all;
+                newRaw = new String(shown, StandardCharsets.UTF_8);
             } catch (Exception e) {
                 err = e;
             }
@@ -376,10 +442,7 @@ public class LogActivity extends BaseRepoActivity {
             }
             int digits = Math.max(2, String.valueOf(s.lines.size()).length());
             int gutter = (int) (charW * digits) + Ui.dp(this, 14);
-            for (int i = 0; i < vis.size(); i += LINES_PER_ROW) {
-                int end = Math.min(vis.size(), i + LINES_PER_ROW);
-                items.add(new Item(1, s, block(vis, i, end, gutter)));
-            }
+            addLines(s, vis, gutter);
         }
         if (!any) {
             message(getString(R.string.log_no_errors));
@@ -398,6 +461,55 @@ public class LogActivity extends BaseRepoActivity {
             list.post(() -> list.setSelection(0));
         } else {
             list.setSelectionFromTop(first, offset);
+        }
+    }
+
+    private void addChunks(List<LogFmt.Line> vis, int from, int to, int gutter, StepLog.Step s) {
+        for (int i = from; i < to; i += LINES_PER_ROW) {
+            int end = Math.min(to, i + LINES_PER_ROW);
+            items.add(new Item(1, s, block(vis, i, end, gutter)));
+        }
+    }
+
+    private void addLines(StepLog.Step s, List<LogFmt.Line> vis, int gutter) {
+        int n = vis.size();
+        if (mode == 1) {
+            addChunks(vis, 0, n, gutter, s);
+            return;
+        }
+        int lastHeader = -1;
+        for (int k = 0; k < n; k++) if (vis.get(k).group == 1) lastHeader = k;
+        Map<String, Integer> seen = new HashMap<>();
+        int i = 0;
+        while (i < n) {
+            LogFmt.Line l = vis.get(i);
+            if (l.group != 1) {
+                int j = i;
+                while (j < n && vis.get(j).group != 1) j++;
+                addChunks(vis, i, j, gutter, s);
+                i = j;
+                continue;
+            }
+            int j = i + 1;
+            boolean err = false;
+            while (j < n && vis.get(j).group == 2 && vis.get(j).gid == l.gid) {
+                if (vis.get(j).err) err = true;
+                j++;
+            }
+            String base = s.number + "|" + l.plain;
+            Integer c = seen.get(base);
+            int occ = c == null ? 0 : c;
+            seen.put(base, occ + 1);
+            String key = base + "|" + occ;
+            Boolean saved = groupOpen.get(key);
+            boolean open = saved != null ? saved : (err || (active && s.code == 1 && i == lastHeader));
+            int count = j - i - 1;
+            String title = l.plain.startsWith("\u25B6 ") ? l.plain.substring(2) : l.plain;
+            String head = (open ? "\u25BE " : "\u25B8 ") + title
+                    + (count > 0 ? "  \u00B7  " + getString(R.string.lg_group_lines, count) : "");
+            items.add(new Item(3, s, head, key, open));
+            if (open && count > 0) addChunks(vis, i + 1, j, gutter, s);
+            i = j;
         }
     }
 

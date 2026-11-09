@@ -47,11 +47,11 @@ public class GitHubApi {
         }
     }
 
-    /** sha == null means delete the path. */
     public static class TreeEntry {
         public final String path;
         public final String sha;
         public final String mode;
+        public final String content;
 
         public TreeEntry(String path, String sha) {
             this(path, sha, "100644");
@@ -61,6 +61,18 @@ public class GitHubApi {
             this.path = path;
             this.sha = sha;
             this.mode = mode == null ? "100644" : mode;
+            this.content = null;
+        }
+
+        private TreeEntry(String path, String content, boolean inline) {
+            this.path = path;
+            this.sha = null;
+            this.mode = "100644";
+            this.content = content;
+        }
+
+        public static TreeEntry inline(String path, String content) {
+            return new TreeEntry(path, content, true);
         }
     }
 
@@ -502,6 +514,42 @@ public class GitHubApi {
         }
     }
 
+    public static final class Piece {
+        public final byte[] data;
+        public final boolean ranged;
+
+        Piece(byte[] data, boolean ranged) {
+            this.data = data;
+            this.ranged = ranged;
+        }
+    }
+
+    public Piece readFrom(String path, String accept, long from) throws Exception {
+        HttpURLConnection c;
+        rangeFrom(from);
+        try {
+            c = openDownload(path, accept);
+        } finally {
+            rangeFrom(0);
+        }
+        try {
+            boolean ranged = from > 0 && c.getResponseCode() == 206;
+            InputStream is = c.getInputStream();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[16384];
+            int n;
+            final int hardCap = 24 * 1024 * 1024;
+            while ((n = is.read(buf)) != -1) {
+                bos.write(buf, 0, n);
+                if (bos.size() > hardCap) break;
+            }
+            is.close();
+            return new Piece(bos.toByteArray(), ranged);
+        } finally {
+            c.disconnect();
+        }
+    }
+
     // ------------------------------------------------------------------ user / repos
 
     public JSONObject getUser() throws Exception {
@@ -873,10 +921,15 @@ public class GitHubApi {
         request("PUT", repo(o, r) + "/contents/" + enc(path), b);
     }
 
-    /** Creates a single commit containing all entries (add/replace, or delete when sha == null). */
     public String commitEntries(String o, String r, String branch, List<TreeEntry> entries, String message) throws Exception {
         String headSha = getBranchSha(o, r, branch);
-        String tree = getCommitTree(o, r, headSha);
+        String newCommit = commitTree(o, r, headSha, entries, message);
+        moveBranch(o, r, branch, newCommit, false);
+        return newCommit;
+    }
+
+    public String commitTree(String o, String r, String parentSha, List<TreeEntry> entries, String message) throws Exception {
+        String tree = getCommitTree(o, r, parentSha);
         for (int i = 0; i < entries.size(); i += 400) {
             JSONArray arr = new JSONArray();
             for (int j = i; j < Math.min(i + 400, entries.size()); j++) {
@@ -885,7 +938,8 @@ public class GitHubApi {
                 e.put("path", t.path);
                 e.put("mode", t.mode);
                 e.put("type", "blob");
-                e.put("sha", t.sha == null ? JSONObject.NULL : t.sha);
+                if (t.content != null) e.put("content", t.content);
+                else e.put("sha", t.sha == null ? JSONObject.NULL : t.sha);
                 arr.put(e);
             }
             JSONObject tb = new JSONObject();
@@ -896,13 +950,15 @@ public class GitHubApi {
         JSONObject cb = new JSONObject();
         cb.put("message", message);
         cb.put("tree", tree);
-        cb.put("parents", new JSONArray().put(headSha));
-        String newCommit = new JSONObject(request("POST", repo(o, r) + "/git/commits", cb)).getString("sha");
+        cb.put("parents", new JSONArray().put(parentSha));
+        return new JSONObject(request("POST", repo(o, r) + "/git/commits", cb)).getString("sha");
+    }
+
+    public void moveBranch(String o, String r, String branch, String sha, boolean force) throws Exception {
         JSONObject ub = new JSONObject();
-        ub.put("sha", newCommit);
-        ub.put("force", false);
+        ub.put("sha", sha);
+        ub.put("force", force);
         request("PATCH", repo(o, r) + "/git/refs/heads/" + enc(branch), ub);
-        return newCommit;
     }
 
     /** All blobs under a folder (recursive), with their sha and mode. */
