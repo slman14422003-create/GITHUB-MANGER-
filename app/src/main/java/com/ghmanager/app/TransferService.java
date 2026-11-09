@@ -32,6 +32,7 @@ public class TransferService extends Service {
     private static volatile TransferService inst;
     private long lastNotify = 0;
     private PowerManager.WakeLock wake;
+    private long lastWake;
 
     static void begin(Context app) {
         try {
@@ -124,6 +125,7 @@ public class TransferService extends Service {
                 wake.setReferenceCounted(false);
             }
             wake.acquire(30L * 60L * 1000L);
+            lastWake = System.currentTimeMillis();
         } catch (Exception ignored) {
         }
     }
@@ -132,6 +134,7 @@ public class TransferService extends Service {
         long now = System.currentTimeMillis();
         if (!force && now - lastNotify < 400) return;
         lastNotify = now;
+        if (wake != null && now - lastWake > 10L * 60L * 1000L) acquireWake();
         try {
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm != null) nm.notify(ID_RUN, build());

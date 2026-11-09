@@ -42,9 +42,8 @@ public final class TransferTasks {
     private static final int PARALLEL = 4;
     private static final int BATCH_FILES = 300;
     private static final long BATCH_BYTES = 100L * 1024 * 1024;
-    private static final int GQL_FILES = 40;
-    private static final long GQL_BYTES = 6L * 1024 * 1024;
-    private static final long GQL_FILE_MAX = 2L * 1024 * 1024;
+    private static final int INLINE_FILE_MAX = 256 * 1024;
+    private static final long INLINE_BATCH_MAX = 3L * 1024 * 1024;
     private static final int RETRIES = 5;
     private static final long BIG = 1024 * 1024;
 
@@ -589,7 +588,8 @@ public final class TransferTasks {
                         skippedNames.add(it.path);
                         continue;
                     }
-                    api.putFile(owner, repo, base.isEmpty() ? it.path : base + "/" + it.path, data, message);
+                    api.putFile(owner, repo, base.isEmpty() ? it.path : base + "/" + it.path, data,
+                            total > 1 ? message + " [skip ci]" : message);
                     shas[first] = "";
                     first++;
                     break;
@@ -604,24 +604,24 @@ public final class TransferTasks {
                 }
             }
 
-            final boolean[] gql = {true};
-            final byte[][] datas = new byte[total][];
+            final String[] texts = new String[total];
             final AtomicInteger doneCount = new AtomicInteger(first);
             final AtomicLong coolUntil = new AtomicLong(0);
             final Semaphore bigGate = new Semaphore(1);
             final ExecutorService ex = Executors.newFixedThreadPool(PARALLEL);
+            final String startHead = first < total ? api.getBranchSha(owner, repo, branch) : null;
+            final String[] chain = {startHead};
+            boolean published = false;
             int batchNo = 0;
             try {
                 int idx = first;
                 while (idx < total) {
                     job.check();
                     final int from = idx;
-                    final boolean useGql = gql[0];
-                    final int maxFiles = useGql ? GQL_FILES : BATCH_FILES;
-                    final long maxBytes = useGql ? GQL_BYTES : BATCH_BYTES;
+                    final AtomicLong inlineBytes = new AtomicLong(0);
                     int to = from;
                     long acc = 0;
-                    while (to < total && to - from < maxFiles && (acc < maxBytes || to == from)) {
+                    while (to < total && to - from < BATCH_FILES && (acc < BATCH_BYTES || to == from)) {
                         long sz = FileScanner.size(cr, all.get(to).uri);
                         sizes[to] = sz;
                         if (sz > 0) acc += Math.min(sz, MAX_FILE_BYTES);
@@ -649,9 +649,13 @@ public final class TransferTasks {
                                             same[k] = true;
                                         } else {
                                             byte[] data = readBytes(cr, it.uri, size);
-                                            if (data == null) skipped[k] = true;
-                                            else if (useGql && size >= 0 && size <= GQL_FILE_MAX) datas[k] = data;
-                                            else shas[k] = blob(api, owner, repo, data, coolUntil, job);
+                                            if (data == null) {
+                                                skipped[k] = true;
+                                            } else {
+                                                String text = inlineText(data, inlineBytes);
+                                                if (text != null) texts[k] = text;
+                                                else shas[k] = blob(api, owner, repo, data, coolUntil, job);
+                                            }
                                         }
                                     } finally {
                                         if (big) bigGate.release();
@@ -671,7 +675,6 @@ public final class TransferTasks {
                     job.check();
 
                     List<GitHubApi.TreeEntry> entries = new ArrayList<>();
-                    List<GitHubApi.Addition> adds = new ArrayList<>();
                     for (int i = from; i < end; i++) {
                         FileScanner.Item it = all.get(i);
                         String dest = base.isEmpty() ? it.path : base + "/" + it.path;
@@ -679,36 +682,34 @@ public final class TransferTasks {
                             skippedNames.add(it.path);
                         } else if (same[i]) {
                             continue;
-                        } else if (datas[i] != null) {
-                            adds.add(new GitHubApi.Addition(dest, datas[i]));
+                        } else if (texts[i] != null) {
+                            entries.add(GitHubApi.TreeEntry.inline(dest, texts[i]));
                         } else if (shas[i] != null && !shas[i].isEmpty()) {
                             entries.add(new GitHubApi.TreeEntry(dest, shas[i]));
                         }
                     }
-                    if (!adds.isEmpty()) {
-                        batchNo++;
-                        job.progress(app.getString(R.string.committing), doneCount.get(), total);
-                        String msgN = total > maxFiles ? message + " (" + batchNo + ")" : message;
-                        boolean sent = gqlCommit(api, owner, repo, branch, msgN, adds, job, coolUntil);
-                        if (!sent) {
-                            gql[0] = false;
-                            for (GitHubApi.Addition a : adds) {
-                                entries.add(new GitHubApi.TreeEntry(a.path,
-                                        blob(api, owner, repo, a.data, coolUntil, job)));
-                            }
-                        }
-                        for (int i = from; i < end; i++) datas[i] = null;
-                    }
                     if (!entries.isEmpty()) {
                         batchNo++;
                         job.progress(app.getString(R.string.committing), doneCount.get(), total);
-                        api.commitEntries(owner, repo, branch, entries,
-                                total > maxFiles ? message + " (" + batchNo + ")" : message);
+                        String msgN = end < total || batchNo > 1 ? message + " (" + batchNo + ")" : message;
+                        chain[0] = stage(api, owner, repo, chain[0], entries, msgN, job, coolUntil);
                     }
+                    for (int i = from; i < end; i++) texts[i] = null;
                     idx = end;
                 }
+                if (chain[0] != null && !chain[0].equals(startHead)) {
+                    job.progress(app.getString(R.string.upload_publishing), total, total);
+                    publish(api, owner, repo, branch, chain[0], message);
+                }
+                published = true;
             } finally {
                 ex.shutdownNow();
+                if (!published && chain[0] != null && !chain[0].equals(startHead)) {
+                    try {
+                        publish(api, owner, repo, branch, chain[0], message);
+                    } catch (Exception ignored) {
+                    }
+                }
                 RepoTree.invalidate(app, owner, repo, branch);
             }
 
@@ -744,47 +745,58 @@ public final class TransferTasks {
         return gitSha(null, Uri.fromFile(f), f.length());
     }
 
-    private static boolean gqlCommit(GitHubApi api, String owner, String repo, String branch, String message,
-                                     List<GitHubApi.Addition> adds, Transfers.Job job, AtomicLong coolUntil)
-            throws Exception {
-        List<GitHubApi.Addition> pending = new ArrayList<>(adds);
-        for (int attempt = 0; attempt < 5; attempt++) {
-            job.check();
+    private static String inlineText(byte[] data, AtomicLong budget) {
+        int len = data.length;
+        if (len == 0 || len > INLINE_FILE_MAX) return null;
+        if (len >= 3 && (data[0] & 0xFF) == 0xEF && (data[1] & 0xFF) == 0xBB && (data[2] & 0xFF) == 0xBF) return null;
+        for (byte b : data) if (b == 0) return null;
+        String text;
+        try {
+            text = java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(data)).toString();
+        } catch (java.nio.charset.CharacterCodingException e) {
+            return null;
+        }
+        if (budget.addAndGet(len) > INLINE_BATCH_MAX) {
+            budget.addAndGet(-len);
+            return null;
+        }
+        return text;
+    }
+
+    private static String stage(GitHubApi api, String owner, String repo, String parent,
+                                List<GitHubApi.TreeEntry> entries, String message, Transfers.Job job,
+                                AtomicLong coolUntil) throws Exception {
+        for (int attempt = 0; ; attempt++) {
             long wait = coolUntil.get() - System.currentTimeMillis();
             if (wait > 0) Thread.sleep(Math.min(wait, 90000L));
+            job.check();
             try {
-                String head = api.getBranchSha(owner, repo, branch);
-                if (attempt > 0) {
-                    Map<String, String> now = api.blobShaMap(owner, repo, branch);
-                    List<GitHubApi.Addition> left = new ArrayList<>();
-                    for (GitHubApi.Addition a : pending) {
-                        if (!gitShaOf(a.data).equals(now.get(a.path))) left.add(a);
-                    }
-                    pending = left;
-                    if (pending.isEmpty()) return true;
-                }
-                api.createCommitOnBranch(owner, repo, branch, head, message, pending);
-                return true;
-            } catch (GitHubApi.HeadMoved e) {
-                Thread.sleep(400L * (attempt + 1));
+                return api.commitTree(owner, repo, parent, entries, message);
             } catch (GitHubApi.ApiException e) {
-                boolean rate = e.code == 429 || (e.code == 403 && e.waitMs > 0);
-                if (rate && attempt < 4) {
+                boolean rate = e.code == 403 || e.code == 429;
+                if (!(rate || e.code >= 500) || attempt >= 5) throw e;
+                if (rate) {
                     final long until = System.currentTimeMillis() + Math.min(Math.max(e.waitMs, 3000L), 90000L);
                     coolUntil.updateAndGet(v -> Math.max(v, until));
-                    continue;
                 }
-                if (e.code >= 500 && attempt < 3) {
-                    Thread.sleep(1500L << attempt);
-                    continue;
-                }
-                return false;
             } catch (IOException e) {
-                if (attempt >= 2) return false;
-                Thread.sleep(1500L);
+                if (attempt >= 5) throw e;
             }
+            Thread.sleep(Math.min(30000L, 1500L << attempt));
         }
-        return false;
+    }
+
+    private static void publish(GitHubApi api, String owner, String repo, String branch, String head,
+                                String message) throws Exception {
+        try {
+            api.moveBranch(owner, repo, branch, head, false);
+        } catch (GitHubApi.ApiException e) {
+            if (e.code != 422 && e.code != 409) throw e;
+            api.mergeBranches(owner, repo, branch, head, message);
+        }
     }
 
     public interface Stop {
