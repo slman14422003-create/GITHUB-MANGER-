@@ -23,6 +23,7 @@
     <string name="working">Working…</string>
     <string name="preparing">Preparing files…</string>
     <string name="committing">Creating the commit…</string>
+    <string name="upload_publishing">Updating the branch once…</string>
     <string name="error">Error</string>
     <string name="done">Done</string>
     <string name="no_files">No files to upload</string>
@@ -638,4 +639,5 @@
     <string name="restore_to_release_sub">Reset branch “%1$s” to the contents of this release</string>
     <string name="rollback_before_run">Failed? Go back to the version before it</string>
     <string name="rollback_detail">The change that failed: %1$s — %2$s\n\nNote: if there are newer changes on the branch they will be undone as well.</string>
+    <string name="lg_group_lines">%1$d lines</string>
 </resources>
