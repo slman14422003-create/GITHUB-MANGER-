@@ -12,4 +12,5 @@
     <string name="log_collapse_all">طي كل الخطوات</string>
     <string name="step_no_output">لا يوجد مخرجات لهذه الخطوة</string>
     <string name="step_pending">الخطوة لم تبدأ بعد</string>
+    <string name="lg_group_lines">%1$d سطر</string>
 </resources>

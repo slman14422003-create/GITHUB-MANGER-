@@ -23,6 +23,7 @@
     <string name="working">جارٍ العمل…</string>
     <string name="preparing">جارٍ تجهيز الملفات…</string>
     <string name="committing">جارٍ إنشاء الـ commit…</string>
+    <string name="upload_publishing">جارٍ تحديث الفرع مرة واحدة…</string>
     <string name="error">خطأ</string>
     <string name="done">تم</string>
     <string name="no_files">لا توجد ملفات للرفع</string>
