@@ -129,10 +129,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK 
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-36 build-tools;${{ steps.audit.outputs.build_tools }}'
+          packages: 'build-tools;${{ steps.audit.outputs.build_tools }}'
+
+      - name: Install the Android 17 platform
+        run: |
+          set -euo pipefail
+          PKG="$(sdkmanager --list 2>/dev/null | grep -oE 'platforms;android-37(\.[0-9]+)?' | sort -uV | head -n1 || true)"
+          [ -z "$PKG" ] && PKG='platforms;android-37'
+          echo "Installing $PKG"
+          sdkmanager --install "$PKG" >/dev/null
+          ls "$ANDROID_HOME/platforms"
 
       - uses: gradle/actions/setup-gradle@v5
         with:

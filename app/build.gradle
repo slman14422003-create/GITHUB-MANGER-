@@ -31,12 +31,12 @@ gradle.taskGraph.whenReady { graph ->
 
 android {
     namespace = 'com.ghmanager.app'
-    compileSdk = 36   // Android 16
+    compileSdk = 37   // Android 17
 
     defaultConfig {
         applicationId = "app.ghconsole.mgr26"   // namespace (com.ghmanager.app) stays for the source code; this is the public package name
         minSdk = 24
-        targetSdk = 36   // Android 16
+        targetSdk = 37   // Android 17
         // CI run number keeps versionCode increasing so a new build always installs over the old one
         versionCode = (System.getenv('VERSION_CODE_OVERRIDE') ?: (10 + (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()).toString()).toInteger()
         // CI passes the release tag (without the leading v) so the installed version matches the Release tag

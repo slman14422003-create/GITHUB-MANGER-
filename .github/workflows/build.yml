@@ -141,7 +141,7 @@ jobs:
           G="$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' gradle/wrapper/gradle-wrapper.properties | head -n1)"
           B="$(grep -oP '^buildTools=\K[0-9.]+' gradle/toolchain.properties | head -n1)"
           [ -z "$G" ] && { echo "::error::Gradle version not found"; exit 1; }
-          [ -z "$B" ] && B="36.0.0"
+          [ -z "$B" ] && B="37.0.0"
           echo "gradle=$G" >> "$GITHUB_OUTPUT"
           echo "build_tools=$B" >> "$GITHUB_OUTPUT"
 
@@ -150,15 +150,46 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK (API 36 / Android 16)
+      - name: Setup Android SDK (API 37 / Android 17)
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-36 build-tools;${{ steps.tc.outputs.build_tools }}'
+          packages: 'build-tools;${{ steps.tc.outputs.build_tools }}'
+
+      - name: Install the Android 17 platform
+        run: |
+          set -euo pipefail
+          PKG="$(sdkmanager --list 2>/dev/null | grep -oE 'platforms;android-37(\.[0-9]+)?' | sort -uV | head -n1 || true)"
+          [ -z "$PKG" ] && PKG='platforms;android-37'
+          echo "Installing $PKG"
+          sdkmanager --install "$PKG" >/dev/null
+          ls "$ANDROID_HOME/platforms"
 
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: ${{ steps.tc.outputs.gradle }}
           cache-cleanup: on-success
+
+      - name: Environment details
+        run: |
+          echo "::group::Runner"
+          echo "Image: ${ImageOS:-unknown} ${ImageVersion:-}"
+          echo "CPU cores: $(nproc)"
+          free -h | head -n 2
+          df -h "$GITHUB_WORKSPACE" | tail -n 1
+          echo "::endgroup::"
+          echo "::group::Java and Gradle"
+          java -version 2>&1
+          echo "Gradle (wrapper pin): ${{ steps.tc.outputs.gradle }}"
+          echo "Build-tools: ${{ steps.tc.outputs.build_tools }}"
+          echo "::endgroup::"
+          echo "::group::Android SDK"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+          echo "::endgroup::"
+          echo "::group::Project"
+          echo "Java files: $(find app/src/main/java -name '*.java' | wc -l)"
+          echo "Resource files: $(find app/src/main/res -type f | wc -l)"
+          echo "Commit: ${GITHUB_SHA:0:7} on ${GITHUB_REF_NAME} (${GITHUB_EVENT_NAME}), run #${GITHUB_RUN_NUMBER}"
+          echo "::endgroup::"
 
       - name: Prepare release signing
         id: sign
@@ -224,7 +255,7 @@ jobs:
           rc=1
           for attempt in 1 2 3 4; do
             echo "::group::Build attempt $attempt"
-            gradle "$TASK" "${FLAGS[@]}" --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/attempt.log"
+            gradle "$TASK" "${FLAGS[@]}" --console=plain --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/attempt.log" | awk -f tools/ci_live.awk
             rc=${PIPESTATUS[0]}
             cat "$RUNNER_TEMP/attempt.log" >> "$RUNNER_TEMP/build.log"
             echo "::endgroup::"
@@ -314,7 +345,7 @@ jobs:
             [ "$BUILD_TYPE" = "release" ] && echo "| **SHA-256 لشهادة التوقيع** (سجّلها في Play Console) | \`$CERT_COLON\` |" || true
             echo "| التوقيع | ${SIGNING_MODE:-debug} |"
             echo "| الحماية من التعديل | ${SEALED:-غير مختوم} |"
-            echo "| Android | compileSdk 36 / targetSdk 36 |"
+            echo "| Android | compileSdk 37 / targetSdk 37 |"
             echo ""
             echo '```'
             grep -E "Verified|certificate" "$RUNNER_TEMP/verify.txt" || true
