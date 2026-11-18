@@ -73,6 +73,10 @@ public class BrowserActivity extends BaseRepoActivity {
         pathView.setTypeface(android.graphics.Typeface.MONOSPACE);
         pathView.setTextDirection(View.TEXT_DIRECTION_LTR);
         pathView.setEllipsize(android.text.TextUtils.TruncateAt.START);
+        pathView.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+        pathView.setHighlightColor(android.graphics.Color.TRANSPARENT);
+        wireRootNav();
+        path = Store.lastFolder(this, owner, repo);
         loadingBar = findViewById(R.id.loading);
         btnNew = findViewById(R.id.btnA1);
         btnNew.setImageResource(R.drawable.ic_add);
@@ -229,10 +233,8 @@ public class BrowserActivity extends BaseRepoActivity {
     }
 
     private void openFile(String filePath) {
-        Intent i = repoIntent(EditorActivity.class);
-        i.putExtra("path", filePath);
         needsReload = true;
-        startActivity(i);
+        EditorActivity.launch(this, filePath, false);
     }
 
     // ---------- browsing ----------
@@ -291,7 +293,13 @@ public class BrowserActivity extends BaseRepoActivity {
     private void load(final boolean force) {
         final int gen = ++loadGen;
         loading(true);
-        pathView.setText("/" + path);
+        pathView.setText(crumbs(path, target -> {
+            if (target.equals(path)) return;
+            exitSelect();
+            path = target;
+            load();
+        }));
+        Store.setLastFolder(this, owner, repo, path);
         final String p = path;
         final String b = branch;
         final android.content.Context app = getApplicationContext();
@@ -529,11 +537,8 @@ public class BrowserActivity extends BaseRepoActivity {
                         if (n.isEmpty()) { Dlg.stay(dd); return; }
                         final String full = join(path, n);
                         if (which == 0) {
-                            Intent i = repoIntent(EditorActivity.class);
-                            i.putExtra("path", full);
-                            i.putExtra("new", true);
                             needsReload = true;
-                            startActivity(i);
+                            EditorActivity.launch(BrowserActivity.this, full, true);
                         } else {
                             showProgress(getString(R.string.working));
                             bg(() -> {
@@ -630,7 +635,7 @@ public class BrowserActivity extends BaseRepoActivity {
         target.setTextDirection(View.TEXT_DIRECTION_LTR);
         final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
         final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
-        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, true);
+        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, false);
 
         box.addView(Ui.field(this, getString(R.string.target_folder), target));
         box.addView(Ui.field(this, getString(R.string.commit_message), msg));

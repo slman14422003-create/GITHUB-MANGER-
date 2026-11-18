@@ -79,7 +79,41 @@ public final class Ui {
         return (int) (v * c.getResources().getDisplayMetrics().density);
     }
 
+    private static final android.util.SparseIntArray ATTRS = new android.util.SparseIntArray();
+
+    static {
+        ATTRS.put(R.color.bg, R.attr.cBg);
+        ATTRS.put(R.color.surface, R.attr.cSurface);
+        ATTRS.put(R.color.surface_high, R.attr.cSurfaceHigh);
+        ATTRS.put(R.color.field, R.attr.cField);
+        ATTRS.put(R.color.stroke, R.attr.cStroke);
+        ATTRS.put(R.color.stroke_soft, R.attr.cStrokeSoft);
+        ATTRS.put(R.color.text_primary, R.attr.cTextPrimary);
+        ATTRS.put(R.color.text_secondary, R.attr.cTextSecondary);
+        ATTRS.put(R.color.text_hint, R.attr.cTextHint);
+        ATTRS.put(R.color.accent, R.attr.cAccent);
+        ATTRS.put(R.color.accent_text, R.attr.cAccentText);
+        ATTRS.put(R.color.accent_soft, R.attr.cAccentSoft);
+        ATTRS.put(R.color.neutral_soft, R.attr.cNeutralSoft);
+        ATTRS.put(R.color.on_accent, R.attr.cOnAccent);
+        ATTRS.put(R.color.ripple, R.attr.cRipple);
+        ATTRS.put(R.color.ripple_on_accent, R.attr.cRippleOnAccent);
+        ATTRS.put(R.color.ok, R.attr.cOk);
+        ATTRS.put(R.color.bad, R.attr.cBad);
+        ATTRS.put(R.color.warn, R.attr.cWarn);
+        ATTRS.put(R.color.info, R.attr.cInfo);
+    }
+
     public static int color(Context c, int res) {
+        int attr = ATTRS.get(res, 0);
+        if (attr != 0) {
+            android.util.TypedValue tv = new android.util.TypedValue();
+            if (c.getTheme().resolveAttribute(attr, tv, true)
+                    && tv.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                    && tv.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT) {
+                return tv.data;
+            }
+        }
         return ContextCompat.getColor(c, res);
     }
 
@@ -88,8 +122,8 @@ public final class Ui {
         e.setHint(hint);
         if (text != null) e.setText(text);
         e.setBackgroundResource(R.drawable.bg_input);
-        e.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
-        e.setHintTextColor(ContextCompat.getColor(c, R.color.text_hint));
+        e.setTextColor(color(c, R.color.text_primary));
+        e.setHintTextColor(color(c, R.color.text_hint));
         e.setTextSize(15);
         e.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         e.setMinHeight(dp(c, 52));
@@ -117,7 +151,7 @@ public final class Ui {
         CheckBox cb = new CheckBox(c);
         cb.setText(textRes);
         cb.setChecked(checked);
-        cb.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
+        cb.setTextColor(color(c, R.color.text_primary));
         cb.setTextSize(15);
         cb.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         cb.setButtonTintList(ContextCompat.getColorStateList(c, R.color.check_tint));
@@ -138,7 +172,7 @@ public final class Ui {
         CheckBox cb = new CheckBox(c);
         cb.setText(text);
         cb.setChecked(checked);
-        cb.setTextColor(ContextCompat.getColor(c, R.color.text_primary));
+        cb.setTextColor(color(c, R.color.text_primary));
         cb.setTextSize(15);
         cb.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         cb.setButtonTintList(ContextCompat.getColorStateList(c, R.color.check_tint));
@@ -172,7 +206,7 @@ public final class Ui {
     }
 
     public static void tint(Context c, ProgressBar bar) {
-        ColorStateList accent = ColorStateList.valueOf(ContextCompat.getColor(c, R.color.accent));
+        ColorStateList accent = ColorStateList.valueOf(color(c, R.color.accent));
         bar.setProgressTintList(accent);
         bar.setIndeterminateTintList(accent);
     }
@@ -180,7 +214,7 @@ public final class Ui {
     public static TextView label(Context c, CharSequence text) {
         TextView t = new TextView(c);
         t.setText(text);
-        t.setTextColor(ContextCompat.getColor(c, R.color.text_secondary));
+        t.setTextColor(color(c, R.color.text_secondary));
         t.setTextSize(13);
         t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         t.setPaddingRelative(dp(c, 6), dp(c, 6), dp(c, 6), dp(c, 4));

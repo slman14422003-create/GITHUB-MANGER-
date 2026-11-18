@@ -47,7 +47,7 @@
                     android:ellipsize="end"
                     android:maxLines="2"
                     android:textAlignment="viewStart"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/cTextPrimary"
                     android:textDirection="locale"
                     android:textSize="15.5sp"
                     android:textStyle="bold" />
@@ -60,7 +60,7 @@
                     android:ellipsize="end"
                     android:maxLines="2"
                     android:textAlignment="viewStart"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/cTextSecondary"
                     android:textDirection="locale"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -74,7 +74,7 @@
                 android:contentDescription="@string/more"
                 android:padding="11dp"
                 android:src="@drawable/ic_more"
-                android:tint="@color/text_secondary" />
+                android:tint="?attr/cTextSecondary" />
         </LinearLayout>
 
         <LinearLayout
@@ -102,7 +102,7 @@
                 android:paddingEnd="10dp"
                 android:paddingBottom="3dp"
                 android:singleLine="true"
-                android:textColor="@color/accent_text"
+                android:textColor="?attr/cAccentText"
                 android:textDirection="ltr"
                 android:textSize="12sp" />
 
@@ -134,10 +134,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:drawablePadding="5dp"
-                android:drawableTint="@color/text_hint"
+                android:drawableTint="?attr/cTextHint"
                 android:gravity="center_vertical"
                 android:singleLine="true"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="12sp" />
 
             <TextView
@@ -146,10 +146,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="14dp"
                 android:drawablePadding="5dp"
-                android:drawableTint="@color/text_hint"
+                android:drawableTint="?attr/cTextHint"
                 android:gravity="center_vertical"
                 android:singleLine="true"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -179,7 +179,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textAlignment="viewStart"
-                android:textColor="@color/info"
+                android:textColor="?attr/cInfo"
                 android:textDirection="locale"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -210,11 +210,11 @@
         android:minHeight="34dp"
                 android:background="@drawable/bg_pill_small"
                 android:drawablePadding="6dp"
-                android:drawableTint="@color/text_primary"
+                android:drawableTint="?attr/cTextPrimary"
                 android:gravity="center"
                 android:paddingStart="13dp"
                 android:paddingEnd="13dp"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/cTextPrimary"
                 android:textSize="13sp" />
 
             <TextView
@@ -225,11 +225,11 @@
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_pill_small"
                 android:drawablePadding="6dp"
-                android:drawableTint="@color/text_primary"
+                android:drawableTint="?attr/cTextPrimary"
                 android:gravity="center"
                 android:paddingStart="13dp"
                 android:paddingEnd="13dp"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/cTextPrimary"
                 android:textSize="13sp" />
         </LinearLayout>
     </LinearLayout>

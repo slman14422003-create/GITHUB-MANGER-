@@ -17,7 +17,7 @@
         android:paddingStart="6dp"
         android:paddingEnd="6dp"
         android:textAlignment="viewStart"
-        android:textColor="@color/text_primary"
+        android:textColor="?attr/cTextPrimary"
         android:textSize="26sp" />
 
     <TextView
@@ -30,7 +30,7 @@
         android:paddingEnd="6dp"
         android:singleLine="true"
         android:textAlignment="viewStart"
-        android:textColor="@color/text_secondary"
+        android:textColor="?attr/cTextSecondary"
         android:textDirection="locale"
         android:textSize="13sp" />
 
@@ -62,7 +62,7 @@
         android:background="@drawable/bg_input"
         android:drawableStart="@drawable/ic_search"
         android:drawablePadding="12dp"
-        android:drawableTint="@color/text_hint"
+        android:drawableTint="?attr/cTextHint"
         android:hint="@string/act_filter_hint"
         android:importantForAutofill="no"
         android:inputType="text"
@@ -71,8 +71,8 @@
         android:paddingTop="13dp"
         android:paddingEnd="18dp"
         android:paddingBottom="13dp"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
+        android:textColor="?attr/cTextPrimary"
+        android:textColorHint="?attr/cTextHint"
         android:textSize="15sp" />
 
     <HorizontalScrollView
@@ -103,7 +103,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textAlignment="viewStart"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="13sp"
             android:textStyle="bold" />
 
@@ -113,7 +113,7 @@
             android:layout_height="wrap_content"
             android:padding="6dp"
             android:text="@string/act_clear"
-            android:textColor="@color/accent_text"
+            android:textColor="?attr/cAccentText"
             android:textSize="13sp"
             android:visibility="gone" />
     </LinearLayout>

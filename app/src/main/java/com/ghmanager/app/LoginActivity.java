@@ -60,6 +60,7 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen splash = SplashScreen.installSplashScreen(this);
+        Themes.apply(this);
         super.onCreate(savedInstanceState);
         if (!Integrity.verify(this)) {
             new Dlg(this)

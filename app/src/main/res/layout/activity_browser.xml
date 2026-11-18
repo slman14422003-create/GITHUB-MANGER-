@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/cBg"
     android:orientation="vertical">
 
     <include layout="@layout/view_header" />
@@ -24,7 +24,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/branch_label"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="13sp" />
 
         <Spinner
@@ -41,7 +41,7 @@
             android:layout_height="20dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_expand"
-            android:tint="@color/text_secondary" />
+            android:tint="?attr/cTextSecondary" />
     </LinearLayout>
 
     <!-- hint row: "long press for more" + the Select chip -->
@@ -63,7 +63,7 @@
             android:layout_weight="1"
             android:text="@string/long_press_hint"
             android:textAlignment="viewStart"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/cTextHint"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -100,7 +100,7 @@
             android:layout_weight="1"
             android:singleLine="true"
             android:textAlignment="viewStart"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -115,7 +115,7 @@
             android:paddingBottom="8dp"
             android:singleLine="true"
             android:text="@string/select_all"
-            android:textColor="@color/accent_text"
+            android:textColor="?attr/cAccentText"
             android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -145,7 +145,7 @@
             android:gravity="center"
             android:padding="32dp"
             android:text="@string/empty_folder"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/cTextHint"
             android:textSize="15sp"
             android:visibility="gone" />
     </FrameLayout>
@@ -170,7 +170,7 @@
             android:layout_weight="1"
             android:drawableStart="@drawable/ic_folder_up"
             android:drawablePadding="8dp"
-            android:drawableTint="@color/on_accent"
+            android:drawableTint="?attr/cOnAccent"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:text="@string/upload_folder" />
@@ -184,7 +184,7 @@
             android:layout_weight="1"
             android:drawableStart="@drawable/ic_upload"
             android:drawablePadding="8dp"
-            android:drawableTint="@color/text_primary"
+            android:drawableTint="?attr/cTextPrimary"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:text="@string/upload_files" />
@@ -211,10 +211,10 @@
             android:layout_weight="1"
             android:drawableStart="@drawable/ic_download"
             android:drawablePadding="8dp"
-            android:drawableTint="@color/on_accent"
+            android:drawableTint="?attr/cOnAccent"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textColor="@color/on_accent" />
+            android:textColor="?attr/cOnAccent" />
 
         <Button
             android:id="@+id/btnDeleteSel"
@@ -225,9 +225,9 @@
             android:background="@drawable/btn_danger"
             android:drawableStart="@drawable/ic_delete"
             android:drawablePadding="8dp"
-            android:drawableTint="@color/on_accent"
+            android:drawableTint="?attr/cOnAccent"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textColor="@color/on_accent" />
+            android:textColor="?attr/cOnAccent" />
     </LinearLayout>
 </LinearLayout>

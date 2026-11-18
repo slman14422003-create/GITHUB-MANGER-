@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sw_copy_url">Copy URL</string>
+    <string name="sw_url_copied">URL copied</string>
+    <string name="sw_protected">This repository is protected from deletion. Remove the protection first.</string>
+    <string name="rs_run_ok">Last Actions run succeeded</string>
+    <string name="rs_run_fail">Last Actions run failed</string>
+    <string name="rs_run_active">Actions run in progress</string>
+</resources>

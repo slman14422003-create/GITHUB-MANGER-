@@ -7,10 +7,10 @@
             android:insetRight="8dp"
             android:insetTop="0dp">
             <shape android:shape="rectangle">
-                <solid android:color="@color/surface_high" />
+                <solid android:color="?attr/cSurfaceHigh" />
                 <stroke
                     android:width="1dp"
-                    android:color="@color/stroke" />
+                    android:color="?attr/cStroke" />
                 <corners android:radius="@dimen/radius_l" />
             </shape>
         </inset>
@@ -22,7 +22,7 @@
         android:gravity="top|center_horizontal"
         android:top="8dp">
         <shape android:shape="rectangle">
-            <solid android:color="@color/text_hint" />
+            <solid android:color="?attr/cTextHint" />
             <corners android:radius="@dimen/radius_pill" />
         </shape>
     </item>

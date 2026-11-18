@@ -10,7 +10,6 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +20,15 @@ public class RowAdapter extends BaseAdapter {
     private final List<Row> rows = new ArrayList<>();
 
     private int animatedUpTo = -1;
+    private Decorator decorator;
+
+    public interface Decorator {
+        void decorate(View row, int position);
+    }
+
+    public void setDecorator(Decorator d) {
+        decorator = d;
+    }
 
     public RowAdapter(Context ctx) {
         this.ctx = ctx;
@@ -56,6 +64,7 @@ public class RowAdapter extends BaseAdapter {
         Row r = rows.get(position);
         Ui.shapeRow(ctx, v, position == 0, position == rows.size() - 1,
                 r.checked ? R.color.accent_soft : R.color.surface);
+        if (decorator != null) decorator.decorate(v, position);
         if (position > animatedUpTo) {
             animatedUpTo = position;
             Ui.enter(v, position);
@@ -73,11 +82,11 @@ public class RowAdapter extends BaseAdapter {
         ImageView icon = v.findViewById(R.id.icon);
         icon.setImageResource(r.icon);
         boolean colored = r.iconColor != 0;
-        int tint = colored ? r.iconColor : ContextCompat.getColor(ctx, R.color.text_primary);
+        int tint = colored ? r.iconColor : Ui.color(ctx, R.color.text_primary);
         icon.setImageTintList(ColorStateList.valueOf(tint));
         GradientDrawable tile = new GradientDrawable();
         tile.setCornerRadius(Ui.radius(ctx, R.dimen.radius_s));
-        tile.setColor(colored ? (tint & 0x00FFFFFF) | 0x24000000 : ContextCompat.getColor(ctx, R.color.neutral_soft));
+        tile.setColor(colored ? (tint & 0x00FFFFFF) | 0x24000000 : Ui.color(ctx, R.color.neutral_soft));
         icon.setBackground(tile);
 
         ImageView tick = v.findViewById(R.id.selTick);
@@ -92,7 +101,15 @@ public class RowAdapter extends BaseAdapter {
         if (r.sub == null || r.sub.isEmpty()) {
             sub.setVisibility(View.GONE);
         } else {
-            sub.setText(r.sub);
+            if (r.dot != 0) {
+                android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder("\u25CF ");
+                sb.setSpan(new android.text.style.ForegroundColorSpan(r.dot), 0, 1,
+                        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.append(r.sub);
+                sub.setText(sb);
+            } else {
+                sub.setText(r.sub);
+            }
             sub.setVisibility(View.VISIBLE);
         }
 

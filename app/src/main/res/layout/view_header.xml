@@ -35,7 +35,7 @@
             android:fontFamily="serif"
             android:gravity="center"
             android:maxLines="1"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="20sp"
             app:autoSizeMaxTextSize="20sp"
             app:autoSizeMinTextSize="14sp"
@@ -50,7 +50,7 @@
             android:ellipsize="middle"
             android:gravity="center"
             android:singleLine="true"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="12sp" />
     </LinearLayout>
 

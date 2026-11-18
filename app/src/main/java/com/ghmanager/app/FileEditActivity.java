@@ -42,6 +42,7 @@ public class FileEditActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Themes.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_editor);
         String path = getIntent().getStringExtra("path");

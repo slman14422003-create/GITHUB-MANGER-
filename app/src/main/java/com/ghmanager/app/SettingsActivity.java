@@ -39,6 +39,14 @@ public class SettingsActivity extends BaseRepoActivity {
         return getString(R.string.lang_system);
     }
 
+    private String themeName() {
+        int t = Store.theme(this);
+        if (t == Themes.LIGHT) return getString(R.string.theme_light);
+        if (t == Themes.AMOLED) return getString(R.string.theme_amoled);
+        if (t == Themes.SYSTEM) return getString(R.string.theme_system);
+        return getString(R.string.theme_dark);
+    }
+
     private boolean resumedOnce = false;
 
     private void render() {
@@ -48,6 +56,8 @@ public class SettingsActivity extends BaseRepoActivity {
         content.addView(Ui.sectionTitle(this, getString(R.string.set_general)));
         addRow(new Row(R.drawable.ic_language, true, getString(R.string.set_language), languageName(), false, true),
                 v -> pickLanguage());
+        addRow(new Row(R.drawable.ic_settings, true, getString(R.string.set_theme), themeName(), false, true),
+                v -> pickTheme());
 
         // ---- updates
         content.addView(Ui.sectionTitle(this, getString(R.string.upd_title)));
@@ -76,6 +86,11 @@ public class SettingsActivity extends BaseRepoActivity {
                     startActivity(new Intent(this, FileManagerActivity.class).putExtra("path", d.getAbsolutePath()));
                 });
 
+        final Ui.Toggle wifi = Ui.toggle(this, content, R.string.st_wifi_only, R.string.st_wifi_only_sub,
+                Store.wifiOnly(this));
+        wifi.onChange((b, on) -> Store.setWifiOnly(this, on));
+        content.addView(wifi.view);
+
         // ---- tools
         content.addView(Ui.sectionTitle(this, getString(R.string.app_tools)));
         addRow(new Row(R.drawable.ic_info, true, getString(R.string.nt_title), getString(R.string.nt_sub_row), false, true),
@@ -102,19 +117,42 @@ public class SettingsActivity extends BaseRepoActivity {
             render();
         });
         content.addView(lock.view);
-        if (AppLock.enabled(this)) {
-            final int[] secs = {0, 30, 120, 300};
-            final String[] names = {getString(R.string.lock_now), getString(R.string.lock_30s),
-                    getString(R.string.lock_2m), getString(R.string.lock_5m)};
-            int cur = AppLock.delaySeconds(this);
-            String curName = names[1];
-            for (int i = 0; i < secs.length; i++) if (secs[i] == cur) curName = names[i];
-            addRow(new Row(R.drawable.ic_timer, true, getString(R.string.lock_delay), curName, false, true),
-                    v -> choose(getString(R.string.lock_delay), names, (d, which) -> {
-                        AppLock.setDelaySeconds(this, secs[which]);
-                        render();
-                    }));
-        }
+        final int[] secs = {0, 30, 120, 300};
+        final String[] names = {getString(R.string.lock_now), getString(R.string.lock_30s),
+                getString(R.string.lock_2m), getString(R.string.lock_5m)};
+        int curSecs = AppLock.delaySeconds(this);
+        String curName = names[1];
+        for (int i = 0; i < secs.length; i++) if (secs[i] == curSecs) curName = names[i];
+        if (!AppLock.enabled(this)) curName = curName + " \u00B7 " + getString(R.string.lock_delay_off);
+        addRow(new Row(R.drawable.ic_timer, true, getString(R.string.lock_delay), curName, false, true),
+                v -> choose(getString(R.string.lock_delay), names, (d, which) -> {
+                    AppLock.setDelaySeconds(this, secs[which]);
+                    render();
+                }));
+
+        final android.view.View trashRow = Ui.rowView(this, content, new Row(R.drawable.ic_trash_sweep, true,
+                getString(R.string.fm_trash), getString(R.string.fm_trash_hint), false, true),
+                v -> confirm(getString(R.string.fm_empty_trash), getString(R.string.fm_empty_trash_msg),
+                        R.string.delete, () -> io.execute(() -> {
+                            Trash.empty(this);
+                            post(this::render);
+                        })));
+        content.addView(trashRow);
+        io.execute(() -> {
+            java.util.List<Trash.Item> items = Trash.list(this);
+            long bytes = 0;
+            for (Trash.Item it : items) bytes += it.size;
+            final String line = items.isEmpty() ? getString(R.string.fm_trash_empty)
+                    : getString(R.string.st_trash_sub, items.size(), Fmt.size(bytes)) + " \u00B7 "
+                    + getString(R.string.fm_trash_hint);
+            post(() -> {
+                android.widget.TextView t = trashRow.findViewById(R.id.sub);
+                if (t != null) {
+                    t.setText(line);
+                    t.setVisibility(android.view.View.VISIBLE);
+                }
+            });
+        });
 
         // ---- proxy mirror (for places where github.com is blocked)
         content.addView(Ui.sectionTitle(this, getString(R.string.mir_title)));
@@ -162,6 +200,16 @@ public class SettingsActivity extends BaseRepoActivity {
             Store.setLanguage(this, codes[which]);
             // recreates every open screen in the new language
             Lang.apply(this);
+        });
+    }
+
+    private void pickTheme() {
+        String[] names = {getString(R.string.theme_dark), getString(R.string.theme_light),
+                getString(R.string.theme_amoled), getString(R.string.theme_system)};
+        choose(getString(R.string.set_theme), names, (d, which) -> {
+            if (which == Store.theme(this)) return;
+            Store.setTheme(this, which);
+            Themes.refresh(this);
         });
     }
 }

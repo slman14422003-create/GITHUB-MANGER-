@@ -78,9 +78,7 @@ public class WorkflowsActivity extends BaseRepoActivity {
                 i.putExtra("workflowName", name);
                 startActivity(i);
             } else if (which == 2) {
-                Intent i = repoIntent(EditorActivity.class);
-                i.putExtra("path", w.optString("path"));
-                startActivity(i);
+                EditorActivity.launch(this, w.optString("path"), false);
             } else {
                 bg(() -> {
                     api.setWorkflowEnabled(owner, repo, id, !active);

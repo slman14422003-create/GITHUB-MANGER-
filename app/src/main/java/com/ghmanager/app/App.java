@@ -61,6 +61,7 @@ public class App extends Application {
 
             @Override
             public void onActivityResumed(Activity a) {
+                Themes.refresh(a);
                 // running uploads / downloads get a live progress card on every normal screen
                 if (!(a instanceof LockActivity) && !(a instanceof LoginActivity)) TransferDock.resume(a);
             }

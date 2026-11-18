@@ -95,6 +95,14 @@ public class Store {
     }
 
     /** Token of the active account ("" when nobody is signed in). */
+    public static String lastFolder(Context c, String owner, String repo) {
+        return sp(c).getString("lastdir:" + owner + "/" + repo, "");
+    }
+
+    public static void setLastFolder(Context c, String owner, String repo, String path) {
+        sp(c).edit().putString("lastdir:" + owner + "/" + repo, path == null ? "" : path).apply();
+    }
+
     public static String getToken(Context c) {
         return Accounts.activeToken(c);
     }
@@ -209,6 +217,15 @@ public class Store {
         return sp(c).getBoolean("upd_mirror_on", false);
     }
 
+    /** Downloads of repository files skip the Mirror proxy (use when GitHub is reachable directly). */
+    public static boolean directDownloads(Context c) {
+        return sp(c).getBoolean("dl_direct", false);
+    }
+
+    public static void setDirectDownloads(Context c, boolean on) {
+        sp(c).edit().putBoolean("dl_direct", on).apply();
+    }
+
     public static String mirrorUrl(Context c) {
         return rawPref(c, "upd_mirror_url");
     }
@@ -234,5 +251,64 @@ public class Store {
 
     public static void setOauthClientId(Context c, String v) {
         sp(c).edit().putString("upd_oauth_client", v == null ? "" : v.trim()).apply();
+    }
+
+    private static java.util.Set<String> strSet(Context c, String key) {
+        java.util.Set<String> v = sp(c).getStringSet(key, null);
+        return v == null ? new java.util.HashSet<>() : new java.util.HashSet<>(v);
+    }
+
+    private static void flip(Context c, String key, String item, boolean on) {
+        java.util.Set<String> v = strSet(c, key);
+        if (on) v.add(item);
+        else v.remove(item);
+        sp(c).edit().putStringSet(key, v).apply();
+    }
+
+    /** Repositories (full names) the user marked "never delete": the cleanup screen never offers them. */
+    public static boolean isProtected(Context c, String fullName) {
+        return strSet(c, "upd_protected").contains(fullName);
+    }
+
+    public static void setProtected(Context c, String fullName, boolean on) {
+        flip(c, "upd_protected", fullName, on);
+    }
+
+    public static boolean isPinned(Context c, String fullName) {
+        return strSet(c, "upd_pinned").contains(fullName);
+    }
+
+    public static void setPinned(Context c, String fullName, boolean on) {
+        flip(c, "upd_pinned", fullName, on);
+    }
+
+    public static java.util.Set<String> pinned(Context c) {
+        return strSet(c, "upd_pinned");
+    }
+
+    /** 0 = recent activity, 1 = name, 2 = size. */
+    public static int repoSort(Context c) {
+        return sp(c).getInt("upd_repo_sort", 0);
+    }
+
+    public static void setRepoSort(Context c, int v) {
+        sp(c).edit().putInt("upd_repo_sort", v).apply();
+    }
+
+    public static boolean wifiOnly(Context c) {
+        return sp(c).getBoolean("upd_wifi_only", false);
+    }
+
+    public static void setWifiOnly(Context c, boolean on) {
+        sp(c).edit().putBoolean("upd_wifi_only", on).apply();
+    }
+
+    /** 0 = dark, 1 = light, 2 = AMOLED black, 3 = follow the system. */
+    public static int theme(Context c) {
+        return sp(c).getInt("upd_theme", 0);
+    }
+
+    public static void setTheme(Context c, int v) {
+        sp(c).edit().putInt("upd_theme", v).apply();
     }
 }

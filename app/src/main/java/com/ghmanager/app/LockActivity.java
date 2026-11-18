@@ -20,6 +20,7 @@ public class LockActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle b) {
+        Themes.apply(this);
         super.onCreate(b);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);

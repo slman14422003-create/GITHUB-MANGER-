@@ -42,6 +42,7 @@ public final class MirrorDialog {
         key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         key.setTextDirection(View.TEXT_DIRECTION_LTR);
         final CheckBox on = Ui.check(a, R.string.mir_enable, Store.mirrorOn(a));
+        final CheckBox direct = Ui.check(a, R.string.mir_direct_dl, Store.directDownloads(a));
         final TextView result = Ui.body(a, "", 13, R.color.text_secondary);
         result.setPaddingRelative(Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4));
         final Button test = Ui.button(a, R.string.mir_test, false);
@@ -49,6 +50,7 @@ public final class MirrorDialog {
         box.addView(url);
         box.addView(key);
         box.addView(on);
+        box.addView(direct);
         box.addView(test);
         box.addView(result);
 
@@ -110,6 +112,7 @@ public final class MirrorDialog {
                         Dlg.stay(dlg);
                         return;
                     }
+                    Store.setDirectDownloads(a, direct.isChecked());
                     Store.setMirror(a, enable, Mirror.clean(u), key.getText().toString().trim());
                     Mirror.load(a);
                     Toast.makeText(a, R.string.acc_saved, Toast.LENGTH_SHORT).show();

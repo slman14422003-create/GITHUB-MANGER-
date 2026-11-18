@@ -82,6 +82,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Themes.apply(this);
         super.onCreate(savedInstanceState);
         // The save location is chosen in the app's OWN file manager (never the system picker).
         saveLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
@@ -130,6 +131,83 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         if (rows instanceof android.view.ViewGroup) Ui.autoGroup(this, (android.view.ViewGroup) rows);
     }
 
+    // ------------------------------------------------------------------ fast navigation
+
+    /** True when leaving to the repository root must first ask about unsaved work. */
+    protected boolean confirmLeave(Runnable proceed) {
+        proceed.run();
+        return true;
+    }
+
+    protected void goRepoRoot() {
+        confirmLeave(() -> {
+            Intent i = repoIntent(RepoHomeActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(i);
+        });
+    }
+
+    /** Adds the "root" icon right after the back button and makes a long press on back jump to the root too. */
+    protected void wireRootNav() {
+        View back = findViewById(R.id.btnBack);
+        if (back == null) return;
+        back.setOnLongClickListener(v -> {
+            goRepoRoot();
+            return true;
+        });
+        if (!(back.getParent() instanceof LinearLayout) || findViewById(R.id.btnRoot) != null) return;
+        LinearLayout row = (LinearLayout) back.getParent();
+        ImageButton root = new ImageButton(this, null, 0, R.style.IconButton);
+        root.setId(R.id.btnRoot);
+        root.setImageResource(R.drawable.ic_root);
+        root.setContentDescription(getString(R.string.repo_root));
+        root.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
+        root.setOnClickListener(v -> goRepoRoot());
+        Ui.press(this, root);
+        row.addView(root, row.indexOfChild(back) + 1);
+    }
+
+    /** Path as tappable segments: repo > src > main. Each tap reports the folder path of that segment. */
+    protected interface CrumbListener {
+        void onCrumb(String path);
+    }
+
+    protected CharSequence crumbs(String path, final CrumbListener l) {
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+        final int accent = Ui.color(this, R.color.accent_text);
+        appendCrumb(sb, repo == null ? "/" : repo, "", accent, l);
+        if (path != null && !path.isEmpty()) {
+            String[] parts = path.split("/");
+            StringBuilder acc = new StringBuilder();
+            for (String part : parts) {
+                if (part.isEmpty()) continue;
+                if (acc.length() > 0) acc.append('/');
+                acc.append(part);
+                sb.append("  \u203A  ");
+                appendCrumb(sb, part, acc.toString(), accent, l);
+            }
+        }
+        return sb;
+    }
+
+    private void appendCrumb(android.text.SpannableStringBuilder sb, String label, final String target,
+                             final int color, final CrumbListener l) {
+        int start = sb.length();
+        sb.append(label);
+        sb.setSpan(new android.text.style.ClickableSpan() {
+            @Override
+            public void onClick(View widget) {
+                l.onCrumb(target);
+            }
+
+            @Override
+            public void updateDrawState(android.text.TextPaint ds) {
+                ds.setColor(color);
+                ds.setUnderlineText(false);
+            }
+        }, start, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
     protected void setSubtitle(String s) {
         if (subtitleView == null) return;
         if (s == null || s.isEmpty()) {
@@ -147,7 +225,29 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         b.setOnClickListener(l);
     }
 
+    private View skeletonView;
+
+    private void skeleton(boolean on) {
+        if (swipe == null || adapter == null) return;
+        android.view.ViewParent pr = swipe.getParent();
+        if (!(pr instanceof android.widget.FrameLayout)) return;
+        android.widget.FrameLayout parent = (android.widget.FrameLayout) pr;
+        if (on && adapter.getCount() == 0) {
+            if (skeletonView == null) {
+                skeletonView = Skeleton.build(this, 6);
+                parent.addView(skeletonView, parent.indexOfChild(swipe) + 1);
+            }
+            skeletonView.setVisibility(View.VISIBLE);
+            Skeleton.pulse(skeletonView, true);
+            if (emptyView != null) emptyView.setVisibility(View.GONE);
+        } else if (skeletonView != null) {
+            Skeleton.pulse(skeletonView, false);
+            skeletonView.setVisibility(View.GONE);
+        }
+    }
+
     protected void loading(boolean on) {
+        skeleton(on);
         if (loadingBar != null) loadingBar.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
         if (!on && swipe != null && swipe.isRefreshing()) swipe.setRefreshing(false);
     }

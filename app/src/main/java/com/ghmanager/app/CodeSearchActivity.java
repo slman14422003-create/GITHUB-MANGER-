@@ -53,7 +53,7 @@ public class CodeSearchActivity extends BaseRepoActivity {
                 return;
             }
             if (pos < 0 || pos > hits.size()) return;
-            startActivity(repoIntent(EditorActivity.class).putExtra("path", hits.get(pos).optString("path")));
+            EditorActivity.launch(this, hits.get(pos).optString("path"), false);
         });
         showEmpty(true, R.string.cs_empty);
     }

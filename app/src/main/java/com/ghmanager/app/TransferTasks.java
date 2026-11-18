@@ -354,100 +354,367 @@ public final class TransferTasks {
         }
     }
 
+    // ------------------------------------------------------------------ repository downloads
+
+    private static final class Item {
+        final String path;
+        final String rel;
+        final long size;
+        final String sha;
+
+        Item(String path, String rel, long size, String sha) {
+            this.path = path;
+            this.rel = rel;
+            this.size = size;
+            this.sha = sha == null ? "" : sha;
+        }
+    }
+
+    /** File counter + bytes shared by every worker; reports at most ~5 times a second. */
+    private static final class Meter {
+        final Transfers.Job job;
+        final long totalBytes;
+        final int totalFiles;
+        final AtomicLong bytes = new AtomicLong();
+        final AtomicInteger files = new AtomicInteger();
+        private long last;
+
+        Meter(Transfers.Job job, long totalBytes, int totalFiles) {
+            this.job = job;
+            this.totalBytes = Math.max(1, totalBytes);
+            this.totalFiles = totalFiles;
+        }
+
+        synchronized void report(String name, boolean force) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (!force && now - last < 200) return;
+            last = now;
+            job.progressFiles(name, files.get(), totalFiles, Math.max(0, Math.min(bytes.get(), totalBytes)), totalBytes);
+        }
+    }
+
+    /** When one worker is rate limited every worker waits (never hammers GitHub in parallel). */
+    private static final class Gate {
+        volatile long until;
+
+        void hit(long ms) {
+            long t = System.currentTimeMillis() + ms;
+            if (t > until) until = t;
+        }
+
+        void await(Transfers.Job job) throws InterruptedException {
+            for (; ; ) {
+                long w = until - System.currentTimeMillis();
+                if (w <= 0) return;
+                job.check();
+                Thread.sleep(Math.min(w, 500));
+            }
+        }
+    }
+
+    private static final long MAX_WAIT_MS = 45_000L;
+    private static final long GIVE_UP_MS = 120_000L;
+    private static final int MAX_ATTEMPTS = 4;
+
+    private static long backoff(GitHubApi.ApiException e, int attempt) {
+        long w = e.waitMs > 0 ? e.waitMs : (1500L << Math.min(attempt, 4));
+        return Math.min(w, MAX_WAIT_MS) + (long) (Math.random() * 400);
+    }
+
+    private static boolean isRate(GitHubApi.ApiException e) {
+        return e.code == 429 || (e.code == 403 && e.waitMs > 0);
+    }
+
+    private static String covering(String p, List<String> sel) {
+        for (String s : sel) if (p.equals(s) || p.startsWith(s + "/")) return s;
+        return null;
+    }
+
+    private static File safeOut(File destDir, String root, String rel) throws IOException {
+        if (rel.isEmpty() || rel.contains("..")) return null;
+        File out = new File(destDir, rel);
+        return out.getCanonicalPath().startsWith(root) ? out : null;
+    }
+
+    /** One file: resumes a .part with Range, retries with capped back-off, checks the git blob sha. */
+    private static void fetchFile(final Transfers.Job job, GitHubApi api, String owner, String repo, String branch,
+                                  Item it, File out, Gate gate, AtomicBoolean direct, Meter meter) throws Exception {
+        File dir = out.getParentFile();
+        if (dir != null && !dir.exists()) dir.mkdirs();
+        File tmp = new File(out.getPath() + ".part");
+        int attempt = 0;
+        for (; ; ) {
+            job.check();
+            gate.await(job);
+            long from = tmp.isFile() ? tmp.length() : 0;
+            if (it.size > 0 && from >= it.size) {
+                tmp.delete();
+                from = 0;
+            }
+            long counted = 0;
+            HttpURLConnection c = null;
+            try {
+                GitHubApi.directDownload(direct.get());
+                GitHubApi.rangeFrom(from);
+                try {
+                    c = api.openDownload(api.contentRawPath(owner, repo, it.path, branch), "application/vnd.github.raw");
+                } finally {
+                    GitHubApi.rangeFrom(0);
+                    GitHubApi.directDownload(false);
+                }
+                boolean ranged = from > 0 && c.getResponseCode() == 206;
+                if (!ranged) from = 0;
+                meter.bytes.addAndGet(from);
+                counted = from;
+                try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(tmp, ranged)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        os.write(buf, 0, n);
+                        meter.bytes.addAndGet(n);
+                        counted += n;
+                        meter.report(it.path, false);
+                        job.check();
+                    }
+                }
+                moveInto(tmp, out);
+                if (!it.sha.isEmpty() && !it.sha.equals(gitSha(out))) {
+                    meter.bytes.addAndGet(-counted);
+                    counted = 0;
+                    out.delete();
+                    throw new IOException(job.app.getString(R.string.dl_checksum, it.path));
+                }
+                return;
+            } catch (Transfers.Cancelled e) {
+                meter.bytes.addAndGet(-counted);
+                throw e;
+            } catch (GitHubApi.ApiException e) {
+                meter.bytes.addAndGet(-counted);
+                if (isRate(e)) {
+                    if (e.waitMs > GIVE_UP_MS) {
+                        GitHubApi.ApiException give = new GitHubApi.ApiException(e.code,
+                                job.app.getString(R.string.dl_rate_limited, (int) (e.waitMs / 1000L)));
+                        give.waitMs = e.waitMs;
+                        throw give;
+                    }
+                    gate.hit(backoff(e, attempt));
+                } else if (e.code < 500) {
+                    tmp.delete();
+                    throw e;
+                } else {
+                    Thread.sleep(backoff(e, attempt));
+                }
+                if (++attempt >= MAX_ATTEMPTS) throw e;
+            } catch (IOException e) {
+                meter.bytes.addAndGet(-counted);
+                if (direct.get() && Mirror.active() && (e instanceof java.net.ConnectException
+                        || e instanceof java.net.UnknownHostException
+                        || e instanceof java.net.SocketTimeoutException)) {
+                    direct.set(false);
+                }
+                if (++attempt >= MAX_ATTEMPTS) throw e;
+                Thread.sleep(1500L << Math.min(attempt, 4));
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }
+    }
+
+    private static List<String> downloadParallel(final Transfers.Job job, final GitHubApi api, final String owner,
+                                                 final String repo, final String branch, List<Item> items,
+                                                 final File destDir, final String root, final Meter meter,
+                                                 final AtomicInteger skipped, final AtomicBoolean direct) throws Exception {
+        final Gate gate = new Gate();
+        final java.util.concurrent.ConcurrentLinkedQueue<String> failed = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        final AtomicReference<Exception> fatal = new AtomicReference<>();
+        int workers = Math.min(items.size(), items.size() >= 24 ? 6 : PARALLEL);
+        if (workers < 1) return new ArrayList<>();
+        ExecutorService ex = Executors.newFixedThreadPool(workers);
+        List<Future<Object>> fs = new ArrayList<>();
+        try {
+            for (final Item it : items) {
+                fs.add(ex.submit(() -> {
+                    if (fatal.get() != null) return null;
+                    try {
+                        File out = safeOut(destDir, root, it.rel);
+                        if (out == null) {
+                            failed.add(it.path);
+                            return null;
+                        }
+                        if (out.isFile() && !it.sha.isEmpty() && it.sha.equals(gitSha(out))) {
+                            meter.bytes.addAndGet(it.size);
+                            skipped.incrementAndGet();
+                        } else {
+                            fetchFile(job, api, owner, repo, branch, it, out, gate, direct, meter);
+                        }
+                        meter.files.incrementAndGet();
+                        meter.report(it.path, true);
+                    } catch (Transfers.Cancelled e) {
+                        fatal.compareAndSet(null, e);
+                    } catch (GitHubApi.ApiException e) {
+                        if (isRate(e)) {
+                            fatal.compareAndSet(null, e);
+                        } else {
+                            failed.add(it.path);
+                        }
+                    } catch (Exception e) {
+                        failed.add(it.path);
+                    }
+                    return null;
+                }));
+            }
+            for (Future<Object> f : fs) f.get();
+        } finally {
+            ex.shutdownNow();
+        }
+        Exception fe = fatal.get();
+        if (fe != null) throw fe;
+        return new ArrayList<>(failed);
+    }
+
+    /** One zipball stream; only the selected paths are written. Returns the paths that are now on disk. */
+    private static java.util.Set<String> downloadZip(final Transfers.Job job, GitHubApi api, String owner, String repo,
+                                                     String branch, List<String> sel, Map<String, Item> known,
+                                                     File destDir, String root, Meter meter, AtomicInteger skipped,
+                                                     AtomicBoolean direct) throws Exception {
+        final java.util.Set<String> done = new java.util.HashSet<>();
+        HttpURLConnection c;
+        try {
+            GitHubApi.directDownload(direct.get());
+            c = api.openZipball(owner, repo, branch);
+        } finally {
+            GitHubApi.directDownload(false);
+        }
+        try (ZipInputStream zin = new ZipInputStream(new java.io.BufferedInputStream(c.getInputStream(), 65536))) {
+            byte[] buf = new byte[65536];
+            ZipEntry e;
+            while ((e = zin.getNextEntry()) != null) {
+                job.check();
+                if (e.isDirectory()) continue;
+                String name = e.getName();
+                int slash = name.indexOf('/');
+                if (slash < 0) continue;
+                String p = name.substring(slash + 1);
+                String base = covering(p, sel);
+                if (base == null) continue;
+                File out = safeOut(destDir, root, p.substring(base.lastIndexOf('/') + 1));
+                if (out == null) continue;
+                Item it = known.get(p);
+                if (it != null && out.isFile() && !it.sha.isEmpty() && it.sha.equals(gitSha(out))) {
+                    meter.bytes.addAndGet(it.size);
+                    skipped.incrementAndGet();
+                    meter.files.incrementAndGet();
+                    done.add(p);
+                    meter.report(p, false);
+                    continue;
+                }
+                File dir = out.getParentFile();
+                if (dir != null && !dir.exists()) dir.mkdirs();
+                File tmp = new File(out.getPath() + ".part");
+                try (OutputStream os = new FileOutputStream(tmp)) {
+                    int n;
+                    while ((n = zin.read(buf)) != -1) {
+                        os.write(buf, 0, n);
+                        meter.bytes.addAndGet(n);
+                        meter.report(p, false);
+                        job.check();
+                    }
+                } catch (RuntimeException | IOException ex) {
+                    tmp.delete();
+                    throw ex;
+                }
+                moveInto(tmp, out);
+                meter.files.incrementAndGet();
+                done.add(p);
+                meter.report(p, true);
+            }
+        } finally {
+            c.disconnect();
+        }
+        return done;
+    }
+
     public static Transfers.Task downloadRepoPaths(final GitHubApi api, final String owner, final String repo,
                                                    final String branch, final List<String> paths,
                                                    final File destDir) {
         return job -> {
             job.progress(job.app.getString(R.string.tr_connecting), 0, 0);
-            List<GitHubApi.BlobInfo> all = api.listAllBlobs(owner, repo, branch);
-            final List<GitHubApi.BlobInfo> pick = new ArrayList<>();
-            final List<String> rels = new ArrayList<>();
-            for (GitHubApi.BlobInfo b : all) {
-                for (String p : paths) {
-                    if (b.path.equals(p) || b.path.startsWith(p + "/")) {
-                        int cut = p.lastIndexOf('/') + 1;
-                        pick.add(b);
-                        rels.add(b.path.substring(cut));
-                        break;
-                    }
+            final AtomicBoolean direct = new AtomicBoolean(Store.directDownloads(job.app));
+
+            // 1) what to download: from the cached tree (no extra requests); huge repos fall back to per-folder trees
+            RepoTree.Snapshot snap = RepoTree.cached(job.app, owner, repo, branch);
+            if (snap == null) snap = RepoTree.fetch(job.app, api, owner, repo, branch, null);
+            final List<Item> items = new ArrayList<>();
+            long repoBytes = 0;
+            if (snap.truncated) {
+                for (GitHubApi.BlobInfo b : api.listBlobsForPaths(owner, repo, branch, paths)) {
+                    String cov = covering(b.path, paths);
+                    if (cov == null) continue;
+                    items.add(new Item(b.path, b.path.substring(cov.lastIndexOf('/') + 1), b.size, b.sha));
+                }
+            } else {
+                for (int i = 0; i < snap.raw.length(); i++) {
+                    org.json.JSONArray e = snap.raw.getJSONArray(i);
+                    if (!"blob".equals(e.getString(1))) continue;
+                    String p = e.getString(0);
+                    long size = e.optLong(3, 0);
+                    repoBytes += size;
+                    String cov = covering(p, paths);
+                    if (cov == null) continue;
+                    items.add(new Item(p, p.substring(cov.lastIndexOf('/') + 1), size, e.optString(2, "")));
                 }
             }
-            if (pick.isEmpty()) {
+            if (items.isEmpty()) {
                 job.message = job.app.getString(R.string.no_files);
                 return;
             }
             long totalBytes = 0;
-            for (GitHubApi.BlobInfo b : pick) totalBytes += b.size;
+            for (Item it : items) totalBytes += it.size;
             if (!destDir.exists() && !destDir.mkdirs()) throw new IOException(destDir.getAbsolutePath());
             long free = destDir.getUsableSpace();
             if (free > 0 && free < totalBytes + 8L * 1024 * 1024) {
                 throw new NoSpace(job.app.getString(R.string.tr_no_space, Fmt.size(totalBytes)));
             }
-            String root = destDir.getCanonicalPath() + File.separator;
-            long doneBytes = 0;
-            int ok = 0;
-            int skipped = 0;
-            List<String> failed = new ArrayList<>();
-            for (int i = 0; i < pick.size(); i++) {
-                job.check();
-                final GitHubApi.BlobInfo b = pick.get(i);
-                File out = new File(destDir, rels.get(i));
-                if (!out.getCanonicalPath().startsWith(root)) {
-                    failed.add(b.path);
-                    continue;
-                }
-                if (out.isFile() && !b.sha.isEmpty() && b.sha.equals(gitSha(out))) {
-                    doneBytes += b.size;
-                    skipped++;
-                    job.progressBytes(b.path, doneBytes, totalBytes);
-                    continue;
-                }
-                File dir = out.getParentFile();
-                if (dir != null && !dir.exists())
-                    dir.mkdirs();
-                File tmp = new File(out.getPath() + ".part");
-                final long before = doneBytes;
-                final long all2 = totalBytes;
-                boolean got = false;
-                for (int attempt = 0; attempt < 3 && !got; attempt++) {
-                    job.check();
-                    try {
-                        HttpURLConnection c = api.openDownload(api.contentRawPath(owner, repo, b.path, branch),
-                                "application/vnd.github.raw");
-                        try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(tmp)) {
-                            GitHubApi.copy(in, os, b.size, (d, t) -> {
-                                job.progressBytes(b.path, before + d, all2);
-                                job.check();
-                            });
-                        } finally {
-                            c.disconnect();
-                        }
-                        moveInto(tmp, out);
-                        got = true;
-                    } catch (Transfers.Cancelled e) {
-                        tmp.delete();
-                        throw e;
-                    } catch (GitHubApi.ApiException e) {
-                        tmp.delete();
-                        if (e.code < 500 && e.code != 429 && e.code != 403) break;
-                        Thread.sleep(Math.max(1500L << attempt, Math.min(e.waitMs, 60000L)));
-                    } catch (IOException e) {
-                        tmp.delete();
-                        Thread.sleep(1500L << attempt);
+            final String root = destDir.getCanonicalPath() + File.separator;
+            final Meter meter = new Meter(job, totalBytes, items.size());
+            final AtomicInteger skipped = new AtomicInteger();
+            meter.report("", true);
+
+            // 2) one zipball stream for folders / big selections, parallel workers for a few single files
+            boolean useZip = items.size() > 1 && (items.size() >= 60
+                    || (repoBytes > 0 && totalBytes * 4 >= repoBytes));
+            List<Item> todo = items;
+            if (useZip) {
+                Map<String, Item> known = new HashMap<>();
+                for (Item it : items) known.put(it.path, it);
+                java.util.Set<String> got = null;
+                try {
+                    got = downloadZip(job, api, owner, repo, branch, paths, known, destDir, root, meter, skipped, direct);
+                } catch (Transfers.Cancelled e) {
+                    throw e;
+                } catch (Exception e) {
+                    // the stream broke or the zipball is not reachable: finish the rest file by file
+                    got = new java.util.HashSet<>();
+                    for (Item it : items) {
+                        File o = safeOut(destDir, root, it.rel);
+                        if (o != null && o.isFile() && !it.sha.isEmpty() && it.sha.equals(gitSha(o))) got.add(it.path);
                     }
+                    meter.files.set(got.size());
                 }
-                if (got) ok++;
-                else failed.add(b.path);
-                doneBytes += b.size;
-                job.progressBytes(b.path, doneBytes, totalBytes);
+                todo = new ArrayList<>();
+                for (Item it : items) if (!got.contains(it.path)) todo.add(it);
             }
+            List<String> failed = downloadParallel(job, api, owner, repo, branch, todo, destDir, root, meter,
+                    skipped, direct);
+
             if (!failed.isEmpty()) {
                 StringBuilder sb = new StringBuilder(job.app.getString(R.string.tr_partial_failed, failed.size()));
                 for (int i = 0; i < Math.min(5, failed.size()); i++) sb.append('\n').append(failed.get(i));
                 throw new IOException(sb.toString());
             }
+            int total = meter.files.get();
             job.message = job.app.getString(R.string.tr_saved_to, destDir.getAbsolutePath())
-                    + "\n" + job.app.getString(R.string.tr_files_skipped_n, ok, skipped);
+                    + "\n" + job.app.getString(R.string.tr_files_skipped_n, total - skipped.get(), skipped.get());
             job.openIntent = new Intent(job.app, FileManagerActivity.class).putExtra("path", destDir.getAbsolutePath());
         };
     }

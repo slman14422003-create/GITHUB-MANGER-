@@ -6,5 +6,5 @@
     android:gravity="center_vertical"
     android:singleLine="true"
     android:textAlignment="viewStart"
-    android:textColor="@color/text_primary"
+    android:textColor="?attr/cTextPrimary"
     android:textSize="15sp" />

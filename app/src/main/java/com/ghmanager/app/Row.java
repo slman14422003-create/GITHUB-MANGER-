@@ -12,6 +12,8 @@ public class Row {
     public int badgeColor;
     /** Optional icon color (0 = default). */
     public int iconColor;
+    /** Optional colour of a small dot shown in front of the sub line (0 = none). */
+    public int dot;
     /** True on screens in select mode: the row shows a tick circle in front of its icon. */
     public boolean selectable;
     public boolean checked;

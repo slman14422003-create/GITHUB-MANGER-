@@ -13,9 +13,9 @@ public class PermissionsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Themes.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_detail);
-        if (BottomNav.fromTab(this)) BottomNav.attach(this, BottomNav.PERMS);
         ((android.widget.TextView) findViewById(R.id.title)).setText(R.string.perm_title);
         ((android.widget.TextView) findViewById(R.id.subtitle)).setText(R.string.perm_subtitle);
         findViewById(R.id.btnBack).setOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());

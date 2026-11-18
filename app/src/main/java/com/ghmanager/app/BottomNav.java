@@ -16,7 +16,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 /**
- * Bottom navigation shared by the four main screens (repositories, files, permissions, settings), so
+ * Bottom navigation shared by the three main screens (repositories, files, settings), so
  * every area of the app is one tap away from anywhere and the current place is always visible.
  * attach() wraps whatever the activity already shows; nothing in the screen's own layout changes.
  */
@@ -26,13 +26,12 @@ public final class BottomNav {
 
     public static final int REPOS = 0;
     public static final int FILES = 1;
-    public static final int PERMS = 2;
-    public static final int SETTINGS = 3;
+    public static final int SETTINGS = 2;
 
-    private static final int[] LABELS = {R.string.repos, R.string.fm_title, R.string.perm_title, R.string.set_title};
-    private static final int[] ICONS = {R.drawable.ic_repo, R.drawable.ic_folder, R.drawable.ic_shield, R.drawable.ic_settings};
+    private static final int[] LABELS = {R.string.repos, R.string.fm_title, R.string.set_title};
+    private static final int[] ICONS = {R.drawable.ic_repo, R.drawable.ic_folder, R.drawable.ic_settings};
     private static final Class<?>[] SCREENS = {ReposActivity.class, FileManagerActivity.class,
-            PermissionsActivity.class, SettingsActivity.class};
+            SettingsActivity.class};
 
     /** Puts the bar under the activity's content. Call right after setContentView. */
     public static void attach(final Activity a, final int selected) {

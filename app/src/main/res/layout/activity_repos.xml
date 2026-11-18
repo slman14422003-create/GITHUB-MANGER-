@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/cBg"
     android:orientation="vertical">
 
     <LinearLayout
@@ -40,14 +40,14 @@
                 android:fontFamily="serif"
                 android:maxLines="1"
                 android:text="@string/repos"
-                android:textColor="@color/text_primary"
-                android:textSize="24sp" />
+                android:textColor="?attr/cTextPrimary"
+                android:textSize="22sp" />
 
             <TextView
                 android:id="@+id/count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -55,7 +55,7 @@
             android:id="@+id/btnStatus"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/bg_icon_btn"
             android:clickable="true"
             android:contentDescription="@string/gs_title"
@@ -67,7 +67,7 @@
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_status"
-                android:tint="@color/text_primary" />
+                android:tint="?attr/cTextPrimary" />
 
             <View
                 android:id="@+id/statusDot"
@@ -79,9 +79,16 @@
         </FrameLayout>
 
         <ImageButton
+            android:id="@+id/btnCleanup"
+            style="@style/IconButton"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="@string/rs_cleanup"
+            android:src="@drawable/ic_trash_sweep" />
+
+        <ImageButton
             android:id="@+id/btnNew"
             style="@style/IconButton"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="4dp"
             android:contentDescription="@string/new_repo"
             android:src="@drawable/ic_add" />
 
@@ -114,7 +121,7 @@
         android:background="@drawable/bg_input"
         android:drawableStart="@drawable/ic_search"
         android:drawablePadding="12dp"
-        android:drawableTint="@color/text_hint"
+        android:drawableTint="?attr/cTextHint"
         android:hint="@string/search_repos"
         android:importantForAutofill="no"
         android:imeOptions="actionSearch"
@@ -124,8 +131,8 @@
         android:paddingTop="14dp"
         android:paddingEnd="18dp"
         android:paddingBottom="14dp"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
+        android:textColor="?attr/cTextPrimary"
+        android:textColorHint="?attr/cTextHint"
         android:textSize="15sp" />
 
     <HorizontalScrollView
@@ -152,7 +159,8 @@
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipe"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <ListView
             android:id="@+id/list"

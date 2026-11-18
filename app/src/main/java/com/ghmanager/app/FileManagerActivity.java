@@ -236,6 +236,7 @@ public class FileManagerActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Themes.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_files);
         if (BottomNav.fromTab(this)) BottomNav.attach(this, BottomNav.FILES);
@@ -2236,7 +2237,7 @@ public class FileManagerActivity extends AppCompatActivity {
         target.setTextDirection(View.TEXT_DIRECTION_LTR);
         final EditText msg = Ui.edit(this, getString(R.string.default_commit), getString(R.string.default_commit));
         final CheckBox includeRoot = Ui.check(this, R.string.include_root_folder, true);
-        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, true);
+        final CheckBox skipJunk = Ui.check(this, R.string.upload_skip_junk, false);
         box.addView(Ui.field(this, getString(R.string.branch_label), branch));
         box.addView(Ui.field(this, getString(R.string.target_folder), target));
         box.addView(Ui.field(this, getString(R.string.commit_message), msg));

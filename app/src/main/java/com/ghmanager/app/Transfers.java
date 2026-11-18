@@ -59,6 +59,7 @@ public final class Transfers {
         volatile long total;
         volatile boolean cancelled;
         volatile boolean paused;
+        volatile boolean waitingWifi;
         Task task;
         Done doneCb;
         /** done/total are byte counts (otherwise item counts). */
@@ -87,6 +88,16 @@ public final class Transfers {
         /** Progress counted in items (files uploaded ...). */
         public void progress(String t, long d, long tot) {
             update(t, d, tot, false);
+        }
+
+        volatile int filesDone;
+        volatile int filesTotal;
+
+        /** Bytes for speed / time left, plus a file counter (37/120) shown in the detail line. */
+        public void progressFiles(String t, int fd, int ft, long bd, long bt) {
+            filesDone = fd;
+            filesTotal = ft;
+            update(t, bd, bt, true);
         }
 
         /** Progress counted in bytes: also feeds the speed and the time left. */
@@ -162,9 +173,11 @@ public final class Transfers {
             long t = total;
             StringBuilder sb = new StringBuilder();
             if (paused) sb.append(app.getString(R.string.tr_paused)).append("  ·  ");
+            else if (waitingWifi) sb.append(app.getString(R.string.tr_wait_wifi)).append("  ·  ");
             if (t > 0) sb.append(Math.min(100, d * 100 / t)).append('%');
             if (bytes) {
                 if (sb.length() > 0) sb.append("  ·  ");
+                if (filesTotal > 0) sb.append(filesDone).append('/').append(filesTotal).append("  ·  ");
                 sb.append(Fmt.size(d));
                 if (t > 0) sb.append(" / ").append(Fmt.size(t));
                 float sp = speed;
@@ -187,7 +200,34 @@ public final class Transfers {
 
         public void check() {
             if (cancelled) throw new Cancelled();
+            if (Store.wifiOnly(app) && onMetered(app)) waitForWifi();
             if (paused) waitWhilePaused();
+        }
+
+        private void waitForWifi() {
+            try {
+                while (onMetered(app) && !cancelled) {
+                    waitingWifi = true;
+                    Thread.sleep(1500);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                waitingWifi = false;
+            }
+            sampleT = 0;
+            speed = 0f;
+            if (cancelled) throw new Cancelled();
+        }
+    }
+
+    private static boolean onMetered(Context c) {
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager)
+                    c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            return cm != null && cm.isActiveNetworkMetered();
+        } catch (Exception e) {
+            return false;
         }
     }
 

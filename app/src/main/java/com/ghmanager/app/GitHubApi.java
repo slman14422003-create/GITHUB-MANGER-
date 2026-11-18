@@ -180,6 +180,14 @@ public class GitHubApi {
         }
     }
 
+    private static final ThreadLocal<Boolean> DIRECT = new ThreadLocal<>();
+
+    /** For the calling thread only: the next downloads skip the Mirror proxy and talk to GitHub directly. */
+    public static void directDownload(boolean on) {
+        if (on) DIRECT.set(Boolean.TRUE);
+        else DIRECT.remove();
+    }
+
     private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
         // never talk plain HTTP (a redirect to http:// must not downgrade a download)
         if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
@@ -191,7 +199,7 @@ public class GitHubApi {
                 throw new IOException("Blocked host");
             }
         }
-        final String real = Mirror.map(url);
+        final String real = Boolean.TRUE.equals(DIRECT.get()) ? url : Mirror.map(url);
         HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
         c.setRequestMethod(method);
         c.setConnectTimeout(20000);
@@ -461,8 +469,11 @@ public class GitHubApi {
         if (code >= 400) {
             InputStream es = c.getErrorStream();
             String resp = es == null ? "" : readAll(es);
+            long wait = code == 403 || code == 429 ? rateWait(c) : 0;
             c.disconnect();
-            throw toException(code, resp);
+            ApiException ex = toException(code, resp);
+            ex.waitMs = wait;
+            throw ex;
         }
         return c;
     }
@@ -1031,6 +1042,41 @@ public class GitHubApi {
             }
         }
         return out;
+    }
+
+    /**
+     * Blobs under the given paths, found with one non-recursive tree request per folder. Used when the
+     * recursive tree of a huge repository comes back truncated.
+     */
+    public List<BlobInfo> listBlobsForPaths(String o, String r, String branch, List<String> sel) throws Exception {
+        String root = getCommitTree(o, r, getBranchSha(o, r, branch));
+        List<BlobInfo> out = new ArrayList<>();
+        walkTree(o, r, root, "", sel, out, 0);
+        return out;
+    }
+
+    private void walkTree(String o, String r, String treeSha, String prefix, List<String> sel,
+                          List<BlobInfo> out, int depth) throws Exception {
+        if (depth > 40) return;
+        JSONArray arr = new JSONObject(request("GET", repo(o, r) + "/git/trees/" + treeSha, null))
+                .getJSONArray("tree");
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject e = arr.getJSONObject(i);
+            String name = e.getString("path");
+            String path = prefix.isEmpty() ? name : prefix + "/" + name;
+            boolean covered = false;
+            boolean onTheWay = false;
+            for (String s : sel) {
+                if (path.equals(s) || path.startsWith(s + "/")) covered = true;
+                else if (s.startsWith(path + "/")) onTheWay = true;
+            }
+            String type = e.optString("type");
+            if ("blob".equals(type) && covered) {
+                out.add(new BlobInfo(path, e.optLong("size", 0), e.optString("sha", "")));
+            } else if ("tree".equals(type) && (covered || onTheWay)) {
+                walkTree(o, r, e.getString("sha"), path, sel, out, depth + 1);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ commits

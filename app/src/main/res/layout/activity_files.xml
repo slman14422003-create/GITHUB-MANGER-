@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/cBg"
     android:orientation="vertical">
 
     <include layout="@layout/view_header" />
@@ -40,7 +40,7 @@
             android:layout_marginStart="6dp"
             android:layout_weight="1"
             android:singleLine="true"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="15sp" />
 
         <ImageButton
@@ -107,7 +107,7 @@
         android:background="@drawable/bg_input"
         android:drawableStart="@drawable/ic_search"
         android:drawablePadding="12dp"
-        android:drawableTint="@color/text_hint"
+        android:drawableTint="?attr/cTextHint"
         android:hint="@string/fm_search_hint"
         android:importantForAutofill="no"
         android:inputType="text"
@@ -116,8 +116,8 @@
         android:paddingTop="12dp"
         android:paddingEnd="18dp"
         android:paddingBottom="12dp"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
+        android:textColor="?attr/cTextPrimary"
+        android:textColorHint="?attr/cTextHint"
         android:textSize="15sp" />
 
     <!-- quick places -->
@@ -171,7 +171,7 @@
             android:paddingStart="26dp"
             android:paddingTop="8dp"
             android:paddingEnd="26dp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="12sp" />
 
         <FrameLayout
@@ -197,7 +197,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/fm_perm_title"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -207,7 +207,7 @@
             android:layout_marginTop="4dp"
             android:lineSpacingMultiplier="1.15"
             android:text="@string/fm_perm_body"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="13sp" />
 
         <Button
@@ -242,7 +242,7 @@
             android:layout_height="22dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_clipboard"
-            android:tint="@color/accent_text" />
+            android:tint="?attr/cAccentText" />
 
         <TextView
             android:id="@+id/pasteText"
@@ -251,7 +251,7 @@
             android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:singleLine="true"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="14sp" />
 
         <Button
@@ -295,7 +295,7 @@
             android:layout_height="22dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_delete"
-            android:tint="@color/accent_text" />
+            android:tint="?attr/cAccentText" />
 
         <TextView
             android:id="@+id/undoText"
@@ -304,7 +304,7 @@
             android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:singleLine="true"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="14sp" />
 
         <Button
@@ -327,7 +327,7 @@
         android:paddingTop="8dp"
         android:paddingEnd="26dp"
         android:paddingBottom="4dp"
-        android:textColor="@color/text_secondary"
+        android:textColor="?attr/cTextSecondary"
         android:textSize="13sp"
         android:visibility="gone" />
 
@@ -357,7 +357,7 @@
             android:layout_gravity="center"
             android:gravity="center"
             android:padding="32dp"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/cTextHint"
             android:textSize="15sp"
             android:visibility="gone" />
     </FrameLayout>
@@ -385,7 +385,7 @@
             android:layout_height="22dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_upload"
-            android:tint="@color/accent_text" />
+            android:tint="?attr/cAccentText" />
 
         <TextView
             android:id="@+id/pickText"
@@ -395,7 +395,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="2"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="14sp" />
 
         <ImageButton

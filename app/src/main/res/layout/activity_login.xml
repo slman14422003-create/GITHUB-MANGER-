@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg"
+    android:background="?attr/cBg"
     android:fillViewport="true">
 
     <LinearLayout
@@ -37,7 +37,7 @@
             android:layout_marginTop="18dp"
             android:fontFamily="serif"
             android:text="@string/app_name"
-            android:textColor="@color/text_primary"
+            android:textColor="?attr/cTextPrimary"
             android:textSize="32sp" />
 
         <TextView
@@ -47,7 +47,7 @@
             android:gravity="center"
             android:lineSpacingMultiplier="1.15"
             android:text="@string/login_subtitle"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/cTextSecondary"
             android:textSize="15sp" />
 
         <!-- sign in with GitHub (device flow: Google, e-mail, password, passkey on GitHub's own page) -->
@@ -74,7 +74,7 @@
                 android:lineSpacingMultiplier="1.2"
                 android:text="@string/login_gh_hint"
                 android:textAlignment="viewStart"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="13sp" />
 
             <LinearLayout
@@ -93,7 +93,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="center"
                     android:text="@string/login_code_title"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/cTextSecondary"
                     android:textSize="13sp" />
 
                 <TextView
@@ -103,7 +103,7 @@
                     android:layout_marginTop="10dp"
                     android:fontFamily="monospace"
                     android:letterSpacing="0.12"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/cTextPrimary"
                     android:textDirection="ltr"
                     android:textIsSelectable="true"
                     android:textSize="32sp"
@@ -154,7 +154,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
                         android:text="@string/login_wait"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/cTextSecondary"
                         android:textSize="13sp" />
                 </LinearLayout>
 
@@ -165,7 +165,7 @@
                     android:layout_marginTop="10dp"
                     android:padding="8dp"
                     android:text="@string/login_cancel_flow"
-                    android:textColor="@color/accent_text"
+                    android:textColor="?attr/cAccentText"
                     android:textSize="14sp" />
             </LinearLayout>
         </LinearLayout>
@@ -176,7 +176,7 @@
             android:layout_marginTop="14dp"
             android:layout_marginBottom="14dp"
             android:text="@string/login_or"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/cTextHint"
             android:textSize="13sp" />
 
         <!-- personal access token -->
@@ -191,7 +191,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/login_token_title"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="13sp" />
 
             <EditText
@@ -205,8 +205,8 @@
                 android:inputType="textPassword"
                 android:padding="14dp"
                 android:textAlignment="viewStart"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_hint"
+                android:textColor="?attr/cTextPrimary"
+                android:textColorHint="?attr/cTextHint"
                 android:textDirection="ltr"
                 android:textSize="15sp" />
 
@@ -225,7 +225,7 @@
                 android:lineSpacingMultiplier="1.2"
                 android:text="@string/token_help"
                 android:textAlignment="viewStart"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/cTextSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -242,7 +242,7 @@
                 android:layout_height="wrap_content"
                 android:padding="12dp"
                 android:text="@string/mir_settings_link"
-                android:textColor="@color/accent_text"
+                android:textColor="?attr/cAccentText"
                 android:textSize="14sp" />
 
             <TextView
@@ -251,7 +251,7 @@
                 android:layout_height="wrap_content"
                 android:padding="12dp"
                 android:text="@string/login_client_set"
-                android:textColor="@color/accent_text"
+                android:textColor="?attr/cAccentText"
                 android:textSize="14sp" />
         </LinearLayout>
     </LinearLayout>
