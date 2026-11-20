@@ -1,0 +1,438 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+    paths-ignore: ['**/*.md']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'نوع البناء'
+        type: choice
+        options: [release, debug]
+        default: release
+      version:
+        description: 'رقم الإصدار / الوسم (مثال v2.3) — اتركه فارغًا للترقيم التلقائي'
+        type: string
+        default: ''
+      publish_release:
+        description: 'انشر الناتج كإصدار (Release) على GitHub'
+        type: boolean
+        default: true
+      prerelease:
+        description: 'علّم الإصدار كنسخة تجريبية (Pre-release)'
+        type: boolean
+        default: false
+      seal_apk:
+        description: 'اختم الـ APK ضد التعديل (يفشل التطبيق إن عُدّل أي ملف بعد البناء)'
+        type: boolean
+        default: true
+
+# Least privilege: the build job only reads the repo, the release job gets write access itself
+permissions:
+  contents: read
+
+# A newer push cancels an older run of the same branch, but tag / manual release runs are never cancelled
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
+
+env:
+  BUILD_TYPE: ${{ inputs.build_type || 'release' }}
+
+jobs:
+  build:
+    name: Build ${{ inputs.build_type || 'release' }} APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version_name: ${{ steps.meta.outputs.version_name }}
+      publish: ${{ steps.meta.outputs.publish }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      version_code: ${{ steps.meta.outputs.version_code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # Looks for mistakes (broken XML, missing resources / activities, unbalanced code, leaked secrets),
+      # repairs the safe ones in this build's workspace, and FAILS the run on anything it cannot repair.
+      - name: Project doctor (find errors, repair what is safe, fail otherwise)
+        run: |
+          set -o pipefail
+          python3 tools/doctor.py --fix --report "$RUNNER_TEMP/doctor-report.md" . 2>&1 | tee "$RUNNER_TEMP/doctor.log"
+
+      - name: Doctor report and patch
+        if: always()
+        run: |
+          [ -f "$RUNNER_TEMP/doctor-report.md" ] && cat "$RUNNER_TEMP/doctor-report.md" >> "$GITHUB_STEP_SUMMARY" || true
+          git add -N . 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/doctor-out"
+          git diff --binary > "$RUNNER_TEMP/doctor-out/autofix.patch" || true
+          [ -s "$RUNNER_TEMP/doctor-out/autofix.patch" ] || rm -f "$RUNNER_TEMP/doctor-out/autofix.patch"
+          [ -f "$RUNNER_TEMP/doctor-report.md" ] && cp "$RUNNER_TEMP/doctor-report.md" "$RUNNER_TEMP/doctor-out/" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: doctor
+          path: ${{ runner.temp }}/doctor-out
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Decide the version and whether to publish a Release. Every successful release build
+      # on main / a tag / a manual run is published, so the release step is no longer skipped.
+      - name: Resolve version and release plan
+        id: meta
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_PUBLISH: ${{ inputs.publish_release }}
+          IN_PRE: ${{ inputs.prerelease }}
+          IN_SEAL: ${{ inputs.seal_apk }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          BASE="$(grep -oP 'versionName\s*=\s*System\.getenv\([^)]*\)\s*\?:\s*"\K[^"]+' app/build.gradle | head -n1)"
+          [ -z "$BASE" ] && BASE="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle | head -n1)"
+          [ -z "$BASE" ] && BASE="1.0"
+          VERSION_CODE=$((10 + GITHUB_RUN_NUMBER))
+          PUBLISH=false
+          PRE=false
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            PUBLISH=true
+          elif [ -n "$IN_VERSION" ]; then
+            TAG="$IN_VERSION"
+            [[ "$TAG" != v* ]] && TAG="v$TAG"
+          else
+            TAG="v${BASE}.${GITHUB_RUN_NUMBER}"
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            PUBLISH="${IN_PUBLISH:-true}"
+            PRE="${IN_PRE:-false}"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            PUBLISH=true
+            # put [skip release] in a commit message to build without publishing a Release
+            case "$COMMIT_MSG" in *"[skip release]"*|*"[no release]"*) PUBLISH=false ;; esac
+          fi
+          if [ "$BUILD_TYPE" != "release" ] || [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            PUBLISH=false
+          fi
+          # sealing is on unless a manual run turns it off (an unset input is empty on push events)
+          SEAL=true
+          [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && SEAL="${IN_SEAL:-true}"
+          echo "SEAL_APK=$SEAL" >> "$GITHUB_ENV"
+          VERSION_NAME="${TAG#v}"
+          {
+            echo "tag=$TAG"
+            echo "version_name=$VERSION_NAME"
+            echo "version_code=$VERSION_CODE"
+            echo "publish=$PUBLISH"
+            echo "prerelease=$PRE"
+          } >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "Version: $TAG (code $VERSION_CODE) — publish release: $PUBLISH"
+
+      - name: Read the pinned toolchain versions
+        id: tc
+        run: |
+          G="$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' gradle/wrapper/gradle-wrapper.properties | head -n1)"
+          B="$(grep -oP '^buildTools=\K[0-9.]+' gradle/toolchain.properties | head -n1)"
+          [ -z "$G" ] && { echo "::error::Gradle version not found"; exit 1; }
+          [ -z "$B" ] && B="37.0.0"
+          echo "gradle=$G" >> "$GITHUB_OUTPUT"
+          echo "build_tools=$B" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK (API 37 / Android 17)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;${{ steps.tc.outputs.build_tools }}'
+
+      - name: Install the Android 17 platform
+        run: |
+          set -euo pipefail
+          PKG="$(sdkmanager --list 2>/dev/null | grep -oE 'platforms;android-37(\.[0-9]+)?' | sort -uV | head -n1 || true)"
+          [ -z "$PKG" ] && PKG='platforms;android-37'
+          echo "Installing $PKG"
+          sdkmanager --install "$PKG" >/dev/null
+          ls "$ANDROID_HOME/platforms"
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: ${{ steps.tc.outputs.gradle }}
+          cache-cleanup: on-success
+
+      - name: Environment details
+        run: |
+          echo "::group::Runner"
+          echo "Image: ${ImageOS:-unknown} ${ImageVersion:-}"
+          echo "CPU cores: $(nproc)"
+          free -h | head -n 2
+          df -h "$GITHUB_WORKSPACE" | tail -n 1
+          echo "::endgroup::"
+          echo "::group::Java and Gradle"
+          java -version 2>&1
+          echo "Gradle (wrapper pin): ${{ steps.tc.outputs.gradle }}"
+          echo "Build-tools: ${{ steps.tc.outputs.build_tools }}"
+          echo "::endgroup::"
+          echo "::group::Android SDK"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+          echo "::endgroup::"
+          echo "::group::Project"
+          echo "Java files: $(find app/src/main/java -name '*.java' | wc -l)"
+          echo "Resource files: $(find app/src/main/res -type f | wc -l)"
+          echo "Commit: ${GITHUB_SHA:0:7} on ${GITHUB_REF_NAME} (${GITHUB_EVENT_NAME}), run #${GITHUB_RUN_NUMBER}"
+          echo "::endgroup::"
+
+      - name: Prepare release signing
+        id: sign
+        if: env.BUILD_TYPE == 'release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ADI_SNIPPET: ${{ secrets.ADI_REGISTRATION_SNIPPET }}
+        run: |
+          # A release must always be signed with the SAME permanent key. A random temporary key gives a
+          # different certificate fingerprint every build, so it can never be registered with Google
+          # and the app can never update itself. Stop here instead of silently producing such a build.
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error title=مفتاح التوقيع غير مضبوط::أضف الأسرار KEYSTORE_BASE64 و KEYSTORE_PASSWORD و KEY_ALIAS (و KEY_PASSWORD إن وُجدت). شغّل سير العمل Generate signing key مرة واحدة أو راجع SIGNING.md."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "::add-mask::$KEYSTORE_PASSWORD"
+          [ -n "$KEY_PASSWORD" ] && echo "::add-mask::$KEY_PASSWORD"
+          {
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "SIGNING_KEY_ALIAS=$KEY_ALIAS"
+            echo "SIGNING_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+          # SHA-256 of the signing certificate (this is what Google asks for, not the hash of the APK file)
+          CERT="$(keytool -list -v -keystore "$RUNNER_TEMP/release.jks" -alias "$KEY_ALIAS" \
+                    -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256:[[:space:]]*//')"
+          if [ -z "$CERT" ]; then
+            echo "::error title=تعذّر قراءة المفتاح::تأكد من كلمة مرور الملف واسم المفتاح (Alias)."
+            exit 1
+          fi
+          echo "EXPECTED_CERT_SHA256=${CERT//:/}" >> "$GITHUB_ENV"
+          echo "SIGNING_MODE=مفتاح المستودع الدائم" >> "$GITHUB_ENV"
+          echo "signing_mode=repo-key" >> "$GITHUB_OUTPUT"
+
+          # Optional proof-of-ownership snippet from Play Console (developer verification)
+          if [ -n "$ADI_SNIPPET" ]; then
+            mkdir -p app/src/main/assets
+            printf '%s\n' "$ADI_SNIPPET" > app/src/main/assets/adi-registration.properties
+            echo "تمت إضافة adi-registration.properties إلى الـ APK"
+          fi
+
+      # Builds, and when the build fails tries to repair the cause (R8 missing classes, missing resources,
+      # duplicate files, lint, memory, SDK licences, damaged caches, flaky network) and builds again.
+      # Up to 4 attempts. If the failure is not one it knows how to repair, or the same failure comes back
+      # after its repair, the build FAILS with the original error.
+      - name: Build APK (auto-repair known build errors, then retry)
+        env:
+          VERSION_CODE_OVERRIDE: ${{ steps.meta.outputs.version_code }}
+          GH_OAUTH_CLIENT_ID: ${{ vars.GH_OAUTH_CLIENT_ID || secrets.GH_OAUTH_CLIENT_ID }}
+          GUARD_SEAL: ${{ (env.BUILD_TYPE == 'release' && env.SEAL_APK == 'true') && '1' || '0' }}
+        run: |
+          set +e
+          : > "$RUNNER_TEMP/build.log"
+          : > "$RUNNER_TEMP/autofix-build.md"
+          rm -f "$RUNNER_TEMP/autofix-state.json"
+          if [ "$BUILD_TYPE" = "release" ]; then TASK=assembleRelease; else TASK=assembleDebug; fi
+          FLAGS=()
+          rc=1
+          for attempt in 1 2 3 4; do
+            echo "::group::Build attempt $attempt"
+            gradle "$TASK" "${FLAGS[@]}" --console=plain --stacktrace --warning-mode all 2>&1 | tee "$RUNNER_TEMP/attempt.log" | awk -f tools/ci_live.awk
+            rc=${PIPESTATUS[0]}
+            cat "$RUNNER_TEMP/attempt.log" >> "$RUNNER_TEMP/build.log"
+            echo "::endgroup::"
+            [ "$rc" -eq 0 ] && break
+            [ "$attempt" -ge 4 ] && break
+            python3 tools/autofix_build.py "$RUNNER_TEMP/attempt.log" \
+              --state "$RUNNER_TEMP/autofix-state.json" --flags-out "$RUNNER_TEMP/gradle.flags" \
+              --report "$RUNNER_TEMP/autofix-build.md" .
+            [ $? -ne 0 ] && break
+            mapfile -t FLAGS < "$RUNNER_TEMP/gradle.flags"
+            echo "::notice title=Build auto-fix::attempt $attempt failed, repaired and retrying"
+          done
+          exit "$rc"
+
+      - name: Auto-fix report and patch
+        if: always()
+        run: |
+          if [ -s "$RUNNER_TEMP/autofix-build.md" ]; then
+            cat "$RUNNER_TEMP/autofix-build.md" >> "$GITHUB_STEP_SUMMARY"
+            echo "_تم تطبيق هذه الإصلاحات داخل نسخة البناء فقط. نزّل artifact باسم autofix وطبّق الـ patch على مستودعك لتثبيتها._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          git add -N . 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/autofix-out"
+          git diff --binary > "$RUNNER_TEMP/autofix-out/autofix.patch" || true
+          [ -s "$RUNNER_TEMP/autofix-out/autofix.patch" ] || rm -f "$RUNNER_TEMP/autofix-out/autofix.patch"
+          [ -s "$RUNNER_TEMP/autofix-build.md" ] && cp "$RUNNER_TEMP/autofix-build.md" "$RUNNER_TEMP/autofix-out/" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autofix
+          path: ${{ runner.temp }}/autofix-out
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Tamper protection: records a signed fingerprint of the code and resources inside the APK, signs the
+      # APK again, and checks the result the same way the app will check it. Any mismatch fails the build
+      # here, so a sealed APK that would refuse to start is never published.
+      - name: Seal APK against modification
+        if: env.BUILD_TYPE == 'release' && env.SEAL_APK == 'true'
+        run: |
+          set -euo pipefail
+          APK_SRC="$(ls app/build/outputs/apk/release/*.apk | head -n1)"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
+          python3 tools/seal_apk.py seal "$APK_SRC" "$RUNNER_TEMP/sealed.apk" "$EXPECTED_CERT_SHA256"
+          "$BT/zipalign" -f -p 4 "$RUNNER_TEMP/sealed.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$SIGNING_STORE_FILE" --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass env:SIGNING_STORE_PASSWORD --key-pass env:SIGNING_KEY_PASSWORD \
+            --out "$RUNNER_TEMP/final.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/zipalign" -c -p 4 "$RUNNER_TEMP/final.apk"
+          "$BT/apksigner" verify --print-certs "$RUNNER_TEMP/final.apk" | tee "$RUNNER_TEMP/seal-verify.txt"
+          CERT_HEX="$(grep -m1 'certificate SHA-256 digest' "$RUNNER_TEMP/seal-verify.txt" | awk '{print $NF}')"
+          if [ "${CERT_HEX,,}" != "${EXPECTED_CERT_SHA256,,}" ]; then
+            echo "::error::بصمة الشهادة بعد الختم لا تطابق المفتاح المضبوط"; exit 1
+          fi
+          python3 tools/seal_apk.py verify "$RUNNER_TEMP/final.apk" "$EXPECTED_CERT_SHA256"
+          cp "$RUNNER_TEMP/final.apk" "$APK_SRC"
+          echo "SEALED=ختم ضد التعديل" >> "$GITHUB_ENV"
+
+      - name: Verify and summarize
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          APK_SRC="$(ls app/build/outputs/apk/${BUILD_TYPE}/*.apk | head -n1)"
+          mkdir -p dist
+          APK="dist/GitHubManager-${TAG}-${BUILD_TYPE}.apk"
+          cp "$APK_SRC" "$APK"
+          APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/verify.txt"
+          CERT_HEX="$(grep -m1 'certificate SHA-256 digest' "$RUNNER_TEMP/verify.txt" | awk '{print $NF}')"
+          if [ "$BUILD_TYPE" = "release" ]; then
+            if [ -z "$CERT_HEX" ]; then echo "::error::لم يُوقَّع الـ APK"; exit 1; fi
+            if [ -n "$EXPECTED_CERT_SHA256" ] && [ "${CERT_HEX,,}" != "${EXPECTED_CERT_SHA256,,}" ]; then
+              echo "::error::بصمة شهادة الـ APK لا تطابق بصمة المفتاح المضبوط"; exit 1
+            fi
+          fi
+          CERT_COLON="$(echo "$CERT_HEX" | tr a-f A-F | sed 's/../&:/g; s/:$//')"
+          {
+            echo "## ✅ GitHub Manager — $BUILD_TYPE"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| الإصدار | \`$TAG\` |"
+            echo "| الملف | \`$(basename "$APK")\` |"
+            echo "| الحجم | $(du -h "$APK" | cut -f1) |"
+            echo "| SHA-256 لملف الـ APK | \`$(sha256sum "$APK" | cut -d' ' -f1)\` |"
+            [ "$BUILD_TYPE" = "release" ] && echo "| **SHA-256 لشهادة التوقيع** (سجّلها في Play Console) | \`$CERT_COLON\` |" || true
+            echo "| التوقيع | ${SIGNING_MODE:-debug} |"
+            echo "| الحماية من التعديل | ${SEALED:-غير مختوم} |"
+            echo "| Android | compileSdk 37 / targetSdk 37 |"
+            echo ""
+            echo '```'
+            grep -E "Verified|certificate" "$RUNNER_TEMP/verify.txt" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "- **التوقيع:** ${SIGNING_MODE:-debug}"
+            echo "- **SHA-256 (APK):** \`$(sha256sum "$APK" | cut -d' ' -f1)\`"
+            [ "$BUILD_TYPE" = "release" ] && echo "- **SHA-256 (شهادة التوقيع):** \`$CERT_COLON\`" || true
+            echo "- versionCode: ${{ steps.meta.outputs.version_code }}"
+          } > dist/notes-footer.md
+
+      # When anything above failed: a ready prompt for an AI assistant (error log included, secrets masked)
+      - name: Failure report with a ready prompt
+        if: failure()
+        run: |
+          SRC="$RUNNER_TEMP/build.log"
+          [ -s "$SRC" ] || SRC="$RUNNER_TEMP/doctor.log"
+          {
+            echo "## ❌ فشل المشروع"
+            echo ""
+            echo "لم يُنشر شيء. انسخ البرومبت التالي إلى مساعدك الذكي (فيه آخر سطور السجل بعد إخفاء الأسرار):"
+            echo ""
+            echo '```text'
+            echo "فشل بناء GitHub Actions في المستودع $GITHUB_REPOSITORY (الفرع $GITHUB_REF_NAME، الـ commit ${GITHUB_SHA:0:7})."
+            echo "ابحث عن السبب الجذري في السجل أدناه، وأصلحه بأقل تعديل ممكن، وأرسل لي الملفات الجديدة أو المعدّلة فقط بمساراتها."
+            echo "إن لم تكن متأكداً من الإصلاح فقل ذلك بوضوح ولا تخمّن، واذكر ما ينقصك لتتأكد."
+            echo ""
+            if [ -s "$RUNNER_TEMP/autofix-build.md" ]; then
+              echo "حاول المصحح التلقائي قبل الفشل:"
+              cat "$RUNNER_TEMP/autofix-build.md"
+              echo ""
+            fi
+            echo "--- آخر سطور السجل ---"
+            [ -s "$SRC" ] && tail -n 80 "$SRC" | sed -E 's/(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/***/g' || echo "(لا يوجد سجل)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GitHubManager-${{ env.BUILD_TYPE }}-apk
+          path: |
+            dist/*.apk
+            dist/notes-footer.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload R8 mapping
+        if: env.BUILD_TYPE == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 90
+
+  # Publishes the APK as a GitHub Release (new tag, or the existing release when the tag already exists)
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.build.outputs.tag }}
+      PRE: ${{ needs.build.outputs.prerelease }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GitHubManager-release-apk
+          path: dist
+
+      - name: Create or update release
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # The release already exists (e.g. created from the app): attach the APK and make sure
+            # the versionCode footer used by the in-app updater is present.
+            gh release upload "$TAG" dist/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+            BODY="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
+            if ! printf '%s' "$BODY" | grep -q 'versionCode:'; then
+              { printf '%s\n\n' "$BODY"; cat dist/notes-footer.md; } > dist/notes-final.md
+              gh release edit "$TAG" --notes-file dist/notes-final.md --repo "$GITHUB_REPOSITORY"
+            fi
+          else
+            ARGS=(--repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --notes-file dist/notes-footer.md)
+            [ "$PRE" = "true" ] && ARGS+=(--prerelease)
+            gh release create "$TAG" dist/*.apk "${ARGS[@]}"
+          fi
