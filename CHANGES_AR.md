@@ -172,3 +172,6 @@
 ## ترجمة
 - كل سلسلة جديدة معرّفة في `values` و`values-en` (`strings_b`, `strings_semo`).
 - `strings_en_gap.xml`: 23 سلسلة كانت معرّفة بالعربية فقط ولا نظير لها في الإنجليزية (close, delete_selected, pk_*, semo_ai_*, token_*, integrity_*, upd_sig_bad…) فكانت تظهر بالعربية في الواجهة الإنجليزية.
+
+## إصلاح بناء: استيراد `Intent` في `ActionsActivity`
+- فشل البناء في CI بخطأ واحد (`cannot find symbol: class Intent` عند `ActionsActivity.java:1224`) لأن زر «اشرح» في قائمة التشغيل يستخدم `Intent` دون استيراد. أُضيف `import android.content.Intent;`. فحصت بعدها كل ملفات `app/src/main/java` بحثاً عن أي نوع مستخدم دون استيراد فلم أجد غيره.

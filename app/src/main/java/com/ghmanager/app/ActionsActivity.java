@@ -1,5 +1,6 @@
 package com.ghmanager.app;
 
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -879,7 +880,7 @@ public class ActionsActivity extends BaseRepoActivity {
             a4.setVisibility(View.VISIBLE);
             final long runIdForExplain = run.optLong("id");
             a4.setOnClickListener(x -> explainRun(runIdForExplain, () -> {
-                android.content.Intent oi = repoIntent(RunDetailActivity.class);
+                Intent oi = repoIntent(RunDetailActivity.class);
                 oi.putExtra("runId", runIdForExplain);
                 startActivity(oi);
             }));
