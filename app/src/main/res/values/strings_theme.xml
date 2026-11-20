@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="set_theme">المظهر</string>
-    <string name="theme_dark">داكن</string>
-    <string name="theme_light">فاتح</string>
-    <string name="theme_amoled">أسود AMOLED</string>
-    <string name="theme_system">حسب النظام</string>
-    <string name="lock_delay_off">لن يُطبَّق إلا بعد تفعيل القفل</string>
-</resources>
