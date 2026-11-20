@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="upd_repo_404">لم يُعثر على المستودع «%s» (404). تأكد أن اسم المصدر صحيح بصيغة المالك/المستودع، وأن الرمز (Token) يملك صلاحية الوصول إليه إن كان خاصًا، وأن فيه إصدارًا (Release) يحتوي ملف APK.</string>
+    <string name="upd_change_source">تغيير مصدر التحديثات</string>
+    <string name="set_title">الإعدادات</string>
+    <string name="set_general">عام</string>
+    <string name="set_language">اللغة</string>
+    <string name="lang_system">لغة النظام</string>
+    <string name="lang_ar">العربية</string>
+    <string name="lang_en">English</string>
+    <string name="app_tools">الأدوات</string>
+    <string name="set_account">الحساب</string>
+    <string name="set_logout_msg">سيتم تسجيل خروجك من التطبيق وحذف الرمز المحفوظ على هذا الجهاز.</string>
+    <string name="set_about">حول التطبيق</string>
+    <string name="set_version">الإصدار %1$s (رقم البناء %2$d)</string>
+    <string name="set_source_code">الشيفرة المصدرية والإصدارات</string>
+    <string name="set_package">معلومات الحزمة والجهاز</string>
+    <string name="set_about_text">مدير جيتهاب يتيح لك إدارة مستودعاتك على GitHub من هاتفك: الملفات والفروع والإصدارات والـ Actions والأسرار، مع مدير ملفات داخلي وتحديث ذاتي من صفحة الإصدارات.</string>
+    <string name="act_workflows">الـ Workflows</string>
+    <string name="act_showing_all">عرض التشغيلات من كل الـ workflows</string>
+    <string name="act_showing_one">عرض تشغيلات هذا الـ workflow</string>
+    <string name="act_filter_hint">تصفية التشغيلات…</string>
+    <string name="act_event">الحدث</string>
+    <string name="act_status">الحالة</string>
+    <string name="act_branch">الفرع</string>
+    <string name="act_actor">المنفّذ</string>
+    <string name="act_all_events">كل الأحداث</string>
+    <string name="act_all_status">كل الحالات</string>
+    <string name="act_all_actors">كل المنفّذين</string>
+    <string name="act_other_user">اسم مستخدم آخر…</string>
+    <string name="act_clear">مسح التصفية</string>
+    <string name="act_cleanup">تنظيف</string>
+    <string name="act_count">%d تشغيل</string>
+    <string name="act_count_shown">%1$d من %2$d تشغيل</string>
+    <string name="act_line_push">%1$s #%2$d: دفع الـ commit %3$s بواسطة %4$s</string>
+    <string name="act_line_pr">%1$s #%2$d: Pull request %3$s بواسطة %4$s</string>
+    <string name="act_line_manual">%1$s #%2$d: تشغيل يدوي بواسطة %4$s</string>
+    <string name="act_line_schedule">%1$s #%2$d: تشغيل مجدول</string>
+    <string name="act_line_other">%1$s #%2$d: %3$s %4$s %5$s</string>
+    <string name="act_view_commit">عرض الـ commit على GitHub</string>
+    <string name="act_copy_link">نسخ رابط التشغيل</string>
+    <string name="act_only_branch">عرض هذا الفرع فقط</string>
+    <string name="act_only_actor">عرض تشغيلات هذا المستخدم فقط</string>
+    <string name="act_still_running">هذا التشغيل ما زال جاريًا، ألغِه أولًا</string>
+    <string name="act_not_running">هذا التشغيل ليس جاريًا حتى يُلغى</string>
+</resources>

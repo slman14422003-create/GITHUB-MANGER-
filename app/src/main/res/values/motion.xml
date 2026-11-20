@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- One motion scale for the whole app: every animation picks one of these durations. -->
+    <integer name="motion_press">90</integer>
+    <integer name="motion_fast">120</integer>
+    <integer name="motion_base">220</integer>
+    <integer name="motion_slow">320</integer>
+    <integer name="motion_stagger">28</integer>
+</resources>
