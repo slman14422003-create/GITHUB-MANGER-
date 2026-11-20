@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="sw_copy_url">نسخ الرابط</string>
-    <string name="sw_url_copied">تم نسخ الرابط</string>
-    <string name="sw_protected">هذا المستودع محمي من الحذف. أزل الحماية أولاً.</string>
-    <string name="rs_run_ok">آخر تشغيل Actions نجح</string>
-    <string name="rs_run_fail">آخر تشغيل Actions فشل</string>
-    <string name="rs_run_active">تشغيل Actions جارٍ</string>
-</resources>
