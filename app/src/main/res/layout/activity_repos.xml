@@ -79,6 +79,13 @@
         </FrameLayout>
 
         <ImageButton
+            android:id="@+id/btnSearch"
+            style="@style/IconButton"
+            android:layout_marginEnd="4dp"
+            android:contentDescription="@string/us_open"
+            android:src="@drawable/ic_search" />
+
+        <ImageButton
             android:id="@+id/btnCleanup"
             style="@style/IconButton"
             android:layout_marginEnd="4dp"
@@ -154,6 +161,15 @@
     <TextView
         android:id="@+id/status"
         style="@style/StatusBanner"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tokenWarn"
+        style="@style/StatusBanner"
+        android:drawablePadding="10dp"
+        android:minHeight="48dp"
+        android:textColor="?attr/cTextPrimary"
+        android:textIsSelectable="false"
         android:visibility="gone" />
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="verify_enable">Verify sensitive actions</string>
+    <string name="verify_enable_sub">Phone unlock, then a code by notification before delete, merge and settings changes</string>
+    <string name="verify_title">Enter the code you received</string>
+    <string name="verify_confirm">Confirm</string>
+    <string name="verify_code_title">Verification code</string>
+    <string name="verify_need_notifications">Enable notifications to receive the code</string>
+    <string name="verify_failed">Not verified, action cancelled</string>
+</resources>

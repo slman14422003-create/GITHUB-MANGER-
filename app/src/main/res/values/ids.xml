@@ -12,4 +12,6 @@
     <item name="fx_loop" type="id" />
     <item name="fx_bound" type="id" />
     <item name="chip_state" type="id" />
+    <item name="run_time_tag" type="id" />
+    <item name="detailScroll" type="id" />
 </resources>
