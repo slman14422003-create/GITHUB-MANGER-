@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="save_need_access">Grant the app file access from the file manager so it can save</string>
-    <string name="saved_to">Saved to %s</string>
-</resources>
