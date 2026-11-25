@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shots_block">منع لقطات الشاشة</string>
+    <string name="shots_block_sub">عند إيقافه يمكنك التقاط لقطات وتسجيل الشاشة داخل التطبيق</string>
+</resources>

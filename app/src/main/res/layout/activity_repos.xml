@@ -18,8 +18,8 @@
 
         <ImageView
             android:id="@+id/btnAccount"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:clickable="true"
             android:contentDescription="@string/acc_title"
             android:focusable="true" />
@@ -47,15 +47,17 @@
                 android:id="@+id/count"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:textColor="?attr/cTextSecondary"
                 android:textSize="13sp" />
         </LinearLayout>
 
         <FrameLayout
             android:id="@+id/btnStatus"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="4dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="2dp"
             android:background="@drawable/bg_icon_btn"
             android:clickable="true"
             android:contentDescription="@string/gs_title"
@@ -81,21 +83,27 @@
         <ImageButton
             android:id="@+id/btnSearch"
             style="@style/IconButton"
-            android:layout_marginEnd="4dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="2dp"
             android:contentDescription="@string/us_open"
             android:src="@drawable/ic_search" />
 
         <ImageButton
             android:id="@+id/btnCleanup"
             style="@style/IconButton"
-            android:layout_marginEnd="4dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="2dp"
             android:contentDescription="@string/rs_cleanup"
             android:src="@drawable/ic_trash_sweep" />
 
         <ImageButton
             android:id="@+id/btnNew"
             style="@style/IconButton"
-            android:layout_marginEnd="4dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="2dp"
             android:contentDescription="@string/new_repo"
             android:src="@drawable/ic_add" />
 
@@ -106,14 +114,16 @@
         <ImageButton
             android:id="@+id/btnRefresh"
             style="@style/IconButton"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:contentDescription="@string/refresh"
             android:src="@drawable/ic_refresh" />
 
         <!-- iOS-style activity indicator: shown over the refresh button while the screen loads -->
         <com.ghmanager.app.IosSpinner
             android:id="@+id/refreshSpinner"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:visibility="invisible" />
     </FrameLayout>
     </LinearLayout>
