@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="close">Close</string>
+    <string name="delete_selected">Delete selected</string>
+    <string name="delete_selected_msg">%d items will be deleted permanently.</string>
+    <string name="fm_open">Open</string>
+    <string name="fm_select">Select</string>
+    <string name="integrity_msg">The app integrity check failed (a modified copy or an unsafe environment). Install the official build from your releases page.</string>
+    <string name="integrity_title">The app could not start</string>
+    <string name="nothing_selected">Nothing selected</string>
+    <string name="pk_save_here">Save here</string>
+    <string name="pk_save_name">File: %1$s\n%2$s</string>
+    <string name="pk_title_save">Choose where to save</string>
+    <string name="save_failed">Could not save here: %s</string>
+    <string name="select_items">Select items</string>
+    <string name="semo_ai_clean">Checked %1$d files, no simple problems found</string>
+    <string name="semo_ai_desc">A local, offline check for balanced brackets and simple mistakes before a run, merging any safe fix into the code automatically</string>
+    <string name="semo_ai_fixed_n">Fixed %1$d of %2$d checked files and saved the fixes to your repository</string>
+    <string name="semo_ai_scanning">SEMO AI is checking the code…</string>
+    <string name="semo_ai_skip_error">The check could not finish (%1$s); the Action was started as usual</string>
+    <string name="semo_ai_title">SEMO AI</string>
+    <string name="token_new">Enter a new token</string>
+    <string name="token_rejected_msg">GitHub rejected the saved token (it expired or was revoked). You were not signed out: enter a new token whenever you like, or press sign out yourself.</string>
+    <string name="token_rejected_title">GitHub rejected the token</string>
+    <string name="upd_sig_bad">The update signature does not match the installed app: it was rejected and not installed.</string>
+</resources>

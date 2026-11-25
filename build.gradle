@@ -1,0 +1,4 @@
+plugins {
+    // AGP 8.13 builds compileSdk 37 (Android 17) with android.suppressUnsupportedCompileSdk=37
+    id 'com.android.application' version '8.13.2' apply false
+}
