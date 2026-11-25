@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cs_title">Code search</string>
+    <string name="cs_sub">Search inside the repository files and open a hit</string>
+    <string name="cs_hint">Search this repository\'s code…</string>
+    <string name="cs_empty">Type a word or a piece of code, then search</string>
+    <string name="cs_none">No results</string>
+    <string name="cs_total">%d results</string>
+    <string name="nt_title">Notifications</string>
+    <string name="nt_sub">What is happening in your repositories</string>
+    <string name="nt_sub_row">Reviews, issues and mentions</string>
+    <string name="nt_unread">Unread</string>
+    <string name="nt_new">New</string>
+    <string name="nt_none">No notifications</string>
+    <string name="nt_mark_all">Mark all as read</string>
+    <string name="nt_mark_all_msg">All your GitHub notifications will be marked as read.</string>
+    <string name="nt_mark_all_go">Mark</string>
+    <string name="nt_marked">All marked as read</string>
+    <string name="fm_recent">Recent</string>
+    <string name="fm_gh_upload">Upload to GitHub</string>
+    <string name="fm_gh_pick_repo">Choose a repository</string>
+    <string name="fm_gh_no_repos">Open the repository list once so it can be loaded</string>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cs_title">البحث في الكود</string>
+    <string name="cs_sub">ابحث داخل ملفات المستودع وافتح النتيجة</string>
+    <string name="cs_hint">ابحث في كود هذا المستودع…</string>
+    <string name="cs_empty">اكتب كلمة أو جزءًا من الكود ثم اضغط بحث</string>
+    <string name="cs_none">لا توجد نتائج</string>
+    <string name="cs_total">%d نتيجة</string>
+    <string name="nt_title">الإشعارات</string>
+    <string name="nt_sub">ما يحدث في مستودعاتك</string>
+    <string name="nt_sub_row">المراجعات والمشاكل والإشارات إليك</string>
+    <string name="nt_unread">غير المقروءة</string>
+    <string name="nt_new">جديد</string>
+    <string name="nt_none">لا توجد إشعارات</string>
+    <string name="nt_mark_all">تعليم الكل كمقروء</string>
+    <string name="nt_mark_all_msg">سيتم تعليم كل إشعاراتك على GitHub كمقروءة.</string>
+    <string name="nt_mark_all_go">تعليم</string>
+    <string name="nt_marked">تم تعليم الكل كمقروء</string>
+    <string name="fm_recent">الأحدث</string>
+    <string name="fm_gh_upload">رفع إلى GitHub</string>
+    <string name="fm_gh_pick_repo">اختر المستودع</string>
+    <string name="fm_gh_no_repos">افتح قائمة المستودعات مرة واحدة أولًا ليتم تحميلها</string>
+</resources>

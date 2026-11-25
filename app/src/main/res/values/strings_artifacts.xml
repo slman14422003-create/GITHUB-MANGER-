@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="artifacts_sub">حمّل ملف الـ APK الناتج من البناء وثبّته مباشرة</string>
+    <string name="artifact_apk">تنزيل APK (استخراج تلقائي)</string>
+    <string name="artifact_zip">تنزيل كملف ZIP</string>
+    <string name="no_apk_in_artifact">لا يوجد ملف APK داخل هذا الملف المُنتَج. جرّب «تنزيل كملف ZIP».</string>
+    <string name="install_apk_msg">تم حفظ ملف APK. هل تريد تثبيته الآن؟\n\nقد يطلب منك النظام السماح لهذا التطبيق بتثبيت التطبيقات.</string>
+    <string name="install_now">تثبيت الآن</string>
+    <string name="install_later">لاحقًا</string>
+    <string name="install_failed">تعذّر فتح المثبّت، افتح الملف من تطبيق الملفات</string>
+</resources>

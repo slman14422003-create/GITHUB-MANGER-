@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="light_bg">#F4F5F8</color>
+    <color name="light_surface">#FFFFFF</color>
+    <color name="light_surface_high">#ECEEF3</color>
+    <color name="light_field">#EEF0F5</color>
+    <color name="light_stroke">#D5D8E0</color>
+    <color name="light_stroke_soft">#E4E6EC</color>
+    <color name="light_text_primary">#101114</color>
+    <color name="light_text_secondary">#4A4D57</color>
+    <color name="light_text_hint">#5D616D</color>
+    <color name="light_accent">#2F5FE8</color>
+    <color name="light_accent_text">#2450D6</color>
+    <color name="light_accent_soft">#DCE6FF</color>
+    <color name="light_neutral_soft">#E6E8EE</color>
+    <color name="light_on_accent">#FFFFFF</color>
+    <color name="light_ripple">#1F000000</color>
+    <color name="light_ripple_on_accent">#33FFFFFF</color>
+    <color name="light_ok">#12713A</color>
+    <color name="light_bad">#B3261E</color>
+    <color name="light_warn">#8A5A00</color>
+    <color name="light_info">#1F5FBF</color>
+
+    <color name="amoled_bg">#000000</color>
+    <color name="amoled_surface">#0E0E10</color>
+    <color name="amoled_surface_high">#1A1A1E</color>
+    <color name="amoled_field">#08080A</color>
+    <color name="amoled_stroke">#2A2A30</color>
+    <color name="amoled_stroke_soft">#1A1A1E</color>
+    <color name="amoled_text_hint">#8E8E9A</color>
+    <color name="amoled_accent_soft">#0F1A3D</color>
+    <color name="amoled_neutral_soft">#1C1C20</color>
+</resources>

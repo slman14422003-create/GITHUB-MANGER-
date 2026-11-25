@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="restore_title">الرجوع إلى نسخة سابقة</string>
+    <string name="restore_msg">سيصبح محتوى الفرع «%2$s» مطابقًا تمامًا للنسخة «%1$s» عن طريق commit جديد يُضاف في الأعلى.\n\nلا يُحذف أي شيء من السجل، وتبقى النسخة الحالية محفوظة فيه ويمكنك الرجوع إليها لاحقًا بنفس الطريقة.</string>
+    <string name="restore_action">رجوع إلى هذه النسخة</string>
+    <string name="restoring">جارٍ الرجوع إلى النسخة…</string>
+    <string name="restore_done">تم الرجوع إلى النسخة السابقة</string>
+    <string name="restore_same">محتوى الفرع مطابق لهذه النسخة بالفعل، لا يوجد ما يُرجَع عنه.</string>
+    <string name="restore_commit_msg">Restore version %1$s (via GitHub Manager)</string>
+    <string name="current_version">الحالية</string>
+    <string name="undo_last">تراجع عن آخر تغيير</string>
+    <string name="undo_detail">آخر تغيير سيتم التراجع عنه: %1$s</string>
+    <string name="no_previous_version">لا توجد نسخة سابقة للرجوع إليها</string>
+    <string name="download_version">تنزيل هذه النسخة (ZIP)</string>
+    <string name="restore_here">الرجوع إلى هذه النسخة</string>
+    <string name="rollback_section">الرجوع إلى هذا الإصدار</string>
+    <string name="restore_to_release">الرجوع إلى %1$s</string>
+    <string name="restore_to_release_sub">إرجاع الفرع «%1$s» لمحتوى هذا الإصدار</string>
+    <string name="rollback_before_run">فشل؟ ارجع للنسخة التي قبله</string>
+    <string name="rollback_detail">التغيير الذي فشل: %1$s — %2$s\n\nملاحظة: إن وُجدت تغييرات أحدث على الفرع فسيتم التراجع عنها أيضًا.</string>
+</resources>

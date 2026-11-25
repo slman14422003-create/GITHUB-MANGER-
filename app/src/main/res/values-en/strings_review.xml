@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rv_btn">Review (%1$d comments)</string>
+    <string name="rv_hint">Tap any line in a file to comment on it. Comments are kept on your device until you submit the review</string>
+    <string name="rv_comment_hint">Write your comment on this line…</string>
+    <string name="rv_pending_badge">Your comment (not sent yet)</string>
+    <string name="rv_lines_note">%1$d line comments will be sent with this review</string>
+    <string name="rv_need_text">Write a general comment or add at least one line comment</string>
+    <string name="rv_pending_title">You have an unsubmitted review on GitHub</string>
+    <string name="rv_pending_msg">A review you started earlier on this PR was never submitted. Choose what to do with it; nothing happens without your choice.</string>
+    <string name="rv_pending_submit">Submit that review</string>
+    <string name="rv_pending_delete">Delete it and send mine</string>
+    <string name="rv_moved_title">The PR changed</string>
+    <string name="rv_moved_msg">A new commit was pushed to this PR after you started reviewing. Your comments are pinned to %1$s and the current one is %2$s, so line numbers may differ.</string>
+    <string name="rv_moved_restart">Start over</string>
+    <string name="rv_moved_keep">Keep my comments</string>
+    <string name="rv_discard">Discard local review</string>
+    <string name="rv_discard_msg">All your saved line comments on this PR will be deleted</string>
+</resources>
