@@ -266,35 +266,8 @@ public class IssueDetailActivity extends BaseRepoActivity {
     }
 
     private void reviewDialog() {
-        final String[] events = {"APPROVE", "REQUEST_CHANGES", "COMMENT"};
-        String[] labels = {getString(R.string.pr_rv_approved), getString(R.string.pr_rv_changes),
-                getString(R.string.pr_rv_commented)};
-        LinearLayout box = Ui.box(this);
-        final android.widget.Spinner sp = Ui.spinner(this, java.util.Arrays.asList(labels), 0);
-        final EditText body = Ui.editMulti(this, getString(R.string.comment_hint), null, 4);
-        box.addView(sp);
-        box.addView(body);
-        new Dlg(this)
-                .setTitle(R.string.pr_review)
-                .setView(box)
-                .setPositiveButton(R.string.send, (d, w) -> {
-                    final String ev = events[sp.getSelectedItemPosition()];
-                    final String b = body.getText().toString().trim();
-                    if (!"APPROVE".equals(ev) && b.isEmpty()) {
-                        toast(R.string.pr_review_need_text);
-                        Dlg.stay(d);
-                        return;
-                    }
-                    bg(() -> {
-                        api.createReview(owner, repo, number, ev, b);
-                        post(() -> {
-                            toast(R.string.done_ok);
-                            load();
-                        });
-                    });
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
+        JSONObject h = pull == null ? null : pull.optJSONObject("head");
+        ReviewDialog.show(this, number, h == null ? "" : h.optString("sha"), this::load);
     }
 
     private void mergeDialog() {

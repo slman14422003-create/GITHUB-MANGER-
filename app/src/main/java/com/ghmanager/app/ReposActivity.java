@@ -47,6 +47,7 @@ public class ReposActivity extends AppCompatActivity {
     private SwipeRows swipeRows;
     private View sharedTitle;
     private TextView status;
+    private TextView tokenWarn;
     private TextView count;
     private LinearLayout chipRow;
     private int filter = 0;
@@ -93,6 +94,7 @@ public class ReposActivity extends AppCompatActivity {
         public void run() {
             if (!resumed) return;
             if (!allRepos.isEmpty() && !swipeRows.hasOpen()) render();
+            showTokenWarn();
             ui.postDelayed(this, CLOCK_MS);
         }
     };
@@ -106,6 +108,8 @@ public class ReposActivity extends AppCompatActivity {
         BottomNav.attach(this, BottomNav.REPOS);
         api = new GitHubApi(this);
         status = findViewById(R.id.status);
+        tokenWarn = findViewById(R.id.tokenWarn);
+        tokenWarn.setOnClickListener(v -> startActivity(new Intent(this, AccountActivity.class)));
         count = findViewById(R.id.count);
         chipRow = findViewById(R.id.chipRow);
         ListView list = findViewById(R.id.list);
@@ -176,10 +180,11 @@ public class ReposActivity extends AppCompatActivity {
             }
         });
 
-        for (int id : new int[]{R.id.btnNew, R.id.btnRefresh, R.id.btnAccount, R.id.btnStatus, R.id.btnCleanup}) {
+        for (int id : new int[]{R.id.btnNew, R.id.btnRefresh, R.id.btnAccount, R.id.btnStatus, R.id.btnCleanup, R.id.btnSearch}) {
             Ui.press(this, findViewById(id));
         }
         findViewById(R.id.btnCleanup).setOnClickListener(v -> startActivity(new Intent(this, CleanupActivity.class)));
+        findViewById(R.id.btnSearch).setOnClickListener(v -> startActivity(new Intent(this, SearchActivity.class)));
         status.setOnClickListener(v -> {
             if (!emptyShown) load();
         });
@@ -277,9 +282,21 @@ public class ReposActivity extends AppCompatActivity {
         if (statusCard != null) statusCard.stop();
     }
 
+    private void showTokenWarn() {
+        if (tokenWarn == null) return;
+        String m = TokenExpiry.banner(this);
+        if (m == null) {
+            tokenWarn.setVisibility(View.GONE);
+        } else {
+            tokenWarn.setText("\u26A0  " + m);
+            tokenWarn.setVisibility(View.VISIBLE);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        showTokenWarn();
         Transfers.addListener(finishListener);
         if (CleanupJobs.showPending(this)) load();
         if (statusCard != null) statusCard.start();
@@ -632,7 +649,7 @@ public class ReposActivity extends AppCompatActivity {
         selBar = new LinearLayout(this);
         selBar.setOrientation(LinearLayout.HORIZONTAL);
         selBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        selBar.setPadding(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
+        selBar.setPaddingRelative(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
         selBar.setBackgroundResource(R.drawable.bg_card);
         selBar.setVisibility(View.GONE);
         TextView close = Ui.chip(this, getString(R.string.cancel), false);
@@ -774,14 +791,17 @@ public class ReposActivity extends AppCompatActivity {
         ViewGroup parent = (ViewGroup) listView.getParent();
         if (on) {
             if (skeleton == null) {
-                skeleton = Skeleton.build(this, 6);
-                parent.addView(skeleton, parent.indexOfChild(listView));
+                skeleton = new ShimmerView(this, ShimmerView.REPOS);
+                ViewGroup.LayoutParams lp = parent instanceof LinearLayout
+                        ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                        : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT);
+                parent.addView(skeleton, parent.indexOfChild(listView), lp);
             }
             skeleton.setVisibility(View.VISIBLE);
-            Skeleton.pulse(skeleton, true);
+            skeleton.invalidate();
             listView.setVisibility(View.GONE);
         } else if (skeleton != null) {
-            Skeleton.pulse(skeleton, false);
             skeleton.setVisibility(View.GONE);
             listView.setVisibility(View.VISIBLE);
         }
@@ -881,6 +901,13 @@ public class ReposActivity extends AppCompatActivity {
                         // keep the session on 401: the user decides whether to sign in again
                         status.setVisibility(View.VISIBLE);
                         status.setText(msg + "\n" + getString(R.string.rs_retry));
+                        status.setMinHeight(Ui.dp(this, 48));
+                        status.setOnClickListener(v -> load());
+                    } else if (!(e instanceof GitHubApi.ApiException)) {
+                        status.setVisibility(View.VISIBLE);
+                        status.setText(getString(R.string.cache_offline, Fmt.agoMs(RepoCache.savedAt(this))));
+                        status.setMinHeight(Ui.dp(this, 48));
+                        status.setOnClickListener(v -> load());
                     } else {
                         // the saved list stays usable; only say that the refresh failed
                         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show();

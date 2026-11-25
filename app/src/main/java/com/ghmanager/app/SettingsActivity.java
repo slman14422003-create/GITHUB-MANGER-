@@ -102,6 +102,10 @@ public class SettingsActivity extends BaseRepoActivity {
         addRow(new Row(R.drawable.ic_shield, true, getString(R.string.perm_title), null, false, true),
                 v -> startActivity(new Intent(this, PermissionsActivity.class)));
 
+        addRow(new Row(R.drawable.ic_star_fill, true, getString(R.string.pw_title), getString(R.string.pw_row_sub),
+                false, true), v -> startActivity(new Intent(this, PinnedWorkflowsActivity.class)));
+        addRow(new Row(R.drawable.ic_upload, true, getString(R.string.cq_title), getString(R.string.cq_row_sub),
+                false, true), v -> startActivity(new Intent(this, QueueActivity.class)));
         addRow(new Row(R.drawable.ic_clipboard, true, getString(R.string.pr_title), getString(R.string.pr_sub),
                 false, true), v -> startActivity(new Intent(this, PromptsActivity.class)));
 
@@ -131,6 +135,35 @@ public class SettingsActivity extends BaseRepoActivity {
             render();
         });
         content.addView(lock.view);
+        final Ui.Toggle verify = Ui.toggle(this, content, R.string.verify_enable, R.string.verify_enable_sub,
+                Verify.enabled(this));
+        verify.onChange((b, on) -> {
+            if (on) {
+                if (!AppLock.available(this)) {
+                    toast(R.string.lock_need_screen_lock);
+                    verify.setChecked(false);
+                    return;
+                }
+                Perms.ensureNotifications(this);
+                Verify.setEnabled(this, true);
+                post(this::render);
+            } else if (Verify.enabled(this)) {
+                io.execute(() -> {
+                    try {
+                        if (AppLock.available(this)) Verify.requireFresh();
+                        Verify.setEnabled(this, false);
+                    } catch (Exception ignored) {
+                    }
+                    runOnUiThread(this::render);
+                });
+            }
+        });
+        content.addView(verify.view);
+        if (Verify.enabled(this)) {
+            for (android.view.View vr : VerifySettings.rows(this, content, this::render)) content.addView(vr);
+        }
+        addRow(new Row(R.drawable.ic_history, true, getString(R.string.audit_title), getString(R.string.audit_row_sub),
+                false, true), v -> startActivity(new Intent(this, AuditLogActivity.class)));
         final int[] secs = {0, 30, 120, 300};
         final String[] names = {getString(R.string.lock_now), getString(R.string.lock_30s),
                 getString(R.string.lock_2m), getString(R.string.lock_5m)};

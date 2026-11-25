@@ -1,21 +1,14 @@
 package com.ghmanager.app;
 
 import android.content.Context;
-import android.util.Base64;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class GitHubApi {
@@ -90,441 +83,6 @@ public class GitHubApi {
         }
     }
 
-    private static final String BASE = "https://api.github.com";
-    private static final String UPLOAD_BASE = "https://uploads.github.com";
-    private static final String JSON = "application/vnd.github+json";
-    private volatile String token;
-    private final Context ctx;
-    private final String accId;
-
-    /** Fixed token, never refreshed (sign-in check, personal access tokens typed by hand). */
-    public GitHubApi(String token) {
-        this.token = token;
-        this.ctx = null;
-        this.accId = "";
-    }
-
-    /** Active account: the access token is renewed silently with the refresh token whenever it expires. */
-    public GitHubApi(Context c) {
-        this.ctx = c.getApplicationContext();
-        Accounts.Acc a = Accounts.active(this.ctx);
-        this.accId = a == null ? "" : a.id;
-        this.token = a == null ? "" : Accounts.tokenOf(a);
-    }
-
-    private String bearer() {
-        if (ctx != null && !accId.isEmpty() && Accounts.needsRefresh(ctx, accId)) {
-            String t = Accounts.refresh(ctx, accId, token);
-            if (!t.isEmpty()) token = t;
-        }
-        return token;
-    }
-
-    private boolean renew() {
-        if (ctx == null || accId.isEmpty()) return false;
-        String t = Accounts.refresh(ctx, accId, token);
-        if (t.isEmpty() || t.equals(token)) return false;
-        token = t;
-        return true;
-    }
-
-    // ------------------------------------------------------------------ helpers
-
-    private static String readAll(InputStream is) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        final int cap = 32 * 1024 * 1024;   // a hostile mirror must not be able to exhaust memory
-        while ((n = is.read(buf)) != -1) {
-            bos.write(buf, 0, n);
-            if (bos.size() > cap) {
-                is.close();
-                throw new IOException("Response too large");
-            }
-        }
-        is.close();
-        return new String(bos.toByteArray(), StandardCharsets.UTF_8);
-    }
-
-    /** Encodes each segment of a path, keeping the slashes. */
-    public static String enc(String path) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        String[] parts = path.split("/");
-        for (String p : parts) {
-            if (p.isEmpty()) continue;
-            if (sb.length() > 0) sb.append('/');
-            sb.append(URLEncoder.encode(p, "UTF-8").replace("+", "%20"));
-        }
-        return sb.toString();
-    }
-
-    /** Encodes a query value. */
-    public static String qe(String s) {
-        try {
-            return URLEncoder.encode(s, "UTF-8");
-        } catch (Exception e) {
-            return s;
-        }
-    }
-
-    public static String repo(String o, String r) {
-        return "/repos/" + seg(o) + "/" + seg(r);
-    }
-
-    /** One path segment, encoded, so an owner or repo name can never add path parts or a query. */
-    private static String seg(String s) {
-        try {
-            return URLEncoder.encode(s == null ? "" : s, "UTF-8").replace("+", "%20");
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private static final ThreadLocal<Boolean> DIRECT = new ThreadLocal<>();
-
-    /** For the calling thread only: the next downloads skip the Mirror proxy and talk to GitHub directly. */
-    public static void directDownload(boolean on) {
-        if (on) DIRECT.set(Boolean.TRUE);
-        else DIRECT.remove();
-    }
-
-    private HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
-        // never talk plain HTTP (a redirect to http:// must not downgrade a download)
-        if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
-        if (api && !Mirror.isMirrored(url)) {
-            // the token may only ever be sent to GitHub's own API hosts (a crafted path such as
-            // "@evil.com" must never be able to redirect it somewhere else)
-            String host = new URL(url).getHost().toLowerCase(java.util.Locale.ROOT);
-            if (!host.equals("api.github.com") && !host.equals("uploads.github.com")) {
-                throw new IOException("Blocked host");
-            }
-        }
-        final String real = Boolean.TRUE.equals(DIRECT.get()) ? url : Mirror.map(url);
-        HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
-        c.setRequestMethod(method);
-        c.setConnectTimeout(20000);
-        c.setReadTimeout(120000);
-        if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
-            c.setRequestProperty("X-Mirror-Key", Mirror.key());
-        }
-        if (api) {
-            c.setRequestProperty("Authorization", "Bearer " + bearer());
-            c.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        }
-        c.setRequestProperty("Accept", accept);
-        c.setRequestProperty("User-Agent", "GitHubManagerApp");
-        return c;
-    }
-
-    private static ApiException toException(int code, String resp) {
-        String msg = resp == null ? "" : resp;
-        try {
-            JSONObject j = new JSONObject(msg);
-            msg = j.optString("message", msg);
-            JSONArray errs = j.optJSONArray("errors");
-            if (errs != null && errs.length() > 0) {
-                Object first = errs.get(0);
-                if (first instanceof JSONObject) {
-                    String m = ((JSONObject) first).optString("message", "");
-                    if (!m.isEmpty()) msg = msg + " - " + m;
-                } else {
-                    msg = msg + " - " + first;
-                }
-            }
-        } catch (Exception ignored) {
-            if (msg.length() > 300) msg = msg.substring(0, 300);
-        }
-        if (msg.isEmpty()) msg = "HTTP " + code;
-        return new ApiException(code, Redact.text(msg));
-    }
-
-    private String request(String method, String path, JSONObject body) throws IOException, ApiException {
-        try {
-            return requestOnce(method, path, body);
-        } catch (ApiException e) {
-            if (e.code == 401 && renew()) return requestOnce(method, path, body);
-            throw e;
-        }
-    }
-
-    private static final android.util.LruCache<String, String[]> ETAGS = new android.util.LruCache<>(80);
-
-    private static void pause(long ms) throws IOException {
-        try {
-            Thread.sleep(ms + (long) (Math.random() * 250));
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted");
-        }
-    }
-
-    /** How long GitHub wants us to wait after a 403/429 rate-limit answer (0 = not a rate limit). */
-    private static long rateWait(HttpURLConnection c) {
-        try {
-            String ra = c.getHeaderField("Retry-After");
-            if (ra != null && !ra.trim().isEmpty()) return Math.max(1, Long.parseLong(ra.trim())) * 1000L;
-            if ("0".equals(c.getHeaderField("X-RateLimit-Remaining"))) {
-                String reset = c.getHeaderField("X-RateLimit-Reset");
-                if (reset != null) return Math.max(1000L, Long.parseLong(reset.trim()) * 1000L - System.currentTimeMillis() + 1000L);
-            }
-        } catch (Exception ignored) {
-        }
-        return 0;
-    }
-
-    /** Retries reads on network hiccups and 5xx with a growing pause, and waits out short rate limits. */
-    private String requestOnce(String method, String path, JSONObject body) throws IOException, ApiException {
-        boolean read = method.equals("GET");
-        int tries = 0;
-        boolean waited = false;
-        for (; ; ) {
-            try {
-                return exchange(method, path, body);
-            } catch (ApiException e) {
-                boolean server = e.code == 500 || e.code == 502 || e.code == 503 || e.code == 504;
-                if (read && server && tries < 2) {
-                    pause(600L << tries++);
-                    continue;
-                }
-                if (e.waitMs > 0) {
-                    if (e.waitMs <= 20000L && !waited) {
-                        waited = true;
-                        pause(e.waitMs);
-                        continue;
-                    }
-                    ApiException r = new ApiException(e.code, "Rate limit reached. Try again in "
-                            + Math.max(1, e.waitMs / 1000L) + " s");
-                    r.waitMs = e.waitMs;
-                    throw r;
-                }
-                throw e;
-            } catch (IOException e) {
-                String m = e.getMessage() == null ? "" : e.getMessage();
-                if (m.startsWith("Blocked") || m.startsWith("Response too large") || m.equals("Interrupted")) throw e;
-                if (read && tries < 2) {
-                    pause(600L << tries++);
-                    continue;
-                }
-                if (e instanceof java.net.UnknownHostException || e instanceof java.net.ConnectException) {
-                    throw new IOException("No internet connection");
-                }
-                throw e;
-            }
-        }
-    }
-
-    private String exchange(String method, String path, JSONObject body) throws IOException, ApiException {
-        boolean needsBody = method.equals("POST") || method.equals("PUT") || method.equals("PATCH");
-        if (body == null && needsBody) body = new JSONObject();
-        byte[] data = body == null ? null : body.toString().getBytes(StandardCharsets.UTF_8);
-        String url = BASE + path;
-        final boolean isGet = method.equals("GET");
-        final String ckey = accId + "|" + path;
-        final String[] hit = isGet ? ETAGS.get(ckey) : null;
-        // Redirects are followed by hand: every hop is checked against the allowed hosts again, so the
-        // token can never be forwarded to another site by a redirect.
-        for (int hop = 0; ; hop++) {
-            HttpURLConnection c = open(method, url, JSON, true);
-            c.setInstanceFollowRedirects(false);
-            if (hit != null && hop == 0) c.setRequestProperty("If-None-Match", hit[0]);
-            boolean reusable = false;
-            try {
-                if (data != null) {
-                    c.setDoOutput(true);
-                    c.setRequestProperty("Content-Type", "application/json");
-                    c.setFixedLengthStreamingMode(data.length);
-                    OutputStream os = c.getOutputStream();
-                    os.write(data);
-                    os.close();
-                }
-                int code = c.getResponseCode();
-                if (code >= 300 && code < 400 && code != 304 && hop < 3) {
-                    String loc = c.getHeaderField("Location");
-                    if (loc == null) throw new ApiException(code, "Redirect without Location");
-                    url = new URL(new URL(url), loc).toString();
-                    continue;
-                }
-                if (code == 304 && hit != null) {
-                    // unchanged since the last answer: GitHub sends no body and does not count it as a request
-                    try {
-                        c.getInputStream().close();
-                    } catch (Exception ignored) {
-                    }
-                    reusable = true;
-                    return hit[1];
-                }
-                InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-                String resp = is == null ? "" : readAll(is);
-                if (code >= 400) {
-                    ApiException ex = toException(code, resp);
-                    if (code == 403 || code == 429) ex.waitMs = rateWait(c);
-                    throw ex;
-                }
-                if (isGet) {
-                    String tag = c.getHeaderField("ETag");
-                    if (tag != null && !tag.isEmpty() && resp.length() < 512 * 1024) {
-                        ETAGS.put(ckey, new String[]{tag, resp});
-                    }
-                }
-                reusable = true;
-                return resp;
-            } finally {
-                // A fully read answer leaves the socket in the keep-alive pool: the next request skips the
-                // TCP/TLS handshake (a big saving through the proxy). Only a failed call is cut.
-                if (!reusable) c.disconnect();
-            }
-        }
-    }
-
-    /**
-     * The whole file tree of a branch in ONE request (instead of one request per folder). When
-     * {@code etag} is still current GitHub answers 304 with no body and this returns null.
-     * The new validator is written to {@code etagOut[0]}.
-     */
-    public JSONObject treeRecursive(String o, String r, String branch, String etag, String[] etagOut) throws Exception {
-        String ref = branch;
-        boolean conditional = etag != null && !etag.isEmpty() && branch.indexOf('/') < 0;
-        if (branch.indexOf('/') >= 0) {
-            // a ref with a slash is not accepted in the tree path: resolve it to the tree sha first
-            ref = getCommitTree(o, r, getBranchSha(o, r, branch));
-        }
-        String url = BASE + repo(o, r) + "/git/trees/" + enc(ref) + "?recursive=1";
-        HttpURLConnection c = open("GET", url, JSON, true);
-        c.setInstanceFollowRedirects(false);
-        if (conditional) c.setRequestProperty("If-None-Match", etag);
-        boolean reusable = false;
-        try {
-            int code = c.getResponseCode();
-            if (code == 304) {
-                try {
-                    c.getInputStream().close();
-                } catch (Exception ignored) {
-                }
-                reusable = true;
-                return null;
-            }
-            if (code >= 300 && code < 400) throw new ApiException(code, "Redirect");
-            InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-            String resp = is == null ? "" : readAll(is);
-            if (code >= 400) throw toException(code, resp);
-            if (etagOut != null && etagOut.length > 0) {
-                String tag = c.getHeaderField("ETag");
-                etagOut[0] = tag == null ? "" : tag;
-            }
-            reusable = true;
-            return new JSONObject(resp);
-        } finally {
-            if (!reusable) c.disconnect();
-        }
-    }
-
-    /** Generic call, returns the raw response body ("" for 204). */
-    public String call(String method, String path, JSONObject body) throws Exception {
-        return request(method, path, body);
-    }
-
-    public JSONObject obj(String path) throws Exception {
-        return new JSONObject(request("GET", path, null));
-    }
-
-    public JSONArray arr(String path) throws Exception {
-        return new JSONArray(request("GET", path, null));
-    }
-
-    /**
-     * Opens a download. The first hop carries the token; any redirect (logs, artifacts,
-     * assets, zipballs) is followed WITHOUT the token because the target URL is pre-signed.
-     */
-    private static final ThreadLocal<Long> RANGE_FROM = new ThreadLocal<>();
-
-    public static void rangeFrom(long from) {
-        if (from > 0) RANGE_FROM.set(from);
-        else RANGE_FROM.remove();
-    }
-
-    private static void applyRange(HttpURLConnection c) {
-        Long f = RANGE_FROM.get();
-        if (f != null && f > 0) {
-            c.setRequestProperty("Range", "bytes=" + f + "-");
-            c.setRequestProperty("Accept-Encoding", "identity");
-        }
-    }
-
-    public HttpURLConnection openDownload(String path, String accept) throws Exception {
-        HttpURLConnection c = open("GET", BASE + path, accept, true);
-        c.setInstanceFollowRedirects(false);
-        applyRange(c);
-        int code = c.getResponseCode();
-        int hops = 0;
-        while (code >= 300 && code < 400 && hops < 5) {
-            String loc = c.getHeaderField("Location");
-            c.disconnect();
-            if (loc == null) throw new ApiException(code, "Redirect without Location");
-            c = open("GET", loc, "*/*", false);
-            c.setInstanceFollowRedirects(false);
-            applyRange(c);
-            code = c.getResponseCode();
-            hops++;
-        }
-        if (code >= 400) {
-            InputStream es = c.getErrorStream();
-            String resp = es == null ? "" : readAll(es);
-            long wait = code == 403 || code == 429 ? rateWait(c) : 0;
-            c.disconnect();
-            ApiException ex = toException(code, resp);
-            ex.waitMs = wait;
-            throw ex;
-        }
-        return c;
-    }
-
-    public static long copy(InputStream in, OutputStream out, long total, Progress p) throws IOException {
-        byte[] buf = new byte[131072];
-        long done = 0;
-        long last = 0;
-        int n;
-        while ((n = in.read(buf)) != -1) {
-            out.write(buf, 0, n);
-            done += n;
-            if (p != null) {
-                long now = System.currentTimeMillis();
-                if (now - last > 150) {
-                    p.on(done, total);
-                    last = now;
-                }
-            }
-        }
-        out.flush();
-        if (p != null) p.on(done, total);
-        return done;
-    }
-
-    /** Reads a text download, keeping only the last maxBytes bytes. */
-    public TextResult readTail(String path, String accept, int maxBytes) throws Exception {
-        HttpURLConnection c = openDownload(path, accept);
-        try {
-            InputStream is = c.getInputStream();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            final int hardCap = 24 * 1024 * 1024;
-            while ((n = is.read(buf)) != -1) {
-                bos.write(buf, 0, n);
-                if (bos.size() > hardCap) break;
-            }
-            is.close();
-            byte[] all = bos.toByteArray();
-            boolean cut = false;
-            if (all.length > maxBytes) {
-                all = Arrays.copyOfRange(all, all.length - maxBytes, all.length);
-                cut = true;
-            }
-            return new TextResult(new String(all, StandardCharsets.UTF_8), cut);
-        } finally {
-            c.disconnect();
-        }
-    }
-
     public static final class Piece {
         public final byte[] data;
         public final boolean ranged;
@@ -533,481 +91,6 @@ public class GitHubApi {
             this.data = data;
             this.ranged = ranged;
         }
-    }
-
-    public Piece readFrom(String path, String accept, long from) throws Exception {
-        HttpURLConnection c;
-        rangeFrom(from);
-        try {
-            c = openDownload(path, accept);
-        } finally {
-            rangeFrom(0);
-        }
-        try {
-            boolean ranged = from > 0 && c.getResponseCode() == 206;
-            InputStream is = c.getInputStream();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            final int hardCap = 24 * 1024 * 1024;
-            while ((n = is.read(buf)) != -1) {
-                bos.write(buf, 0, n);
-                if (bos.size() > hardCap) break;
-            }
-            is.close();
-            return new Piece(bos.toByteArray(), ranged);
-        } finally {
-            c.disconnect();
-        }
-    }
-
-    // ------------------------------------------------------------------ user / repos
-
-    public JSONObject getUser() throws Exception {
-        return new JSONObject(request("GET", "/user", null));
-    }
-
-    /** Like getUser() plus "_scopes": the scopes GitHub reports for a classic / OAuth token ("" otherwise). */
-    public JSONObject getUserMeta() throws Exception {
-        HttpURLConnection c = open("GET", BASE + "/user", JSON, true);
-        int code = c.getResponseCode();
-        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-        String resp = is == null ? "" : readAll(is);
-        String scopes = c.getHeaderField("X-OAuth-Scopes");
-        c.disconnect();
-        if (code >= 400) throw toException(code, resp);
-        JSONObject u = new JSONObject(resp);
-        u.put("_scopes", scopes == null ? "" : scopes.trim());
-        return u;
-    }
-
-    public JSONObject updateProfile(JSONObject patch) throws Exception {
-        return new JSONObject(request("PATCH", "/user", patch));
-    }
-
-    public JSONArray listEmails() throws Exception {
-        return new JSONArray(request("GET", "/user/emails", null));
-    }
-
-    public JSONArray listSshKeys() throws Exception {
-        return new JSONArray(request("GET", "/user/keys?per_page=100", null));
-    }
-
-    public void addSshKey(String title, String key) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("title", title);
-        b.put("key", key);
-        request("POST", "/user/keys", b);
-    }
-
-    public void deleteSshKey(long id) throws Exception {
-        request("DELETE", "/user/keys/" + id, null);
-    }
-
-    public JSONArray listOrgs() throws Exception {
-        return new JSONArray(request("GET", "/user/orgs?per_page=100", null));
-    }
-
-    /** The "core" bucket of /rate_limit: limit, remaining, reset (epoch seconds). */
-    public JSONObject rateLimit() throws Exception {
-        JSONObject r = obj("/rate_limit").optJSONObject("resources");
-        JSONObject core = r == null ? null : r.optJSONObject("core");
-        return core == null ? new JSONObject() : core;
-    }
-
-    /** Unauthenticated form POST (GitHub device flow). Returns the body whatever the status is. */
-    public static String postForm(String url, String form) throws Exception {
-        if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
-        String real = Mirror.map(url);
-        HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
-        c.setRequestMethod("POST");
-        c.setConnectTimeout(20000);
-        c.setReadTimeout(30000);
-        c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-        c.setRequestProperty("User-Agent", "GitHubManagerApp");
-        if (Mirror.isMirrored(real) && !Mirror.key().isEmpty()) {
-            c.setRequestProperty("X-Mirror-Key", Mirror.key());
-        }
-        byte[] data = form.getBytes(StandardCharsets.UTF_8);
-        c.setDoOutput(true);
-        c.setFixedLengthStreamingMode(data.length);
-        OutputStream os = c.getOutputStream();
-        os.write(data);
-        os.close();
-        int code = c.getResponseCode();
-        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-        String resp = is == null ? "" : readAll(is);
-        c.disconnect();
-        return resp;
-    }
-
-    /** Small unauthenticated download (avatars). Returns null on any failure. */
-    public static byte[] fetchBytes(String url, int maxBytes) {
-        return fetchBytes(url, maxBytes, false, 15000);
-    }
-
-    /**
-     * @param forceMirror use the saved mirror even when its switch is off
-     * @param connectMs   how long to wait for the connection before giving up
-     */
-    public static byte[] fetchBytes(String url, int maxBytes, boolean forceMirror, int connectMs) {
-        try {
-            if (!url.startsWith("https://")) return null;
-            String real = forceMirror ? Mirror.mapForced(url) : Mirror.map(url);
-            HttpURLConnection c = (HttpURLConnection) new URL(real).openConnection();
-            c.setConnectTimeout(connectMs);
-            c.setReadTimeout(20000);
-            c.setRequestProperty("User-Agent", "GitHubManagerApp");
-            if (Mirror.pointsAtMirror(real) && !Mirror.key().isEmpty()) {
-                c.setRequestProperty("X-Mirror-Key", Mirror.key());
-            }
-            if (c.getResponseCode() != 200) {
-                c.disconnect();
-                return null;
-            }
-            InputStream is = c.getInputStream();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) != -1) {
-                bos.write(buf, 0, n);
-                if (bos.size() > maxBytes) {
-                    is.close();
-                    c.disconnect();
-                    return null;
-                }
-            }
-            is.close();
-            c.disconnect();
-            return bos.toByteArray();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    public JSONArray listRepos() throws Exception {
-        JSONArray all = new JSONArray();
-        for (int page = 1; page <= 10; page++) {
-            String res = request("GET", "/user/repos?per_page=100&sort=updated&page=" + page
-                    + "&affiliation=owner,collaborator,organization_member", null);
-            JSONArray arr = new JSONArray(res);
-            for (int i = 0; i < arr.length(); i++) all.put(arr.get(i));
-            if (arr.length() < 100) break;
-        }
-        return all;
-    }
-
-    public JSONObject createRepo(String name, boolean isPrivate) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("name", name);
-        b.put("private", isPrivate);
-        b.put("auto_init", true);
-        return new JSONObject(request("POST", "/user/repos", b));
-    }
-
-    public JSONObject getRepo(String o, String r) throws Exception {
-        return obj(repo(o, r));
-    }
-
-    public JSONObject updateRepo(String o, String r, JSONObject patch) throws Exception {
-        return new JSONObject(request("PATCH", repo(o, r), patch));
-    }
-
-    public void deleteRepo(String o, String r) throws Exception {
-        request("DELETE", repo(o, r), null);
-    }
-
-    public JSONObject languages(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/languages");
-    }
-
-    public JSONArray contributors(String o, String r) throws Exception {
-        String res = request("GET", repo(o, r) + "/contributors?per_page=10", null).trim();
-        if (res.isEmpty()) return new JSONArray();
-        return new JSONArray(res);
-    }
-
-    public JSONObject trafficViews(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/traffic/views");
-    }
-
-    public JSONObject trafficClones(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/traffic/clones");
-    }
-
-    public JSONArray topics(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/topics").optJSONArray("names");
-    }
-
-    public void setTopics(String o, String r, List<String> names) throws Exception {
-        JSONObject b = new JSONObject();
-        JSONArray a = new JSONArray();
-        for (String n : names) a.put(n);
-        b.put("names", a);
-        request("PUT", repo(o, r) + "/topics", b);
-    }
-
-    public boolean isStarred(String o, String r) throws Exception {
-        try {
-            request("GET", "/user/starred/" + o + "/" + r, null);
-            return true;
-        } catch (ApiException e) {
-            if (e.code == 404) return false;
-            throw e;
-        }
-    }
-
-    public void star(String o, String r, boolean on) throws Exception {
-        request(on ? "PUT" : "DELETE", "/user/starred/" + o + "/" + r, null);
-    }
-
-    // ------------------------------------------------------------------ branches
-
-    public JSONArray listBranches(String o, String r) throws Exception {
-        return new JSONArray(request("GET", repo(o, r) + "/branches?per_page=100", null));
-    }
-
-    public String getBranchSha(String o, String r, String branch) throws Exception {
-        String res = request("GET", repo(o, r) + "/git/ref/heads/" + enc(branch), null);
-        return new JSONObject(res).getJSONObject("object").getString("sha");
-    }
-
-    public void createBranch(String o, String r, String name, String fromSha) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("ref", "refs/heads/" + name);
-        b.put("sha", fromSha);
-        request("POST", repo(o, r) + "/git/refs", b);
-    }
-
-    public void deleteBranch(String o, String r, String name) throws Exception {
-        request("DELETE", repo(o, r) + "/git/refs/heads/" + enc(name), null);
-    }
-
-    /** Returns true when a merge commit was created, false when there was nothing to merge. */
-    public boolean mergeBranches(String o, String r, String base, String head, String message) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("base", base);
-        b.put("head", head);
-        if (message != null && !message.isEmpty()) b.put("commit_message", message);
-        String res = request("POST", repo(o, r) + "/merges", b);
-        return !res.trim().isEmpty();
-    }
-
-    // ------------------------------------------------------------------ contents
-
-    public JSONArray listContents(String o, String r, String path, String branch) throws Exception {
-        String p = repo(o, r) + "/contents" + (path.isEmpty() ? "" : "/" + enc(path))
-                + "?ref=" + qe(branch);
-        String res = request("GET", p, null).trim();
-        if (res.startsWith("[")) return new JSONArray(res);
-        return new JSONArray().put(new JSONObject(res));
-    }
-
-    public JSONObject getContent(String o, String r, String path, String branch) throws Exception {
-        String p = repo(o, r) + "/contents/" + enc(path) + "?ref=" + qe(branch);
-        return new JSONObject(request("GET", p, null));
-    }
-
-    public String contentRawPath(String o, String r, String path, String branch) throws IOException {
-        return repo(o, r) + "/contents/" + enc(path) + "?ref=" + qe(branch);
-    }
-
-    /** Returns null when the file is larger than maxBytes. */
-    public byte[] getFileBytes(String o, String r, String path, String branch, int maxBytes) throws Exception {
-        HttpURLConnection c = openDownload(contentRawPath(o, r, path, branch), "application/vnd.github.raw");
-        try {
-            InputStream is = c.getInputStream();
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = is.read(buf)) != -1) {
-                bos.write(buf, 0, n);
-                if (bos.size() > maxBytes) return null;
-            }
-            is.close();
-            return bos.toByteArray();
-        } finally {
-            c.disconnect();
-        }
-    }
-
-    public JSONObject putFileContent(String o, String r, String path, byte[] data, String message,
-                                     String branch, String sha) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("message", message);
-        b.put("content", Base64.encodeToString(data, Base64.NO_WRAP));
-        b.put("branch", branch);
-        if (sha != null) b.put("sha", sha);
-        return new JSONObject(request("PUT", repo(o, r) + "/contents/" + enc(path), b));
-    }
-
-    public HttpURLConnection openZipball(String o, String r, String ref) throws Exception {
-        return openDownload(repo(o, r) + "/zipball/" + enc(ref), JSON);
-    }
-
-    public HttpURLConnection openTarball(String o, String r, String ref) throws Exception {
-        return openDownload(repo(o, r) + "/tarball/" + enc(ref), JSON);
-    }
-
-    private String getCommitTree(String o, String r, String commitSha) throws Exception {
-        String res = request("GET", repo(o, r) + "/git/commits/" + commitSha, null);
-        return new JSONObject(res).getJSONObject("tree").getString("sha");
-    }
-
-    public String createBlob(String o, String r, byte[] data) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("content", Base64.encodeToString(data, Base64.NO_WRAP));
-        b.put("encoding", "base64");
-        return new JSONObject(request("POST", repo(o, r) + "/git/blobs", b)).getString("sha");
-    }
-
-    private static ApiException graphqlError(JSONArray errs) {
-        JSONObject e = errs.optJSONObject(0);
-        String msg = e == null ? "GraphQL error" : e.optString("message", "GraphQL error");
-        String type = e == null ? "" : e.optString("type", "");
-        if ("STALE_DATA".equals(type) || msg.contains("Expected branch to point")) {
-            return new HeadMoved(Redact.text(msg));
-        }
-        if ("RATE_LIMITED".equals(type)) {
-            ApiException x = new ApiException(429, Redact.text(msg));
-            x.waitMs = 60000L;
-            return x;
-        }
-        int code = "NOT_FOUND".equals(type) ? 404
-                : ("FORBIDDEN".equals(type) || "INSUFFICIENT_SCOPES".equals(type)) ? 403 : 422;
-        return new ApiException(code, Redact.text(msg));
-    }
-
-    public String createCommitOnBranch(String o, String r, String branch, String expectedHead, String message,
-                                       List<Addition> adds) throws Exception {
-        JSONArray arr = new JSONArray();
-        for (Addition a : adds) {
-            JSONObject j = new JSONObject();
-            j.put("path", a.path);
-            j.put("contents", Base64.encodeToString(a.data, Base64.NO_WRAP));
-            arr.put(j);
-        }
-        String head = message;
-        String rest = "";
-        int nl = message.indexOf('\n');
-        if (nl > 0) {
-            head = message.substring(0, nl);
-            rest = message.substring(nl + 1).trim();
-        }
-        JSONObject msg = new JSONObject();
-        msg.put("headline", head);
-        if (!rest.isEmpty()) msg.put("body", rest);
-        JSONObject br = new JSONObject();
-        br.put("repositoryNameWithOwner", o + "/" + r);
-        br.put("branchName", branch);
-        JSONObject changes = new JSONObject();
-        changes.put("additions", arr);
-        JSONObject input = new JSONObject();
-        input.put("branch", br);
-        input.put("message", msg);
-        input.put("fileChanges", changes);
-        input.put("expectedHeadOid", expectedHead);
-        JSONObject vars = new JSONObject();
-        vars.put("input", input);
-        JSONObject body = new JSONObject();
-        body.put("query", "mutation($input: CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}");
-        body.put("variables", vars);
-        JSONObject res = new JSONObject(request("POST", "/graphql", body));
-        JSONArray errs = res.optJSONArray("errors");
-        if (errs != null && errs.length() > 0) throw graphqlError(errs);
-        JSONObject data = res.optJSONObject("data");
-        JSONObject c = data == null ? null : data.optJSONObject("createCommitOnBranch");
-        JSONObject commit = c == null ? null : c.optJSONObject("commit");
-        String oid = commit == null ? "" : commit.optString("oid", "");
-        if (oid.isEmpty()) throw new ApiException(422, "GraphQL: empty answer");
-        return oid;
-    }
-
-    /** Used only to initialize an empty repository (no branch exists yet). */
-    public void putFile(String o, String r, String path, byte[] data, String message) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("message", message);
-        b.put("content", Base64.encodeToString(data, Base64.NO_WRAP));
-        request("PUT", repo(o, r) + "/contents/" + enc(path), b);
-    }
-
-    public String commitEntries(String o, String r, String branch, List<TreeEntry> entries, String message) throws Exception {
-        String headSha = getBranchSha(o, r, branch);
-        String newCommit = commitTree(o, r, headSha, entries, message);
-        moveBranch(o, r, branch, newCommit, false);
-        return newCommit;
-    }
-
-    public String commitTree(String o, String r, String parentSha, List<TreeEntry> entries, String message) throws Exception {
-        String tree = getCommitTree(o, r, parentSha);
-        for (int i = 0; i < entries.size(); i += 400) {
-            JSONArray arr = new JSONArray();
-            for (int j = i; j < Math.min(i + 400, entries.size()); j++) {
-                TreeEntry t = entries.get(j);
-                JSONObject e = new JSONObject();
-                e.put("path", t.path);
-                e.put("mode", t.mode);
-                e.put("type", "blob");
-                if (t.content != null) e.put("content", t.content);
-                else e.put("sha", t.sha == null ? JSONObject.NULL : t.sha);
-                arr.put(e);
-            }
-            JSONObject tb = new JSONObject();
-            tb.put("base_tree", tree);
-            tb.put("tree", arr);
-            tree = new JSONObject(request("POST", repo(o, r) + "/git/trees", tb)).getString("sha");
-        }
-        JSONObject cb = new JSONObject();
-        cb.put("message", message);
-        cb.put("tree", tree);
-        cb.put("parents", new JSONArray().put(parentSha));
-        return new JSONObject(request("POST", repo(o, r) + "/git/commits", cb)).getString("sha");
-    }
-
-    public void moveBranch(String o, String r, String branch, String sha, boolean force) throws Exception {
-        JSONObject ub = new JSONObject();
-        ub.put("sha", sha);
-        ub.put("force", force);
-        request("PATCH", repo(o, r) + "/git/refs/heads/" + enc(branch), ub);
-    }
-
-    /** All blobs under a folder (recursive), with their sha and mode. */
-    public List<TreeEntry> listBlobsUnder(String o, String r, String branch, String folder) throws Exception {
-        String headSha = getBranchSha(o, r, branch);
-        String tree = getCommitTree(o, r, headSha);
-        String res = request("GET", repo(o, r) + "/git/trees/" + tree + "?recursive=1", null);
-        JSONArray arr = new JSONObject(res).getJSONArray("tree");
-        List<TreeEntry> out = new ArrayList<>();
-        String prefix = folder + "/";
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject e = arr.getJSONObject(i);
-            if ("blob".equals(e.optString("type")) && e.optString("path").startsWith(prefix)) {
-                out.add(new TreeEntry(e.getString("path"), e.getString("sha"), e.optString("mode", "100644")));
-            }
-        }
-        return out;
-    }
-
-    /** path -> blob sha for every file of the branch (lets an upload skip what is already there). */
-    public java.util.Map<String, String> blobShaMap(String o, String r, String branch) throws Exception {
-        String headSha = getBranchSha(o, r, branch);
-        String tree = getCommitTree(o, r, headSha);
-        String res = request("GET", repo(o, r) + "/git/trees/" + tree + "?recursive=1", null);
-        JSONArray arr = new JSONObject(res).getJSONArray("tree");
-        java.util.Map<String, String> out = new java.util.HashMap<>();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject e = arr.getJSONObject(i);
-            if ("blob".equals(e.optString("type"))) out.put(e.getString("path"), e.getString("sha"));
-        }
-        return out;
-    }
-
-    /** All file paths under a folder (recursive). */
-    public List<String> listFilesUnder(String o, String r, String branch, String folder) throws Exception {
-        List<String> out = new ArrayList<>();
-        for (TreeEntry t : listBlobsUnder(o, r, branch, folder)) out.add(t.path);
-        return out;
     }
 
     /** path + size, every blob in the whole repository tree (used by SEMO AI to pick which files to read). */
@@ -1027,534 +110,658 @@ public class GitHubApi {
         }
     }
 
-    /** All blobs in the whole repository (recursive), with size but not content — cheap to call. */
-    public List<BlobInfo> listAllBlobs(String o, String r, String branch) throws Exception {
-        String headSha = getBranchSha(o, r, branch);
-        String tree = getCommitTree(o, r, headSha);
-        String res = request("GET", repo(o, r) + "/git/trees/" + tree + "?recursive=1", null);
-        JSONObject root = new JSONObject(res);
-        JSONArray arr = root.getJSONArray("tree");
-        List<BlobInfo> out = new ArrayList<>();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject e = arr.getJSONObject(i);
-            if ("blob".equals(e.optString("type"))) {
-                out.add(new BlobInfo(e.getString("path"), e.optLong("size", 0), e.optString("sha", "")));
-            }
-        }
-        return out;
+    private final ApiCore core;
+    private final UserApi userApi;
+    private final RepoApi repoApi;
+    private final BranchApi branchApi;
+    private final ContentApi contentApi;
+    private final GitDataApi gitDataApi;
+    private final CommitApi commitApi;
+    private final ActionsApi actionsApi;
+    private final ReleaseApi releaseApi;
+    private final IssueApi issueApi;
+    private final SearchApi searchApi;
+    private final NotificationApi notificationApi;
+    private final SecurityApi securityApi;
+    private final CollaboratorApi collaboratorApi;
+    private final DownloadApi downloadApi;
+
+    public GitHubApi(String token) {
+        this(new ApiCore(token), true);
     }
 
-    /**
-     * Blobs under the given paths, found with one non-recursive tree request per folder. Used when the
-     * recursive tree of a huge repository comes back truncated.
-     */
-    public List<BlobInfo> listBlobsForPaths(String o, String r, String branch, List<String> sel) throws Exception {
-        String root = getCommitTree(o, r, getBranchSha(o, r, branch));
-        List<BlobInfo> out = new ArrayList<>();
-        walkTree(o, r, root, "", sel, out, 0);
-        return out;
+    public GitHubApi(Context c) {
+        this(new ApiCore(c), true);
     }
 
-    private void walkTree(String o, String r, String treeSha, String prefix, List<String> sel,
-                          List<BlobInfo> out, int depth) throws Exception {
-        if (depth > 40) return;
-        JSONArray arr = new JSONObject(request("GET", repo(o, r) + "/git/trees/" + treeSha, null))
-                .getJSONArray("tree");
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject e = arr.getJSONObject(i);
-            String name = e.getString("path");
-            String path = prefix.isEmpty() ? name : prefix + "/" + name;
-            boolean covered = false;
-            boolean onTheWay = false;
-            for (String s : sel) {
-                if (path.equals(s) || path.startsWith(s + "/")) covered = true;
-                else if (s.startsWith(path + "/")) onTheWay = true;
-            }
-            String type = e.optString("type");
-            if ("blob".equals(type) && covered) {
-                out.add(new BlobInfo(path, e.optLong("size", 0), e.optString("sha", "")));
-            } else if ("tree".equals(type) && (covered || onTheWay)) {
-                walkTree(o, r, e.getString("sha"), path, sel, out, depth + 1);
-            }
-        }
+    private GitHubApi(ApiCore core, boolean wired) {
+        this.core = core;
+        this.userApi = new UserApi(core);
+        this.repoApi = new RepoApi(core);
+        this.branchApi = new BranchApi(core);
+        this.contentApi = new ContentApi(core);
+        this.commitApi = new CommitApi(core);
+        this.actionsApi = new ActionsApi(core);
+        this.releaseApi = new ReleaseApi(core);
+        this.issueApi = new IssueApi(core);
+        this.searchApi = new SearchApi(core);
+        this.notificationApi = new NotificationApi(core);
+        this.securityApi = new SecurityApi(core);
+        this.collaboratorApi = new CollaboratorApi(core);
+        this.downloadApi = new DownloadApi(core);
+        this.gitDataApi = new GitDataApi(core, this.branchApi);
     }
 
-    // ------------------------------------------------------------------ commits
-
-    public JSONArray listCommits(String o, String r, String branch, int page, int perPage) throws Exception {
-        return arr(repo(o, r) + "/commits?sha=" + qe(branch) + "&per_page=" + perPage + "&page=" + page);
+    public static String enc(String path) throws IOException {
+        return ApiCore.enc(path);
     }
 
-    public JSONObject getCommit(String o, String r, String sha) throws Exception {
-        return obj(repo(o, r) + "/commits/" + sha);
+    public static String qe(String s) {
+        return ApiCore.qe(s);
     }
 
-    // ------------------------------------------------------------------ versions / rollback
-
-    /** Resolves a commit sha, branch or tag (annotated or not) to the full sha of its commit. */
-    public String resolveCommitSha(String o, String r, String ref) throws Exception {
-        return obj(repo(o, r) + "/commits/" + enc(ref)).getString("sha");
+    public static String repo(String o, String r) {
+        return ApiCore.repo(o, r);
     }
 
-    /** First parent of a commit, or null when it is the very first commit of the history. */
-    public String getParentSha(String o, String r, String commitSha) throws Exception {
-        JSONArray parents = obj(repo(o, r) + "/git/commits/" + commitSha).optJSONArray("parents");
-        if (parents == null || parents.length() == 0) return null;
-        return parents.getJSONObject(0).getString("sha");
+    public static void directDownload(boolean on) {
+        ApiCore.directDownload(on);
     }
 
-    /**
-     * Rolls a branch back to the exact content of {@code targetSha} by adding ONE new commit on top
-     * of the current head. History is kept and nothing is force-pushed, so the rollback can itself
-     * be undone later. Returns the new commit sha, or null when the branch already has that content.
-     */
-    public String restoreToCommit(String o, String r, String branch, String targetSha, String message) throws Exception {
-        String headSha = getBranchSha(o, r, branch);
-        String targetTree = getCommitTree(o, r, targetSha);
-        if (targetTree.equals(getCommitTree(o, r, headSha))) return null;
-        JSONObject cb = new JSONObject();
-        cb.put("message", message);
-        cb.put("tree", targetTree);
-        cb.put("parents", new JSONArray().put(headSha));
-        String newCommit = new JSONObject(request("POST", repo(o, r) + "/git/commits", cb)).getString("sha");
-        JSONObject ub = new JSONObject();
-        ub.put("sha", newCommit);
-        ub.put("force", false);
-        request("PATCH", repo(o, r) + "/git/refs/heads/" + enc(branch), ub);
-        return newCommit;
+    public static void rangeFrom(long from) {
+        ApiCore.rangeFrom(from);
     }
 
-    // ------------------------------------------------------------------ actions
-
-    public JSONArray listWorkflows(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/workflows?per_page=100").optJSONArray("workflows");
+    public static long copy(InputStream in, OutputStream out, long total, Progress p) throws IOException {
+        return ApiCore.copy(in, out, total, p);
     }
 
-    public JSONObject listRuns(String o, String r, long workflowId, String status, String branch,
-                               int page, int perPage) throws Exception {
-        return listRuns(o, r, workflowId, status, branch, null, null, page, perPage);
+    public static String postForm(String url, String form) throws Exception {
+        return ApiCore.postForm(url, form);
     }
 
-    /** Same as above with GitHub's own "event" and "actor" filters. */
-    public JSONObject listRuns(String o, String r, long workflowId, String status, String branch,
-                               String event, String actor, int page, int perPage) throws Exception {
-        StringBuilder p = new StringBuilder(repo(o, r));
-        if (workflowId > 0) p.append("/actions/workflows/").append(workflowId).append("/runs");
-        else p.append("/actions/runs");
-        p.append("?per_page=").append(perPage).append("&page=").append(page);
-        if (status != null && !status.isEmpty()) p.append("&status=").append(qe(status));
-        if (branch != null && !branch.isEmpty()) p.append("&branch=").append(qe(branch));
-        if (event != null && !event.isEmpty()) p.append("&event=").append(qe(event));
-        if (actor != null && !actor.isEmpty()) p.append("&actor=").append(qe(actor));
-        return obj(p.toString());
+    public static byte[] fetchBytes(String url, int maxBytes) {
+        return ApiCore.fetchBytes(url, maxBytes);
     }
 
-    public JSONObject getRun(String o, String r, long runId) throws Exception {
-        return obj(repo(o, r) + "/actions/runs/" + runId);
+    public static byte[] fetchBytes(String url, int maxBytes, boolean forceMirror, int connectMs) {
+        return ApiCore.fetchBytes(url, maxBytes, forceMirror, connectMs);
     }
 
-    public JSONObject getJob(String o, String r, long jobId) throws Exception {
-        return obj(repo(o, r) + "/actions/jobs/" + jobId);
+    public String call(String method, String path, JSONObject body) throws Exception {
+        return core.request(method, path, body);
     }
 
-    public JSONArray listJobs(String o, String r, long runId) throws Exception {
-        return obj(repo(o, r) + "/actions/runs/" + runId + "/jobs?per_page=100&filter=latest").optJSONArray("jobs");
+    public JSONObject obj(String path) throws Exception {
+        return core.obj(path);
     }
 
-    public JSONArray listRunArtifacts(String o, String r, long runId) throws Exception {
-        return obj(repo(o, r) + "/actions/runs/" + runId + "/artifacts?per_page=100").optJSONArray("artifacts");
+    public JSONArray arr(String path) throws Exception {
+        return core.arr(path);
     }
 
-    public void rerunRun(String o, String r, long runId) throws Exception {
-        request("POST", repo(o, r) + "/actions/runs/" + runId + "/rerun", null);
+    public HttpURLConnection openDownload(String path, String accept) throws Exception {
+        return core.openDownload(path, accept);
     }
 
-    public void rerunFailed(String o, String r, long runId) throws Exception {
-        request("POST", repo(o, r) + "/actions/runs/" + runId + "/rerun-failed-jobs", null);
+    public JSONObject getUser() throws Exception  {
+        return userApi.getUser();
     }
 
-    public void rerunJob(String o, String r, long jobId) throws Exception {
-        request("POST", repo(o, r) + "/actions/jobs/" + jobId + "/rerun", null);
+    public JSONObject getUserMeta() throws Exception  {
+        return userApi.getUserMeta();
     }
 
-    public void cancelRun(String o, String r, long runId, boolean force) throws Exception {
-        request("POST", repo(o, r) + "/actions/runs/" + runId + (force ? "/force-cancel" : "/cancel"), null);
+    public JSONObject updateProfile(JSONObject patch) throws Exception  {
+        return userApi.updateProfile(patch);
     }
 
-    public void deleteRun(String o, String r, long runId) throws Exception {
-        request("DELETE", repo(o, r) + "/actions/runs/" + runId, null);
+    public JSONArray listEmails() throws Exception  {
+        return userApi.listEmails();
+    }
+
+    public JSONArray listSshKeys() throws Exception  {
+        return userApi.listSshKeys();
+    }
+
+    public void addSshKey(String title, String key) throws Exception  {
+        userApi.addSshKey(title, key);
+    }
+
+    public void deleteSshKey(long id) throws Exception  {
+        userApi.deleteSshKey(id);
+    }
+
+    public JSONArray listOrgs() throws Exception  {
+        return userApi.listOrgs();
+    }
+
+    public JSONObject rateLimit() throws Exception  {
+        return userApi.rateLimit();
+    }
+
+    public JSONArray listRepos() throws Exception  {
+        return repoApi.listRepos();
+    }
+
+    public JSONObject createRepo(String name, boolean isPrivate) throws Exception  {
+        return repoApi.createRepo(name, isPrivate);
+    }
+
+    public JSONObject getRepo(String o, String r) throws Exception  {
+        return repoApi.getRepo(o, r);
+    }
+
+    public JSONObject updateRepo(String o, String r, JSONObject patch) throws Exception  {
+        return repoApi.updateRepo(o, r, patch);
+    }
+
+    public void deleteRepo(String o, String r) throws Exception  {
+        repoApi.deleteRepo(o, r);
+    }
+
+    public JSONObject languages(String o, String r) throws Exception  {
+        return repoApi.languages(o, r);
+    }
+
+    public JSONArray contributors(String o, String r) throws Exception  {
+        return repoApi.contributors(o, r);
+    }
+
+    public JSONObject trafficViews(String o, String r) throws Exception  {
+        return repoApi.trafficViews(o, r);
+    }
+
+    public JSONObject trafficClones(String o, String r) throws Exception  {
+        return repoApi.trafficClones(o, r);
+    }
+
+    public JSONArray topics(String o, String r) throws Exception  {
+        return repoApi.topics(o, r);
+    }
+
+    public void setTopics(String o, String r, List<String> names) throws Exception  {
+        repoApi.setTopics(o, r, names);
+    }
+
+    public boolean isStarred(String o, String r) throws Exception  {
+        return repoApi.isStarred(o, r);
+    }
+
+    public void star(String o, String r, boolean on) throws Exception  {
+        repoApi.star(o, r, on);
+    }
+
+    public JSONArray listBranches(String o, String r) throws Exception  {
+        return branchApi.listBranches(o, r);
+    }
+
+    public String getBranchSha(String o, String r, String branch) throws Exception  {
+        return branchApi.getBranchSha(o, r, branch);
+    }
+
+    public void createBranch(String o, String r, String name, String fromSha) throws Exception  {
+        branchApi.createBranch(o, r, name, fromSha);
+    }
+
+    public void deleteBranch(String o, String r, String name) throws Exception  {
+        branchApi.deleteBranch(o, r, name);
+    }
+
+    public boolean mergeBranches(String o, String r, String base, String head, String message) throws Exception  {
+        return branchApi.mergeBranches(o, r, base, head, message);
+    }
+
+    public JSONArray listContents(String o, String r, String path, String branch) throws Exception  {
+        return contentApi.listContents(o, r, path, branch);
+    }
+
+    public JSONObject getContent(String o, String r, String path, String branch) throws Exception  {
+        return contentApi.getContent(o, r, path, branch);
+    }
+
+    public String contentRawPath(String o, String r, String path, String branch) throws IOException  {
+        return contentApi.contentRawPath(o, r, path, branch);
+    }
+
+    public byte[] getFileBytes(String o, String r, String path, String branch, int maxBytes) throws Exception  {
+        return contentApi.getFileBytes(o, r, path, branch, maxBytes);
+    }
+
+    public JSONObject putFileContent(String o, String r, String path, byte[] data, String message, String branch, String sha) throws Exception  {
+        return contentApi.putFileContent(o, r, path, data, message, branch, sha);
+    }
+
+    public HttpURLConnection openZipball(String o, String r, String ref) throws Exception  {
+        return contentApi.openZipball(o, r, ref);
+    }
+
+    public HttpURLConnection openTarball(String o, String r, String ref) throws Exception  {
+        return contentApi.openTarball(o, r, ref);
+    }
+
+    public void putFile(String o, String r, String path, byte[] data, String message) throws Exception  {
+        contentApi.putFile(o, r, path, data, message);
+    }
+
+    public JSONObject treeRecursive(String o, String r, String branch, String etag, String[] etagOut) throws Exception  {
+        return gitDataApi.treeRecursive(o, r, branch, etag, etagOut);
+    }
+
+    public String createBlob(String o, String r, byte[] data) throws Exception  {
+        return gitDataApi.createBlob(o, r, data);
+    }
+
+    public String createCommitOnBranch(String o, String r, String branch, String expectedHead, String message, List<Addition> adds) throws Exception  {
+        return gitDataApi.createCommitOnBranch(o, r, branch, expectedHead, message, adds);
+    }
+
+    public String commitEntries(String o, String r, String branch, List<TreeEntry> entries, String message) throws Exception  {
+        return gitDataApi.commitEntries(o, r, branch, entries, message);
+    }
+
+    public String commitTree(String o, String r, String parentSha, List<TreeEntry> entries, String message) throws Exception  {
+        return gitDataApi.commitTree(o, r, parentSha, entries, message);
+    }
+
+    public void moveBranch(String o, String r, String branch, String sha, boolean force) throws Exception  {
+        gitDataApi.moveBranch(o, r, branch, sha, force);
+    }
+
+    public List<TreeEntry> listBlobsUnder(String o, String r, String branch, String folder) throws Exception  {
+        return gitDataApi.listBlobsUnder(o, r, branch, folder);
+    }
+
+    public java.util.Map<String, String> blobShaMap(String o, String r, String branch) throws Exception  {
+        return gitDataApi.blobShaMap(o, r, branch);
+    }
+
+    public List<String> listFilesUnder(String o, String r, String branch, String folder) throws Exception  {
+        return gitDataApi.listFilesUnder(o, r, branch, folder);
+    }
+
+    public List<BlobInfo> listAllBlobs(String o, String r, String branch) throws Exception  {
+        return gitDataApi.listAllBlobs(o, r, branch);
+    }
+
+    public List<BlobInfo> listBlobsForPaths(String o, String r, String branch, List<String> sel) throws Exception  {
+        return gitDataApi.listBlobsForPaths(o, r, branch, sel);
+    }
+
+    public String restoreToCommit(String o, String r, String branch, String targetSha, String message) throws Exception  {
+        return gitDataApi.restoreToCommit(o, r, branch, targetSha, message);
+    }
+
+    public JSONArray listCommits(String o, String r, String branch, int page, int perPage) throws Exception  {
+        return commitApi.listCommits(o, r, branch, page, perPage);
+    }
+
+    public JSONObject getCommit(String o, String r, String sha) throws Exception  {
+        return commitApi.getCommit(o, r, sha);
+    }
+
+    public String resolveCommitSha(String o, String r, String ref) throws Exception  {
+        return commitApi.resolveCommitSha(o, r, ref);
+    }
+
+    public String getParentSha(String o, String r, String commitSha) throws Exception  {
+        return commitApi.getParentSha(o, r, commitSha);
+    }
+
+    public JSONObject compare(String o, String r, String base, String head) throws Exception  {
+        return commitApi.compare(o, r, base, head);
+    }
+
+    public JSONArray listCommitsPath(String o, String r, String branch, String path, int page, int perPage) throws Exception  {
+        return commitApi.listCommitsPath(o, r, branch, path, page, perPage);
+    }
+
+    public JSONArray listWorkflows(String o, String r) throws Exception  {
+        return actionsApi.listWorkflows(o, r);
+    }
+
+    public JSONObject listRuns(String o, String r, long workflowId, String status, String branch, int page, int perPage) throws Exception  {
+        return actionsApi.listRuns(o, r, workflowId, status, branch, page, perPage);
+    }
+
+    public JSONObject listRuns(String o, String r, long workflowId, String status, String branch, String event, String actor, int page, int perPage) throws Exception  {
+        return actionsApi.listRuns(o, r, workflowId, status, branch, event, actor, page, perPage);
+    }
+
+    public JSONObject getRun(String o, String r, long runId) throws Exception  {
+        return actionsApi.getRun(o, r, runId);
+    }
+
+    public JSONObject getJob(String o, String r, long jobId) throws Exception  {
+        return actionsApi.getJob(o, r, jobId);
+    }
+
+    public JSONArray listJobs(String o, String r, long runId) throws Exception  {
+        return actionsApi.listJobs(o, r, runId);
+    }
+
+    public JSONArray listRunArtifacts(String o, String r, long runId) throws Exception  {
+        return actionsApi.listRunArtifacts(o, r, runId);
+    }
+
+    public void rerunRun(String o, String r, long runId) throws Exception  {
+        actionsApi.rerunRun(o, r, runId);
+    }
+
+    public void rerunFailed(String o, String r, long runId) throws Exception  {
+        actionsApi.rerunFailed(o, r, runId);
+    }
+
+    public void rerunJob(String o, String r, long jobId) throws Exception  {
+        actionsApi.rerunJob(o, r, jobId);
+    }
+
+    public void cancelRun(String o, String r, long runId, boolean force) throws Exception  {
+        actionsApi.cancelRun(o, r, runId, force);
+    }
+
+    public void deleteRun(String o, String r, long runId) throws Exception  {
+        actionsApi.deleteRun(o, r, runId);
     }
 
     public String jobLogsPath(String o, String r, long jobId) {
-        return repo(o, r) + "/actions/jobs/" + jobId + "/logs";
+        return actionsApi.jobLogsPath(o, r, jobId);
     }
 
     public String runLogsPath(String o, String r, long runId) {
-        return repo(o, r) + "/actions/runs/" + runId + "/logs";
+        return actionsApi.runLogsPath(o, r, runId);
     }
 
-    public void dispatchWorkflow(String o, String r, long workflowId, String ref, JSONObject inputs) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("ref", ref);
-        if (inputs != null && inputs.length() > 0) b.put("inputs", inputs);
-        request("POST", repo(o, r) + "/actions/workflows/" + workflowId + "/dispatches", b);
+    public void dispatchWorkflow(String o, String r, long workflowId, String ref, JSONObject inputs) throws Exception  {
+        actionsApi.dispatchWorkflow(o, r, workflowId, ref, inputs);
     }
 
-    public void setWorkflowEnabled(String o, String r, long workflowId, boolean enabled) throws Exception {
-        request("PUT", repo(o, r) + "/actions/workflows/" + workflowId + (enabled ? "/enable" : "/disable"), null);
+    public void setWorkflowEnabled(String o, String r, long workflowId, boolean enabled) throws Exception  {
+        actionsApi.setWorkflowEnabled(o, r, workflowId, enabled);
     }
 
-    public JSONArray listArtifacts(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/artifacts?per_page=100").optJSONArray("artifacts");
+    public JSONArray listArtifacts(String o, String r) throws Exception  {
+        return actionsApi.listArtifacts(o, r);
     }
 
-    public void deleteArtifact(String o, String r, long id) throws Exception {
-        request("DELETE", repo(o, r) + "/actions/artifacts/" + id, null);
+    public void deleteArtifact(String o, String r, long id) throws Exception  {
+        actionsApi.deleteArtifact(o, r, id);
     }
 
     public String artifactZipPath(String o, String r, long id) {
-        return repo(o, r) + "/actions/artifacts/" + id + "/zip";
+        return actionsApi.artifactZipPath(o, r, id);
     }
 
-    public JSONArray listCaches(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/caches?per_page=100&sort=last_accessed_at&direction=desc")
-                .optJSONArray("actions_caches");
+    public JSONArray listCaches(String o, String r) throws Exception  {
+        return actionsApi.listCaches(o, r);
     }
 
-    public JSONObject cacheUsage(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/cache/usage");
+    public JSONObject cacheUsage(String o, String r) throws Exception  {
+        return actionsApi.cacheUsage(o, r);
     }
 
-    public void deleteCache(String o, String r, long id) throws Exception {
-        request("DELETE", repo(o, r) + "/actions/caches/" + id, null);
+    public void deleteCache(String o, String r, long id) throws Exception  {
+        actionsApi.deleteCache(o, r, id);
     }
 
-    public JSONArray listVariables(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/variables?per_page=100").optJSONArray("variables");
+    public JSONArray listVariables(String o, String r) throws Exception  {
+        return actionsApi.listVariables(o, r);
     }
 
-    public void createVariable(String o, String r, String name, String value) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("name", name);
-        b.put("value", value);
-        request("POST", repo(o, r) + "/actions/variables", b);
+    public void createVariable(String o, String r, String name, String value) throws Exception  {
+        actionsApi.createVariable(o, r, name, value);
     }
 
-    public void updateVariable(String o, String r, String name, String value) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("name", name);
-        b.put("value", value);
-        request("PATCH", repo(o, r) + "/actions/variables/" + enc(name), b);
+    public void updateVariable(String o, String r, String name, String value) throws Exception  {
+        actionsApi.updateVariable(o, r, name, value);
     }
 
-    public void deleteVariable(String o, String r, String name) throws Exception {
-        request("DELETE", repo(o, r) + "/actions/variables/" + enc(name), null);
+    public void deleteVariable(String o, String r, String name) throws Exception  {
+        actionsApi.deleteVariable(o, r, name);
     }
 
-    public JSONArray listSecrets(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/secrets?per_page=100").optJSONArray("secrets");
+    public JSONArray listSecrets(String o, String r) throws Exception  {
+        return actionsApi.listSecrets(o, r);
     }
 
-    public void deleteSecret(String o, String r, String name) throws Exception {
-        request("DELETE", repo(o, r) + "/actions/secrets/" + enc(name), null);
+    public void deleteSecret(String o, String r, String name) throws Exception  {
+        actionsApi.deleteSecret(o, r, name);
     }
 
-    // ------------------------------------------------------------------ releases
-
-    public JSONArray listReleases(String o, String r, int page, int perPage) throws Exception {
-        return arr(repo(o, r) + "/releases?per_page=" + perPage + "&page=" + page);
+    public JSONObject secretsPublicKey(String o, String r) throws Exception  {
+        return actionsApi.secretsPublicKey(o, r);
     }
 
-    public JSONObject getRelease(String o, String r, long id) throws Exception {
-        return obj(repo(o, r) + "/releases/" + id);
+    public void putSecret(String o, String r, String name, String value) throws Exception  {
+        actionsApi.putSecret(o, r, name, value);
     }
 
-    public JSONObject createRelease(String o, String r, JSONObject body) throws Exception {
-        return new JSONObject(request("POST", repo(o, r) + "/releases", body));
+    public JSONObject actionsPermissions(String o, String r) throws Exception  {
+        return actionsApi.actionsPermissions(o, r);
     }
 
-    public JSONObject updateRelease(String o, String r, long id, JSONObject body) throws Exception {
-        return new JSONObject(request("PATCH", repo(o, r) + "/releases/" + id, body));
+    public void setActionsPermissions(String o, String r, boolean enabled, String allowedActions) throws Exception  {
+        actionsApi.setActionsPermissions(o, r, enabled, allowedActions);
     }
 
-    public void deleteRelease(String o, String r, long id) throws Exception {
-        request("DELETE", repo(o, r) + "/releases/" + id, null);
+    public JSONObject workflowPermissions(String o, String r) throws Exception  {
+        return actionsApi.workflowPermissions(o, r);
     }
 
-    public void deleteTag(String o, String r, String tag) throws Exception {
-        request("DELETE", repo(o, r) + "/git/refs/tags/" + enc(tag), null);
+    public void setWorkflowPermissions(String o, String r, String defaultPerm, boolean canApprove) throws Exception  {
+        actionsApi.setWorkflowPermissions(o, r, defaultPerm, canApprove);
     }
 
-    public JSONObject generateNotes(String o, String r, String tag, String target) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("tag_name", tag);
-        if (target != null && !target.isEmpty()) b.put("target_commitish", target);
-        return new JSONObject(request("POST", repo(o, r) + "/releases/generate-notes", b));
+    public JSONObject lastSuccessfulRun(String o, String r, JSONObject run) throws Exception  {
+        return actionsApi.lastSuccessfulRun(o, r, run);
     }
 
-    public void deleteAsset(String o, String r, long id) throws Exception {
-        request("DELETE", repo(o, r) + "/releases/assets/" + id, null);
+    public JSONObject compareRefs(String o, String r, String base, String head) throws Exception  {
+        return actionsApi.compare(o, r, base, head);
+    }
+
+    public JSONObject getWorkflow(String o, String r, long workflowId) throws Exception  {
+        return actionsApi.getWorkflow(o, r, workflowId);
+    }
+
+    public JSONArray listReleases(String o, String r, int page, int perPage) throws Exception  {
+        return releaseApi.listReleases(o, r, page, perPage);
+    }
+
+    public JSONObject getRelease(String o, String r, long id) throws Exception  {
+        return releaseApi.getRelease(o, r, id);
+    }
+
+    public JSONObject createRelease(String o, String r, JSONObject body) throws Exception  {
+        return releaseApi.createRelease(o, r, body);
+    }
+
+    public JSONObject updateRelease(String o, String r, long id, JSONObject body) throws Exception  {
+        return releaseApi.updateRelease(o, r, id, body);
+    }
+
+    public void deleteRelease(String o, String r, long id) throws Exception  {
+        releaseApi.deleteRelease(o, r, id);
+    }
+
+    public void deleteTag(String o, String r, String tag) throws Exception  {
+        releaseApi.deleteTag(o, r, tag);
+    }
+
+    public JSONObject generateNotes(String o, String r, String tag, String target) throws Exception  {
+        return releaseApi.generateNotes(o, r, tag, target);
+    }
+
+    public void deleteAsset(String o, String r, long id) throws Exception  {
+        releaseApi.deleteAsset(o, r, id);
     }
 
     public String assetPath(String o, String r, long id) {
-        return repo(o, r) + "/releases/assets/" + id;
+        return releaseApi.assetPath(o, r, id);
     }
 
-    public JSONObject uploadAsset(String o, String r, long releaseId, String name, String contentType,
-                                  InputStream in, long size, Progress p) throws Exception {
-        String url = UPLOAD_BASE + repo(o, r) + "/releases/" + releaseId + "/assets?name=" + qe(name);
-        HttpURLConnection c = open("POST", url, JSON, true);
-        c.setDoOutput(true);
-        c.setRequestProperty("Content-Type", contentType == null ? "application/octet-stream" : contentType);
-        if (size > 0) c.setFixedLengthStreamingMode(size);
-        else c.setChunkedStreamingMode(65536);
-        c.setReadTimeout(600000);
-        OutputStream os = c.getOutputStream();
-        try {
-            copy(in, os, size, p);
-        } finally {
-            os.close();
-        }
-        int code = c.getResponseCode();
-        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
-        String resp = is == null ? "" : readAll(is);
-        c.disconnect();
-        if (code >= 400) throw toException(code, resp);
-        return new JSONObject(resp);
+    public JSONObject uploadAsset(String o, String r, long releaseId, String name, String contentType, InputStream in, long size, Progress p) throws Exception  {
+        return releaseApi.uploadAsset(o, r, releaseId, name, contentType, in, size, p);
     }
 
-    // ------------------------------------------------------------------ issues / pulls
-
-    public JSONArray listIssues(String o, String r, String state, int page, int perPage) throws Exception {
-        return arr(repo(o, r) + "/issues?state=" + qe(state) + "&per_page=" + perPage + "&page=" + page);
+    public JSONObject generateNotes(String o, String r, String tag, String target, String previousTag) throws Exception  {
+        return releaseApi.generateNotes(o, r, tag, target, previousTag);
     }
 
-    public JSONObject getIssue(String o, String r, long number) throws Exception {
-        return obj(repo(o, r) + "/issues/" + number);
+    public JSONArray listIssues(String o, String r, String state, int page, int perPage) throws Exception  {
+        return issueApi.listIssues(o, r, state, page, perPage);
     }
 
-    public JSONArray listComments(String o, String r, long number) throws Exception {
-        return arr(repo(o, r) + "/issues/" + number + "/comments?per_page=100");
+    public JSONObject getIssue(String o, String r, long number) throws Exception  {
+        return issueApi.getIssue(o, r, number);
     }
 
-    public JSONObject createIssue(String o, String r, String title, String body) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("title", title);
-        if (body != null && !body.isEmpty()) b.put("body", body);
-        return new JSONObject(request("POST", repo(o, r) + "/issues", b));
+    public JSONArray listComments(String o, String r, long number) throws Exception  {
+        return issueApi.listComments(o, r, number);
     }
 
-    public void setIssueState(String o, String r, long number, boolean open) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("state", open ? "open" : "closed");
-        request("PATCH", repo(o, r) + "/issues/" + number, b);
+    public JSONObject createIssue(String o, String r, String title, String body) throws Exception  {
+        return issueApi.createIssue(o, r, title, body);
     }
 
-    public void addComment(String o, String r, long number, String body) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("body", body);
-        request("POST", repo(o, r) + "/issues/" + number + "/comments", b);
+    public void setIssueState(String o, String r, long number, boolean open) throws Exception  {
+        issueApi.setIssueState(o, r, number, open);
     }
 
-    public JSONObject getPull(String o, String r, long number) throws Exception {
-        return obj(repo(o, r) + "/pulls/" + number);
+    public void addComment(String o, String r, long number, String body) throws Exception  {
+        issueApi.addComment(o, r, number, body);
     }
 
-    public void mergePull(String o, String r, long number, String method) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("merge_method", method);
-        request("PUT", repo(o, r) + "/pulls/" + number + "/merge", b);
+    public JSONObject getPull(String o, String r, long number) throws Exception  {
+        return issueApi.getPull(o, r, number);
     }
 
-    public void mergePull(String o, String r, long number, String method, String title, String message) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("merge_method", method);
-        if (title != null && !title.isEmpty()) b.put("commit_title", title);
-        if (message != null && !message.isEmpty()) b.put("commit_message", message);
-        request("PUT", repo(o, r) + "/pulls/" + number + "/merge", b);
+    public void mergePull(String o, String r, long number, String method) throws Exception  {
+        issueApi.mergePull(o, r, number, method);
     }
 
-    public JSONArray listPullFiles(String o, String r, long number, int page) throws Exception {
-        return arr(repo(o, r) + "/pulls/" + number + "/files?per_page=100&page=" + page);
+    public void mergePull(String o, String r, long number, String method, String title, String message) throws Exception  {
+        issueApi.mergePull(o, r, number, method, title, message);
     }
 
-    public JSONArray listPullCommits(String o, String r, long number) throws Exception {
-        return arr(repo(o, r) + "/pulls/" + number + "/commits?per_page=100");
+    public JSONArray listPullFiles(String o, String r, long number, int page) throws Exception  {
+        return issueApi.listPullFiles(o, r, number, page);
     }
 
-    public JSONArray listReviews(String o, String r, long number) throws Exception {
-        return arr(repo(o, r) + "/pulls/" + number + "/reviews?per_page=50");
+    public JSONArray listPullCommits(String o, String r, long number) throws Exception  {
+        return issueApi.listPullCommits(o, r, number);
     }
 
-    public void createReview(String o, String r, long number, String event, String body) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("event", event);
-        if (body != null && !body.isEmpty()) b.put("body", body);
-        request("POST", repo(o, r) + "/pulls/" + number + "/reviews", b);
+    public JSONArray listReviews(String o, String r, long number) throws Exception  {
+        return issueApi.listReviews(o, r, number);
     }
 
-    public JSONObject createPull(String o, String r, String title, String body, String head, String base,
-                                 boolean draft) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("title", title);
-        b.put("head", head);
-        b.put("base", base);
-        if (body != null && !body.isEmpty()) b.put("body", body);
-        b.put("draft", draft);
-        return new JSONObject(request("POST", repo(o, r) + "/pulls", b));
+    public JSONArray listPullComments(String o, String r, long number, int page) throws Exception  {
+        return issueApi.listPullComments(o, r, number, page);
     }
 
-    public JSONObject compare(String o, String r, String base, String head) throws Exception {
-        return obj(repo(o, r) + "/compare/" + enc(base) + "..." + enc(head) + "?per_page=100");
+    public JSONObject createReview(String o, String r, long number, String commitId, String event, String body,
+                                   JSONArray comments) throws Exception  {
+        return issueApi.createReview(o, r, number, commitId, event, body, comments);
     }
 
-    public JSONArray listCommitsPath(String o, String r, String branch, String path, int page, int perPage) throws Exception {
-        return arr(repo(o, r) + "/commits?sha=" + qe(branch) + "&path=" + qe(path) + "&per_page=" + perPage
-                + "&page=" + page);
+    public void submitReview(String o, String r, long number, long reviewId, String event, String body) throws Exception  {
+        issueApi.submitReview(o, r, number, reviewId, event, body);
     }
 
-    public JSONObject generateNotes(String o, String r, String tag, String target, String previousTag) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("tag_name", tag);
-        if (target != null && !target.isEmpty()) b.put("target_commitish", target);
-        if (previousTag != null && !previousTag.isEmpty()) b.put("previous_tag_name", previousTag);
-        return new JSONObject(request("POST", repo(o, r) + "/releases/generate-notes", b));
+    public void deleteReview(String o, String r, long number, long reviewId) throws Exception  {
+        issueApi.deleteReview(o, r, number, reviewId);
     }
 
-    // ------------------------------------------------------------------ code search / notifications
-
-    public JSONObject searchCode(String o, String r, String q, int page, int perPage) throws Exception {
-        return obj("/search/code?q=" + qe(q + " repo:" + o + "/" + r) + "&per_page=" + perPage + "&page=" + page);
+    public void createReview(String o, String r, long number, String event, String body) throws Exception  {
+        issueApi.createReview(o, r, number, event, body);
     }
 
-    public JSONArray listNotifications(boolean all, int page, int perPage) throws Exception {
-        return arr("/notifications?all=" + all + "&per_page=" + perPage + "&page=" + page);
+    public JSONObject createPull(String o, String r, String title, String body, String head, String base, boolean draft) throws Exception  {
+        return issueApi.createPull(o, r, title, body, head, base, draft);
     }
 
-    public void markNotificationRead(String id) throws Exception {
-        request("PATCH", "/notifications/threads/" + seg(id), null);
+    public JSONObject searchCode(String o, String r, String q, int page, int perPage) throws Exception  {
+        return searchApi.searchCode(o, r, q, page, perPage);
     }
 
-    public void markAllNotificationsRead() throws Exception {
-        request("PUT", "/notifications", new JSONObject());
+    public JSONObject searchRepos(String q, int page, int perPage) throws Exception  {
+        return searchApi.searchRepos(q, page, perPage);
     }
 
-    // ------------------------------------------------------------------ secrets (encrypted writes)
-
-    public JSONObject secretsPublicKey(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/secrets/public-key");
+    public JSONObject searchCodeQuery(String q, int page, int perPage) throws Exception  {
+        return searchApi.searchCodeQuery(q, page, perPage);
     }
 
-    /** Creates or updates an Actions secret: the value is sealed with the repository public key first. */
-    public void putSecret(String o, String r, String name, String value) throws Exception {
-        JSONObject pk = secretsPublicKey(o, r);
-        byte[] key = Base64.decode(pk.getString("key"), Base64.DEFAULT);
-        byte[] sealed = SealedBox.seal(value.getBytes(StandardCharsets.UTF_8), key);
-        JSONObject b = new JSONObject();
-        b.put("encrypted_value", Base64.encodeToString(sealed, Base64.NO_WRAP));
-        b.put("key_id", pk.getString("key_id"));
-        request("PUT", repo(o, r) + "/actions/secrets/" + enc(name), b);
+    public JSONObject searchIssues(String q, int page, int perPage) throws Exception  {
+        return searchApi.searchIssues(q, page, perPage);
     }
 
-    // ------------------------------------------------------------------ Actions permissions
-
-    public JSONObject actionsPermissions(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/permissions");
+    public JSONArray listNotifications(boolean all, int page, int perPage) throws Exception  {
+        return notificationApi.listNotifications(all, page, perPage);
     }
 
-    public void setActionsPermissions(String o, String r, boolean enabled, String allowedActions) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("enabled", enabled);
-        if (enabled && allowedActions != null && !allowedActions.isEmpty()) b.put("allowed_actions", allowedActions);
-        request("PUT", repo(o, r) + "/actions/permissions", b);
+    public void markNotificationRead(String id) throws Exception  {
+        notificationApi.markNotificationRead(id);
     }
 
-    public JSONObject workflowPermissions(String o, String r) throws Exception {
-        return obj(repo(o, r) + "/actions/permissions/workflow");
+    public void markAllNotificationsRead() throws Exception  {
+        notificationApi.markAllNotificationsRead();
     }
 
-    public void setWorkflowPermissions(String o, String r, String defaultPerm, boolean canApprove) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("default_workflow_permissions", defaultPerm);
-        b.put("can_approve_pull_request_reviews", canApprove);
-        request("PUT", repo(o, r) + "/actions/permissions/workflow", b);
+    public boolean vulnerabilityAlerts(String o, String r) throws Exception  {
+        return securityApi.vulnerabilityAlerts(o, r);
     }
 
-    public JSONObject getWorkflow(String o, String r, long workflowId) throws Exception {
-        return obj(repo(o, r) + "/actions/workflows/" + workflowId);
+    public void setVulnerabilityAlerts(String o, String r, boolean on) throws Exception  {
+        securityApi.setVulnerabilityAlerts(o, r, on);
     }
 
-    // ------------------------------------------------------------------ security
-
-    /** True when Dependabot alerts are enabled (the API answers 204 when on and 404 when off). */
-    public boolean vulnerabilityAlerts(String o, String r) throws Exception {
-        try {
-            request("GET", repo(o, r) + "/vulnerability-alerts", null);
-            return true;
-        } catch (ApiException e) {
-            if (e.code == 404) return false;
-            throw e;
-        }
+    public boolean automatedSecurityFixes(String o, String r) throws Exception  {
+        return securityApi.automatedSecurityFixes(o, r);
     }
 
-    public void setVulnerabilityAlerts(String o, String r, boolean on) throws Exception {
-        request(on ? "PUT" : "DELETE", repo(o, r) + "/vulnerability-alerts", null);
+    public void setAutomatedSecurityFixes(String o, String r, boolean on) throws Exception  {
+        securityApi.setAutomatedSecurityFixes(o, r, on);
     }
 
-    public boolean automatedSecurityFixes(String o, String r) throws Exception {
-        try {
-            return obj(repo(o, r) + "/automated-security-fixes").optBoolean("enabled");
-        } catch (ApiException e) {
-            if (e.code == 404) return false;
-            throw e;
-        }
+    public JSONObject getBranchProtection(String o, String r, String branch) throws Exception  {
+        return securityApi.getBranchProtection(o, r, branch);
     }
 
-    public void setAutomatedSecurityFixes(String o, String r, boolean on) throws Exception {
-        request(on ? "PUT" : "DELETE", repo(o, r) + "/automated-security-fixes", null);
+    public void putBranchProtection(String o, String r, String branch, JSONObject body) throws Exception  {
+        securityApi.putBranchProtection(o, r, branch, body);
     }
 
-    // ------------------------------------------------------------------ branch protection
-
-    /** Returns null when the branch has no protection rule. */
-    public JSONObject getBranchProtection(String o, String r, String branch) throws Exception {
-        try {
-            return new JSONObject(request("GET", repo(o, r) + "/branches/" + enc(branch) + "/protection", null));
-        } catch (ApiException e) {
-            if (e.code == 404) return null;
-            throw e;
-        }
+    public void deleteBranchProtection(String o, String r, String branch) throws Exception  {
+        securityApi.deleteBranchProtection(o, r, branch);
     }
 
-    public void putBranchProtection(String o, String r, String branch, JSONObject body) throws Exception {
-        request("PUT", repo(o, r) + "/branches/" + enc(branch) + "/protection", body);
+    public JSONArray collaborators(String o, String r) throws Exception  {
+        return collaboratorApi.collaborators(o, r);
     }
 
-    public void deleteBranchProtection(String o, String r, String branch) throws Exception {
-        request("DELETE", repo(o, r) + "/branches/" + enc(branch) + "/protection", null);
+    public JSONArray invitations(String o, String r) throws Exception  {
+        return collaboratorApi.invitations(o, r);
     }
 
-    // ------------------------------------------------------------------ collaborators
-
-    public JSONArray collaborators(String o, String r) throws Exception {
-        return arr(repo(o, r) + "/collaborators?per_page=100&affiliation=all");
+    public void addCollaborator(String o, String r, String user, String permission) throws Exception  {
+        collaboratorApi.addCollaborator(o, r, user, permission);
     }
 
-    public JSONArray invitations(String o, String r) throws Exception {
-        return arr(repo(o, r) + "/invitations?per_page=100");
+    public void removeCollaborator(String o, String r, String user) throws Exception  {
+        collaboratorApi.removeCollaborator(o, r, user);
     }
 
-    public void addCollaborator(String o, String r, String user, String permission) throws Exception {
-        JSONObject b = new JSONObject();
-        b.put("permission", permission);
-        request("PUT", repo(o, r) + "/collaborators/" + enc(user), b);
+    public void deleteInvitation(String o, String r, long id) throws Exception  {
+        collaboratorApi.deleteInvitation(o, r, id);
     }
 
-    public void removeCollaborator(String o, String r, String user) throws Exception {
-        request("DELETE", repo(o, r) + "/collaborators/" + enc(user), null);
+    public TextResult readTail(String path, String accept, int maxBytes) throws Exception  {
+        return downloadApi.readTail(path, accept, maxBytes);
     }
 
-    public void deleteInvitation(String o, String r, long id) throws Exception {
-        request("DELETE", repo(o, r) + "/invitations/" + id, null);
+    public Piece readFrom(String path, String accept, long from) throws Exception  {
+        return downloadApi.readFrom(path, accept, from);
     }
 }

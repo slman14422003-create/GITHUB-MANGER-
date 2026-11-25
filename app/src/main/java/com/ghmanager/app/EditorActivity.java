@@ -5,6 +5,8 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Base64;
@@ -19,6 +21,8 @@ import android.widget.ScrollView;
 import android.widget.LinearLayout;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 
 import org.json.JSONArray;
@@ -61,6 +65,14 @@ public class EditorActivity extends BaseRepoActivity {
     }
 
     private final List<Tab> tabs = new ArrayList<>();
+    private final Handler draftHandler = new Handler(Looper.getMainLooper());
+    private final Runnable draftTick = new Runnable() {
+        @Override
+        public void run() {
+            saveDraftAsync();
+        }
+    };
+    private ActivityResultLauncher<Intent> conflictLauncher;
     private Tab cur;
     private boolean suppress = false;
     private CodeEditText editor;
@@ -114,6 +126,13 @@ public class EditorActivity extends BaseRepoActivity {
         editorInfoView = findViewById(R.id.editorInfo);
         setupTree();
 
+        conflictLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), res -> {
+            if (res.getResultCode() != android.app.Activity.RESULT_OK || cur == null) return;
+            cur.dirty = false;
+            cur.isNew = false;
+            load(cur);
+        });
+
         editor.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -130,13 +149,17 @@ public class EditorActivity extends BaseRepoActivity {
                     rebuildTabs();
                 }
                 if (!suppress && highlighter != null) highlighter.schedule(380);
+                if (!suppress && cur != null && cur.dirty) scheduleDraft();
             }
         });
 
         btnRefresh.setOnClickListener(v -> {
             if (cur == null || cur.isNew) return;
             if (cur.dirty) confirm(getString(R.string.discard_title), getString(R.string.discard_msg),
-                    R.string.discard, () -> load(cur));
+                    R.string.discard, () -> {
+                        dropDraft(cur);
+                        load(cur);
+                    });
             else load(cur);
         });
         action(btnA1, R.drawable.ic_check, R.string.save, v -> saveDialog());
@@ -182,6 +205,7 @@ public class EditorActivity extends BaseRepoActivity {
     }
 
     private void switchRepo(String o, String r, String b) {
+        dropAllDrafts();
         owner = o;
         repo = r;
         branch = b;
@@ -302,7 +326,10 @@ public class EditorActivity extends BaseRepoActivity {
             proceed.run();
         } else {
             confirm(getString(R.string.unsaved_files_title), getString(R.string.unsaved_files_msg, n),
-                    R.string.discard, proceed);
+                    R.string.discard, () -> {
+                        dropAllDrafts();
+                        proceed.run();
+                    });
         }
         return true;
     }
@@ -331,6 +358,93 @@ public class EditorActivity extends BaseRepoActivity {
             t.base = "";
         }
         select(t);
+        if (isNew) offerDraft(t);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        draftHandler.removeCallbacks(draftTick);
+        saveCurrentState();
+        for (Tab t : tabs) {
+            if (t.loaded && t.dirty && t.editable && !t.isImage) Drafts.save(this, draftOf(t, t.text));
+        }
+    }
+
+    private Drafts.Draft draftOf(Tab t, String text) {
+        Drafts.Draft d = new Drafts.Draft();
+        d.acc = Accounts.activeId(this);
+        d.owner = owner;
+        d.repo = repo;
+        d.branch = branch;
+        d.path = t.path;
+        d.text = text;
+        d.baseSha = t.sha;
+        d.baseText = t.base == null ? "" : t.base;
+        return d;
+    }
+
+    private void scheduleDraft() {
+        draftHandler.removeCallbacks(draftTick);
+        draftHandler.postDelayed(draftTick, 1500);
+    }
+
+    private void saveDraftAsync() {
+        final Tab t = cur;
+        if (t == null || !t.loaded || !t.dirty || !t.editable || t.isImage) return;
+        final Drafts.Draft d = draftOf(t, editor.getText().toString());
+        final android.content.Context app = getApplicationContext();
+        try {
+            io.execute(() -> Drafts.save(app, d));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void dropDraft(Tab t) {
+        if (t == null) return;
+        draftHandler.removeCallbacks(draftTick);
+        Drafts.delete(this, owner, repo, branch, t.path);
+    }
+
+    private void dropAllDrafts() {
+        draftHandler.removeCallbacks(draftTick);
+        for (Tab t : tabs) if (t.dirty) Drafts.delete(this, owner, repo, branch, t.path);
+    }
+
+    private void offerDraft(final Tab t) {
+        if (!t.loaded || !t.editable || t.isImage) return;
+        final Drafts.Draft d = Drafts.load(this, owner, repo, branch, t.path);
+        if (d == null) return;
+        if (d.text.equals(t.text)) {
+            Drafts.delete(this, owner, repo, branch, t.path);
+            return;
+        }
+        if (d.auto) {
+            applyDraft(t, d);
+            return;
+        }
+        boolean moved = !CommitQueue.same(d.baseSha, t.sha);
+        new Dlg(this)
+                .setTitle(R.string.dr_restore_title)
+                .setMessage(getString(moved ? R.string.dr_restore_changed : R.string.dr_restore_msg, Fmt.agoMs(d.at)))
+                .setPositiveButton(R.string.dr_restore, (x, w) -> applyDraft(t, d))
+                .setNegativeButton(R.string.dr_discard, (x, w) -> Drafts.delete(this, owner, repo, branch, t.path))
+                .show();
+    }
+
+    private void applyDraft(Tab t, Drafts.Draft d) {
+        if (!tabs.contains(t)) return;
+        t.text = d.text;
+        t.sha = d.baseSha;
+        t.base = d.baseText == null ? t.base : d.baseText;
+        t.dirty = true;
+        t.history = new CodeEditText.History();
+        if (d.auto) {
+            d.auto = false;
+            Drafts.save(this, d);
+        }
+        if (t == cur) applyCurrent();
+        rebuildTabs();
     }
 
     private void select(Tab t) {
@@ -496,7 +610,7 @@ public class EditorActivity extends BaseRepoActivity {
         name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         name.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        name.setPadding(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
+        name.setPaddingRelative(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8));
         if (t.dirty) name.setTextColor(Ui.color(this, R.color.warn));
         name.setOnClickListener(v -> {
             if (t != cur) select(t);
@@ -511,7 +625,7 @@ public class EditorActivity extends BaseRepoActivity {
         x.setContentDescription(getString(R.string.close_file));
         x.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        x.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 12), Ui.dp(this, 6));
+        x.setPaddingRelative(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 12), Ui.dp(this, 6));
         x.setOnClickListener(v -> closeTab(t, false));
 
         box.addView(name);
@@ -536,6 +650,7 @@ public class EditorActivity extends BaseRepoActivity {
         }
         int idx = tabs.indexOf(t);
         if (idx < 0) return;
+        if (t.dirty) dropDraft(t);
         tabs.remove(t);
         t.gen++;
         if (tabs.isEmpty()) {
@@ -687,6 +802,7 @@ public class EditorActivity extends BaseRepoActivity {
                         applyCurrent();
                     }
                     rebuildTabs();
+                    offerDraft(t);
                 });
             } catch (Exception e) {
                 post(() -> {
@@ -751,39 +867,126 @@ public class EditorActivity extends BaseRepoActivity {
                     final String savedText = current;
                     final String fromBranch = branch;
                     showProgress(getString(R.string.committing));
+                    final android.content.Context app = getApplicationContext();
+                    final String filePath = t.path;
                     bg(() -> {
+                        String remoteSha;
+                        try {
+                            remoteSha = CommitQueue.remoteSha(api, owner, repo, filePath, fromBranch);
+                        } catch (GitHubApi.ApiException e) {
+                            throw e;
+                        } catch (Exception e) {
+                            if (!toNew && isOffline(e)) {
+                                post(() -> offerQueue(t, savedText, message, fromBranch, currentSha));
+                                return;
+                            }
+                            throw e;
+                        }
+                        if (!toNew && remoteSha != null && remoteSha.equals(GitSha.blob(data))) {
+                            final String same = remoteSha;
+                            post(() -> saved(t, same, savedText, fromBranch, fromBranch, message, false));
+                            return;
+                        }
+                        if (!CommitQueue.same(remoteSha, currentSha)) {
+                            final CommitQueue.Item it = CommitQueue.add(app, owner, repo, fromBranch, filePath,
+                                    message, currentSha, savedText, CommitQueue.CONFLICT);
+                            post(() -> openConflict(it));
+                            return;
+                        }
                         String target = fromBranch;
                         if (toNew) {
                             String head = api.getBranchSha(owner, repo, fromBranch);
                             api.createBranch(owner, repo, newName, head);
                             target = newName;
                         }
-                        JSONObject res = api.putFileContent(owner, repo, t.path, data, message, target, currentSha);
+                        JSONObject res;
+                        try {
+                            res = api.putFileContent(owner, repo, filePath, data, message, target, currentSha);
+                        } catch (GitHubApi.ApiException e) {
+                            if (e.code == 409 && !toNew) {
+                                final CommitQueue.Item it = CommitQueue.add(app, owner, repo, fromBranch, filePath,
+                                        message, currentSha, savedText, CommitQueue.CONFLICT);
+                                post(() -> openConflict(it));
+                                return;
+                            }
+                            throw e;
+                        } catch (java.io.IOException e) {
+                            if (!toNew) {
+                                post(() -> offerQueue(t, savedText, message, fromBranch, currentSha));
+                                return;
+                            }
+                            throw e;
+                        }
                         JSONObject content = res.optJSONObject("content");
                         final String newSha = content == null ? currentSha : content.optString("sha");
                         final String landed = target;
-                        post(() -> {
-                            hideProgress();
-                            t.sha = newSha;
-                            t.isNew = false;
-                            t.dirty = false;
-                            t.text = savedText;
-                            t.base = savedText;
-                            RepoTree.invalidate(getApplicationContext(), owner, repo, fromBranch);
-                            FileDates.invalidate();
-                            rebuildTabs();
-                            if (toNew) {
-                                branch = landed;
-                                treeSnap = null;
-                                if (treePane.getVisibility() == View.VISIBLE) loadTree();
-                                confirm(getString(R.string.ed_branch_saved_title),
-                                        getString(R.string.ed_branch_saved_msg, landed), R.string.df_create_pr,
-                                        () -> prDialog(fromBranch, landed, message));
-                            } else {
-                                toast(R.string.saved);
-                            }
-                        });
+                        post(() -> saved(t, newSha, savedText, fromBranch, landed, message, toNew));
                     });
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void saved(Tab t, String newSha, String savedText, String fromBranch, String landed, String message,
+                       boolean toNew) {
+        hideProgress();
+        draftHandler.removeCallbacks(draftTick);
+        Drafts.delete(this, owner, repo, fromBranch, t.path);
+        CommitQueue.supersede(this, owner, repo, fromBranch, t.path);
+        t.sha = newSha;
+        t.isNew = false;
+        t.dirty = false;
+        t.text = savedText;
+        t.base = savedText;
+        RepoTree.invalidate(getApplicationContext(), owner, repo, fromBranch);
+        FileDates.invalidate();
+        rebuildTabs();
+        if (toNew) {
+            branch = landed;
+            treeSnap = null;
+            if (treePane.getVisibility() == View.VISIBLE) loadTree();
+            confirm(getString(R.string.ed_branch_saved_title),
+                    getString(R.string.ed_branch_saved_msg, landed), R.string.df_create_pr,
+                    () -> prDialog(fromBranch, landed, message));
+        } else {
+            toast(R.string.saved);
+        }
+    }
+
+    private void openConflict(CommitQueue.Item it) {
+        hideProgress();
+        draftHandler.removeCallbacks(draftTick);
+        if (it == null) {
+            toast(R.string.error);
+            return;
+        }
+        Intent i = new Intent(this, ConflictActivity.class);
+        i.putExtra("itemId", it.id);
+        i.putExtra("fromEditor", true);
+        conflictLauncher.launch(i);
+    }
+
+    private void offerQueue(final Tab t, final String text, final String message, final String fromBranch,
+                            final String baseSha) {
+        hideProgress();
+        new Dlg(this)
+                .setTitle(R.string.cq_offline_title)
+                .setMessage(R.string.cq_offline_msg)
+                .setPositiveButton(R.string.cq_queue_it, (d, w) -> {
+                    CommitQueue.Item it = CommitQueue.add(this, owner, repo, fromBranch, t.path, message, baseSha,
+                            text, CommitQueue.PENDING);
+                    if (it == null) {
+                        toast(R.string.error);
+                        return;
+                    }
+                    draftHandler.removeCallbacks(draftTick);
+                    Drafts.delete(this, owner, repo, fromBranch, t.path);
+                    t.dirty = false;
+                    t.text = text;
+                    t.base = text;
+                    rebuildTabs();
+                    CommitQueueJob.schedule(getApplicationContext());
+                    toast(R.string.cq_queued);
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();

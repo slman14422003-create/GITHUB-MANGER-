@@ -260,9 +260,9 @@ public class RepoHomeActivity extends BaseRepoActivity {
             startActivity(ai);
         });
 
-        addRow(new Row(R.drawable.ic_search, true, getString(R.string.cs_title),
-                getString(R.string.cs_sub), false, true),
-                v -> startActivity(repoIntent(CodeSearchActivity.class)));
+        addRow(new Row(R.drawable.ic_search, true, getString(R.string.us_title),
+                getString(R.string.us_repo_sub), false, true),
+                v -> startActivity(repoIntent(SearchActivity.class)));
 
         addRow(new Row(R.drawable.ic_branch, true, getString(R.string.branches),
                 getString(R.string.branches_sub), false, true),

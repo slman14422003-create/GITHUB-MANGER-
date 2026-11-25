@@ -3,6 +3,9 @@ package com.ghmanager.app;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.transition.ChangeBounds;
+import android.transition.ChangeTransform;
+import android.transition.TransitionSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -45,6 +48,18 @@ public class RunDetailActivity extends BaseRepoActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_detail);
         runId = getIntent().getLongExtra("runId", 0);
+        String shared = getIntent().getStringExtra("transitionName");
+        View scroll = findViewById(R.id.detailScroll);
+        if (shared != null && scroll != null && Motion.enabled()) {
+            scroll.setTransitionName(shared);
+            TransitionSet t = new TransitionSet();
+            t.addTransition(new ChangeBounds());
+            t.addTransition(new ChangeTransform());
+            t.setDuration(Motion.slow(this));
+            t.setInterpolator(Motion.standard());
+            getWindow().setSharedElementEnterTransition(t);
+            getWindow().setSharedElementReturnTransition(t);
+        }
         bindHeader(getString(R.string.run_title), repo);
         content = findViewById(R.id.content);
         board = new LiveBoard(this, new LiveBoard.Listener() {
@@ -352,6 +367,13 @@ public class RunDetailActivity extends BaseRepoActivity {
             Button rollback = Ui.button(this, R.string.rollback_before_run, false);
             rollback.setOnClickListener(v -> rollbackBeforeRun());
             back.addView(rollback, weighted());
+            Button compare = Ui.button(this, R.string.cmp_btn, false);
+            compare.setOnClickListener(v -> {
+                Intent ci = repoIntent(RunCompareActivity.class);
+                ci.putExtra("runId", runId);
+                startActivity(ci);
+            });
+            back.addView(compare, weighted());
             content.addView(back);
         }
     }

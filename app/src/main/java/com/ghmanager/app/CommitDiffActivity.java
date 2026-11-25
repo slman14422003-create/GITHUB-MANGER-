@@ -9,6 +9,8 @@ import android.transition.TransitionManager;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -18,7 +20,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CommitDiffActivity extends BaseRepoActivity {
     static final String MODE_COMMIT = "commit";
@@ -36,6 +40,12 @@ public class CommitDiffActivity extends BaseRepoActivity {
     private JSONObject pull;
     private JSONArray files = new JSONArray();
     private JSONArray commits = new JSONArray();
+    private static final int MAX_LINES = 1500;
+    private JSONArray serverComments = new JSONArray();
+    private final Map<String, List<JSONObject>> serverByKey = new HashMap<>();
+    private PendingReviews.Review review = new PendingReviews.Review();
+    private Button reviewBtn;
+    private boolean headAsked;
     private final List<View> bodies = new ArrayList<>();
     private final List<View> arrows = new ArrayList<>();
 
@@ -99,6 +109,7 @@ public class CommitDiffActivity extends BaseRepoActivity {
                 JSONObject pr = null;
                 JSONArray fs = new JSONArray();
                 JSONArray cs = new JSONArray();
+                JSONArray pcs = new JSONArray();
                 if (MODE_COMPARE.equals(mode)) {
                     d = api.compare(owner, repo, base, head);
                     JSONArray a = d.optJSONArray("files");
@@ -113,6 +124,16 @@ public class CommitDiffActivity extends BaseRepoActivity {
                         if (p.length() < 100) break;
                     }
                     cs = api.listPullCommits(owner, repo, number);
+                    try {
+                        for (int pg = 1; pg <= 3; pg++) {
+                            JSONArray p = api.listPullComments(owner, repo, number, pg);
+                            for (int i = 0; i < p.length(); i++) pcs.put(p.get(i));
+                            if (p.length() < 100) break;
+                        }
+                    } catch (GitHubApi.ApiException e) {
+                        if (e.code == 401) throw e;
+                    } catch (java.io.IOException ignored) {
+                    }
                 } else {
                     d = api.getCommit(owner, repo, sha);
                     JSONArray a = d.optJSONArray("files");
@@ -122,6 +143,7 @@ public class CommitDiffActivity extends BaseRepoActivity {
                 final JSONObject fpr = pr;
                 final JSONArray ffs = fs;
                 final JSONArray fcs = cs;
+                final JSONArray fpcs = pcs;
                 post(() -> {
                     loading(false);
                     showStatus(null);
@@ -129,7 +151,13 @@ public class CommitDiffActivity extends BaseRepoActivity {
                     pull = fpr;
                     files = ffs;
                     commits = fcs;
+                    if (MODE_PULL.equals(mode)) {
+                        serverComments = fpcs;
+                        indexComments();
+                        review = PendingReviews.load(this, owner, repo, number);
+                    }
                     render();
+                    checkHeadMoved();
                 });
             } catch (Exception e) {
                 fail(e);
@@ -173,6 +201,8 @@ public class CommitDiffActivity extends BaseRepoActivity {
         bodies.clear();
         arrows.clear();
         content.addView(hero());
+        reviewBtn = null;
+        if (MODE_PULL.equals(mode) && pull != null) content.addView(reviewBar());
 
         if (commits.length() > 0 && !MODE_COMMIT.equals(mode)) {
             content.addView(Ui.sectionTitle(this, getString(R.string.df_commits_n, commits.length())));
@@ -353,7 +383,7 @@ public class CommitDiffActivity extends BaseRepoActivity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12));
+        header.setPaddingRelative(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12));
         header.setBackgroundResource(R.drawable.bg_card_ripple);
         Ui.press(this, header);
 
@@ -452,6 +482,10 @@ public class CommitDiffActivity extends BaseRepoActivity {
         if (!(tag instanceof JSONObject)) return;
         JSONObject f = (JSONObject) tag;
         String patch = f.optString("patch");
+        if (MODE_PULL.equals(mode) && !patch.isEmpty()) {
+            lineBody(body, f.optString("filename"), patch);
+            return;
+        }
         if (patch.isEmpty()) {
             TextView none = new TextView(this);
             none.setText(R.string.df_no_patch);
@@ -464,7 +498,7 @@ public class CommitDiffActivity extends BaseRepoActivity {
         List<CharSequence> chunks = LineDiff.patchChunks(this, patch);
         LinearLayout inner = new LinearLayout(this);
         inner.setOrientation(LinearLayout.VERTICAL);
-        inner.setPadding(Ui.dp(this, 10), Ui.dp(this, 4), Ui.dp(this, 14), Ui.dp(this, 12));
+        inner.setPaddingRelative(Ui.dp(this, 10), Ui.dp(this, 4), Ui.dp(this, 14), Ui.dp(this, 12));
         for (CharSequence cs : chunks) {
             TextView t = new TextView(this);
             t.setText(cs);
@@ -549,8 +583,21 @@ public class CommitDiffActivity extends BaseRepoActivity {
     }
 
     private void moreMenu() {
-        String[] items = {getString(R.string.open_in_github), getString(R.string.copy_link)};
+        final boolean discard = MODE_PULL.equals(mode) && !review.comments.isEmpty();
+        String[] items = discard
+                ? new String[]{getString(R.string.open_in_github), getString(R.string.copy_link),
+                getString(R.string.rv_discard)}
+                : new String[]{getString(R.string.open_in_github), getString(R.string.copy_link)};
         choose(getString(R.string.more), items, (d, which) -> {
+            if (which == 2) {
+                confirm(getString(R.string.rv_discard), getString(R.string.rv_discard_msg), R.string.rv_discard, () -> {
+                    PendingReviews.clear(this, owner, repo, number);
+                    review = new PendingReviews.Review();
+                    updateReviewBtn();
+                    refreshBodies();
+                });
+                return;
+            }
             String url;
             if (MODE_COMMIT.equals(mode)) url = webUrl("/commit/" + sha);
             else if (MODE_PULL.equals(mode)) url = webUrl("/pull/" + number + "/files");
@@ -558,5 +605,182 @@ public class CommitDiffActivity extends BaseRepoActivity {
             if (which == 0) openUrl(url);
             else copy("link", url);
         });
+    }
+
+    private String headSha() {
+        JSONObject h = pull == null ? null : pull.optJSONObject("head");
+        return h == null ? "" : h.optString("sha");
+    }
+
+    private void indexComments() {
+        serverByKey.clear();
+        for (int i = 0; i < serverComments.length(); i++) {
+            JSONObject c = serverComments.optJSONObject(i);
+            if (c == null || c.isNull("line")) continue;
+            int line = c.optInt("line");
+            if (line <= 0) continue;
+            String side = "LEFT".equals(c.optString("side")) ? "LEFT" : "RIGHT";
+            String k = PatchLines.key(c.optString("path"), side, line);
+            List<JSONObject> l = serverByKey.get(k);
+            if (l == null) {
+                l = new ArrayList<>();
+                serverByKey.put(k, l);
+            }
+            l.add(c);
+        }
+    }
+
+    private void checkHeadMoved() {
+        if (!MODE_PULL.equals(mode) || headAsked || review.comments.isEmpty() || review.commitId.isEmpty()) return;
+        final String now = headSha();
+        if (now.isEmpty() || review.commitId.equals(now)) return;
+        headAsked = true;
+        new Dlg(this)
+                .setTitle(R.string.rv_moved_title)
+                .setMessage(getString(R.string.rv_moved_msg, Fmt.shortSha(review.commitId), Fmt.shortSha(now)))
+                .setPositiveButton(R.string.rv_moved_restart, (d, w) -> {
+                    PendingReviews.clear(this, owner, repo, number);
+                    review = new PendingReviews.Review();
+                    updateReviewBtn();
+                    refreshBodies();
+                })
+                .setNegativeButton(R.string.rv_moved_keep, null)
+                .show();
+    }
+
+    private View reviewBar() {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        reviewBtn = Ui.button(this, R.string.pr_review, true);
+        updateReviewBtn();
+        reviewBtn.setOnClickListener(v -> ReviewDialog.show(this, number, headSha(), () -> {
+            review = PendingReviews.load(this, owner, repo, number);
+            load();
+        }));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 14), 0);
+        col.addView(reviewBtn, lp);
+        col.addView(Ui.body(this, getString(R.string.rv_hint), 12, R.color.text_hint));
+        return col;
+    }
+
+    private void updateReviewBtn() {
+        if (reviewBtn == null) return;
+        int n = review.comments.size();
+        reviewBtn.setText(n > 0 ? getString(R.string.rv_btn, n) : getString(R.string.pr_review));
+    }
+
+    private void refreshBodies() {
+        for (View b : bodies) {
+            if (b instanceof LinearLayout && ((LinearLayout) b).getChildCount() > 0) {
+                ((LinearLayout) b).removeAllViews();
+                ensureBody(b);
+            }
+        }
+    }
+
+    private static int alpha(int color, int a) {
+        return (color & 0x00FFFFFF) | (a << 24);
+    }
+
+    private void lineBody(LinearLayout body, String path, String patch) {
+        List<PatchLines.Line> ls = PatchLines.parse(patch);
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setPaddingRelative(0, Ui.dp(this, 4), 0, Ui.dp(this, 10));
+        int limit = Math.min(ls.size(), MAX_LINES);
+        for (int i = 0; i < limit; i++) addLine(inner, path, ls.get(i));
+        if (ls.size() > limit) inner.addView(Ui.body(this, getString(R.string.df_truncated), 12, R.color.text_hint));
+        body.addView(inner, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void addLine(LinearLayout inner, final String path, final PatchLines.Line l) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        if (l.type == '+') row.setBackgroundColor(alpha(Ui.color(this, R.color.ok), 44));
+        else if (l.type == '-') row.setBackgroundColor(alpha(Ui.color(this, R.color.bad), 44));
+        else if (l.type == '@') row.setBackgroundColor(alpha(Ui.color(this, R.color.info), 30));
+        boolean code = l.type == '+' || l.type == '-' || l.type == ' ';
+        final boolean can = l.commentable();
+        PendingReviews.Comment mine = can ? review.find(path, l.side(), l.number()) : null;
+
+        TextView gutter = new TextView(this);
+        gutter.setText(can ? String.valueOf(l.number()) : "");
+        gutter.setTypeface(Typeface.MONOSPACE, mine != null ? Typeface.BOLD : Typeface.NORMAL);
+        gutter.setTextSize(11);
+        gutter.setGravity(Gravity.END);
+        gutter.setTextDirection(View.TEXT_DIRECTION_LTR);
+        gutter.setTextColor(Ui.color(this, mine != null ? R.color.accent : R.color.text_hint));
+        gutter.setPaddingRelative(Ui.dp(this, 6), Ui.dp(this, 2), Ui.dp(this, 8), Ui.dp(this, 2));
+        row.addView(gutter, new LinearLayout.LayoutParams(Ui.dp(this, 52), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView t = new TextView(this);
+        String prefix = l.type == '+' ? "+ " : l.type == '-' ? "\u2212 " : code ? "  " : "";
+        t.setText(prefix + l.text);
+        t.setTypeface(Typeface.MONOSPACE);
+        t.setTextSize(12);
+        t.setTextColor(Ui.color(this, code ? R.color.text_primary : R.color.text_hint));
+        t.setTextDirection(View.TEXT_DIRECTION_LTR);
+        t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        t.setPaddingRelative(0, Ui.dp(this, 2), Ui.dp(this, 8), Ui.dp(this, 2));
+        row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (can) row.setOnClickListener(v -> commentDialog(path, l));
+        inner.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        if (!can) return;
+        List<JSONObject> server = serverByKey.get(PatchLines.key(path, l.side(), l.number()));
+        if (server != null) {
+            for (JSONObject c : server) {
+                JSONObject u = c.optJSONObject("user");
+                String head = (u == null ? "" : u.optString("login")) + " \u00B7 " + Fmt.ago(Fmt.s(c, "created_at"));
+                inner.addView(Ui.noteCard(this, head + "\n" + c.optString("body"), R.color.text_secondary));
+            }
+        }
+        if (mine != null) {
+            TextView n = Ui.noteCard(this, getString(R.string.rv_pending_badge) + "\n" + mine.body,
+                    R.color.text_primary);
+            n.setTextIsSelectable(false);
+            n.setOnClickListener(v -> commentDialog(path, l));
+            inner.addView(n);
+        }
+    }
+
+    private void commentDialog(final String path, final PatchLines.Line l) {
+        final String side = l.side();
+        final int line = l.number();
+        final PendingReviews.Comment ex = review.find(path, side, line);
+        LinearLayout box = Ui.box(this);
+        final EditText e = Ui.editMulti(this, getString(R.string.rv_comment_hint), ex == null ? null : ex.body, 4);
+        box.addView(e);
+        int slash = path.lastIndexOf('/');
+        String name = (slash < 0 ? path : path.substring(slash + 1)) + ":" + line
+                + ("LEFT".equals(side) ? " (\u2212)" : "");
+        androidx.appcompat.app.AlertDialog.Builder b = new Dlg(this).setTitle(name).setView(box);
+        b.setPositiveButton(R.string.save, (d, w) -> {
+            String txt = e.getText().toString().trim();
+            if (txt.isEmpty()) {
+                Dlg.stay(d);
+                return;
+            }
+            if (review.commitId.isEmpty()) review.commitId = headSha();
+            review.upsert(new PendingReviews.Comment(path, side, line, txt));
+            PendingReviews.save(this, owner, repo, number, review);
+            updateReviewBtn();
+            refreshBodies();
+        });
+        if (ex != null) {
+            b.setNeutralButton(R.string.delete, (d, w) -> {
+                review.remove(path, side, line);
+                if (review.comments.isEmpty()) review.commitId = "";
+                PendingReviews.save(this, owner, repo, number, review);
+                updateReviewBtn();
+                refreshBodies();
+            });
+        }
+        b.setNegativeButton(R.string.cancel, null);
+        b.show();
     }
 }

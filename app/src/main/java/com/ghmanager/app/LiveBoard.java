@@ -410,7 +410,7 @@ public class LiveBoard extends LinearLayout {
             addView(steps, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             empty = text(c, 13, R.color.text_hint, false, false);
             empty.setText(R.string.live_no_steps);
-            empty.setPadding(Ui.dp(c, 6), Ui.dp(c, 4), 0, Ui.dp(c, 4));
+            empty.setPaddingRelative(Ui.dp(c, 6), Ui.dp(c, 4), 0, Ui.dp(c, 4));
             steps.addView(empty);
 
             head.setOnClickListener(v -> {

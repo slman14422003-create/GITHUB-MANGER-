@@ -245,6 +245,9 @@ public final class Accounts {
                 break;
             }
         }
+        RepoCache.clearAccount(c, id);
+        ListCache.clearAccount(c, id);
+        TokenExpiry.forget(c, id);
         if (list.isEmpty()) {
             Store.clear(c);
             return 0;

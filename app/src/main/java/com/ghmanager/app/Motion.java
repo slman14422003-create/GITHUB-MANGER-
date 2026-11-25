@@ -41,7 +41,15 @@ public final class Motion {
 
     /** False when the user turned animations off in the system settings: show things at once. */
     public static boolean enabled() {
-        return ValueAnimator.areAnimatorsEnabled();
+        if (android.os.Build.VERSION.SDK_INT >= 26) return ValueAnimator.areAnimatorsEnabled();
+        Context c = App.context();
+        if (c == null) return true;
+        try {
+            return android.provider.Settings.Global.getFloat(c.getContentResolver(),
+                    android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f;
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     /** Things appearing: quick start, soft landing. */

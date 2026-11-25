@@ -236,6 +236,18 @@ jobs:
             echo "تمت إضافة adi-registration.properties إلى الـ APK"
           fi
 
+      - name: Unit tests
+        run: gradle testDebugUnitTest --console=plain
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests
+          if-no-files-found: ignore
+          retention-days: 14
+
       # Builds, and when the build fails tries to repair the cause (R8 missing classes, missing resources,
       # duplicate files, lint, memory, SDK licences, damaged caches, flaky network) and builds again.
       # Up to 4 attempts. If the failure is not one it knows how to repair, or the same failure comes back

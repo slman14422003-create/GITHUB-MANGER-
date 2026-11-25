@@ -126,8 +126,17 @@ public class Store {
         }
         e.apply();
         RepoCache.clear(c);
+        ListCache.clear(c);
         RepoTree.clearAll(c);
         FileMarks.clearAll(c);
+        RecentSearches.clearAll(c);
+        TotpVault.wipe(c);
+        AuditLog.clear(c);
+        Drafts.clearAll(c);
+        PendingReviews.clearAll(c);
+        CommitQueue.clearAll(c);
+        CommitQueueJob.cancel(c);
+        BuildWidgetProvider.onSignedOut(c);
         try {
             KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
             ks.load(null);

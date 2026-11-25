@@ -53,6 +53,10 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
     // No build-time metadata that identifies the toolchain inside the APK
     dependenciesInfo {
         includeInApk = false
@@ -105,4 +109,12 @@ dependencies {
     implementation 'androidx.core:core-splashscreen:1.2.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.0'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}
+
+afterEvaluate {
+    tasks.matching { it.name == 'assembleDebug' || it.name == 'assembleRelease' }.configureEach {
+        dependsOn 'testDebugUnitTest'
+    }
 }

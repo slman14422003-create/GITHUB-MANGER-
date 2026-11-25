@@ -45,6 +45,11 @@ public class CommitsActivity extends BaseRepoActivity {
         load(true);
     }
 
+    @Override
+    protected int skeletonKind() {
+        return ShimmerView.COMMITS;
+    }
+
     private void load(final boolean reset) {
         if (reset) page = 1;
         final int pg = page;
@@ -57,6 +62,7 @@ public class CommitsActivity extends BaseRepoActivity {
                 try {
                     for (int i = 0; i < hit.data.length(); i++) items.add(hit.data.getJSONObject(i));
                     hasMore = items.size() >= PER_PAGE;
+                    dataAt = hit.at;
                     render();
                 } catch (Exception ignored) {
                     items.clear();
@@ -78,6 +84,7 @@ public class CommitsActivity extends BaseRepoActivity {
                     if (pg == 1) items.clear();
                     items.addAll(tmp);
                     hasMore = tmp.size() >= PER_PAGE;
+                    dataAt = System.currentTimeMillis();
                     render();
                 });
             } catch (Exception e) {

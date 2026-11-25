@@ -490,7 +490,8 @@ final class TransferDock implements Transfers.Listener {
         badge.setVisibility(View.GONE);
         FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-        bp.setMargins(0, Ui.dp(act, 2), Ui.dp(act, 2), 0);
+        bp.setMargins(0, Ui.dp(act, 2), 0, 0);
+        bp.setMarginEnd(Ui.dp(act, 2));
         button.addView(badge, bp);
 
         // next to the refresh button of the screen's own header
@@ -511,7 +512,8 @@ final class TransferDock implements Transfers.Listener {
         }
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Ui.dp(act, 48), Ui.dp(act, 48),
                 Gravity.TOP | Gravity.END);
-        lp.setMargins(0, Ui.dp(act, 10), Ui.dp(act, 12), 0);
+        lp.setMargins(0, Ui.dp(act, 10), 0, 0);
+        lp.setMarginEnd(Ui.dp(act, 12));
         content.addView(button, lp);
     }
 

@@ -17,7 +17,9 @@ public final class ListCache {
     }
 
     private static final int MAX_ENTRIES = 60;
-    private static final int MAX_CHARS = 900 * 1024;
+    private static final int MAX_CHARS = 400 * 1024;
+    private static final String KEY_PATTERN = "l_[0-9a-f]{12}_[0-9a-f]{16}";
+    private static boolean purged = false;
 
     public static final class Hit {
         public final JSONArray data;
@@ -33,14 +35,37 @@ public final class ListCache {
         return c.getApplicationContext().getSharedPreferences("gh_list_cache", Context.MODE_PRIVATE);
     }
 
+    private static String hex(String s, int bytes) throws Exception {
+        byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < bytes; i++) b.append(String.format("%02x", d[i]));
+        return b.toString();
+    }
+
+    private static String prefix(String accountId) throws Exception {
+        return "l_" + hex(accountId, 6) + "_";
+    }
+
+    private static void purgeLegacy(Context c) {
+        if (purged) return;
+        purged = true;
+        try {
+            SharedPreferences p = sp(c);
+            SharedPreferences.Editor ed = p.edit();
+            for (String k : p.getAll().keySet()) {
+                if (!k.matches(KEY_PATTERN)) ed.remove(k);
+            }
+            ed.apply();
+        } catch (Exception ignored) {
+        }
+    }
+
     private static String key(Context c, String name) {
         try {
             String id = Accounts.activeId(c);
             if (id.isEmpty()) return null;
-            byte[] d = MessageDigest.getInstance("SHA-256").digest((id + "|" + name).getBytes(StandardCharsets.UTF_8));
-            StringBuilder b = new StringBuilder("l_");
-            for (int i = 0; i < 10; i++) b.append(String.format("%02x", d[i]));
-            return b.toString();
+            purgeLegacy(c);
+            return prefix(id) + hex(name, 8);
         } catch (Exception e) {
             return null;
         }
@@ -85,6 +110,20 @@ public final class ListCache {
                 for (int i = 0; i < Math.min(20, aged.size()); i++) ed.remove(aged.get(i)[0]);
             }
             ed.putString(k, s).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void clearAccount(Context c, String accountId) {
+        try {
+            if (accountId == null || accountId.isEmpty()) return;
+            String pre = prefix(accountId);
+            SharedPreferences p = sp(c);
+            SharedPreferences.Editor ed = p.edit();
+            for (String k : p.getAll().keySet()) {
+                if (k.startsWith(pre) || !k.matches(KEY_PATTERN)) ed.remove(k);
+            }
+            ed.apply();
         } catch (Exception ignored) {
         }
     }

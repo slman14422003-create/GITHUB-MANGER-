@@ -310,7 +310,7 @@ public class LogActivity extends BaseRepoActivity {
         searchBar = new LinearLayout(this);
         searchBar.setOrientation(LinearLayout.HORIZONTAL);
         searchBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        searchBar.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 10), Ui.dp(this, 8));
+        searchBar.setPaddingRelative(Ui.dp(this, 16), 0, Ui.dp(this, 10), Ui.dp(this, 8));
         searchBar.setVisibility(View.GONE);
         searchInput = Ui.edit(this, getString(R.string.lg_search_hint), null);
         searchInput.setSingleLine(true);
@@ -335,7 +335,7 @@ public class LogActivity extends BaseRepoActivity {
         searchCount = new TextView(this);
         searchCount.setTextColor(Ui.color(this, R.color.text_secondary));
         searchCount.setTextSize(12);
-        searchCount.setPadding(Ui.dp(this, 10), 0, Ui.dp(this, 4), 0);
+        searchCount.setPaddingRelative(Ui.dp(this, 10), 0, Ui.dp(this, 4), 0);
         searchBar.addView(searchCount);
         searchBar.addView(searchBtn(R.drawable.ic_arrow_up, v -> stepHit(-1)));
         searchBar.addView(searchBtn(R.drawable.ic_arrow_down2, v -> stepHit(1)));

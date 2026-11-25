@@ -246,6 +246,10 @@ public final class Ui {
         int ph = dp(c, 14);
         int pv = dp(c, 8);
         t.setPadding(ph, pv, ph, pv);
+        t.setMinHeight(dp(c, 48));
+        t.setMinWidth(dp(c, 48));
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(t, A11y.button());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMarginEnd(dp(c, 8));
@@ -258,6 +262,7 @@ public final class Ui {
     public static void setChip(Context c, TextView t, boolean selected) {
         Object prev = t.getTag(R.id.chip_state);
         t.setTag(R.id.chip_state, selected);
+        androidx.core.view.ViewCompat.setStateDescription(t, selected ? c.getString(R.string.a11y_selected) : null);
         if (selected && prev instanceof Boolean && !((Boolean) prev)) Fx.pop(t);
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(radius(c, R.dimen.radius_pill));

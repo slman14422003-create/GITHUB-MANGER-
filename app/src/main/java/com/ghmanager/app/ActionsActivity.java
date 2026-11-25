@@ -1,5 +1,6 @@
 package com.ghmanager.app;
 
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
@@ -13,21 +14,30 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
-import android.widget.ScrollView;
+import android.widget.FrameLayout;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.recyclerview.widget.ConcatAdapter;
+import androidx.recyclerview.widget.DefaultItemAnimator;
+import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.ListAdapter;
+import androidx.recyclerview.widget.RecyclerView;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -47,7 +57,12 @@ public class ActionsActivity extends BaseRepoActivity {
             "skipped", "timed_out", "action_required", "waiting"};
 
     private final List<JSONObject> runs = new ArrayList<>();
-    private final List<JSONObject> shown = new ArrayList<>();
+    private final List<RunItem> items = new ArrayList<>();
+    private final Set<Long> entered = new HashSet<>();
+    private RecyclerView rv;
+    private FooterAdapter footer;
+    private String dashSig = "";
+    private int tickCount = 0;
     private long workflowId = 0;
     private LinearLayout wfChips;
     private String workflowName = null;
@@ -70,6 +85,7 @@ public class ActionsActivity extends BaseRepoActivity {
     private final Map<Long, JSONArray> liveJobs = new HashMap<>();
     private LinearLayout dash;
     private RunAdapter runAdapter;
+    private ShimmerView shimmer;
 
     // header views
     private TextView wfTitle;
@@ -88,13 +104,20 @@ public class ActionsActivity extends BaseRepoActivity {
     private final Runnable ticker = new Runnable() {
         @Override
         public void run() {
-            if (!resumed) return;
+            if (!resumed || rv == null) return;
             long now = System.currentTimeMillis();
-            for (int i = 0; i < listView.getChildCount(); i++) {
-                View row = listView.getChildAt(i);
+            boolean refreshAgo = ++tickCount % 30 == 0;
+            for (int i = 0; i < rv.getChildCount(); i++) {
+                View row = rv.getChildAt(i);
                 View d = row.findViewById(R.id.dur);
                 if (d instanceof TextView && d.getTag() instanceof Long) {
                     ((TextView) d).setText(Fmt.duration(now - (Long) d.getTag()));
+                }
+                if (refreshAgo) {
+                    View t = row.findViewById(R.id.time);
+                    if (t instanceof TextView && t.getTag(R.id.run_time_tag) instanceof String) {
+                        ((TextView) t).setText(Fmt.ago((String) t.getTag(R.id.run_time_tag)));
+                    }
                 }
                 View lw = row.findViewById(R.id.liveWrap);
                 if (lw != null) LiveSteps.tick(lw);
@@ -106,51 +129,60 @@ public class ActionsActivity extends BaseRepoActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_list);
+        setContentView(R.layout.activity_actions);
         bindHeader(getString(R.string.actions), repo);
-        initList();
+        initChrome();
+        rv = findViewById(R.id.list);
+        rv.setLayoutManager(new LinearLayoutManager(this));
+        rv.setItemViewCacheSize(6);
         workflowId = getIntent().getLongExtra("workflowId", 0);
         workflowName = getIntent().getStringExtra("workflowName");
 
-        View head = LayoutInflater.from(this).inflate(R.layout.view_actions_head, listView, false);
-        listView.addHeaderView(head, null, false);
+        View head = LayoutInflater.from(this).inflate(R.layout.view_actions_head, rv, false);
         dash = new LinearLayout(this);
         dash.setOrientation(LinearLayout.VERTICAL);
-        listView.addHeaderView(dash, null, false);
+        customSkeleton = true;
+        shimmer = new ShimmerView(this);
+        shimmer.setVisibility(View.GONE);
+        FrameLayout shimmerBox = new FrameLayout(this);
+        shimmerBox.addView(shimmer, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 600)));
         runAdapter = new RunAdapter();
-        listView.setAdapter(runAdapter);
+        footer = new FooterAdapter();
+        rv.setAdapter(new ConcatAdapter(new HostAdapter(head), new HostAdapter(dash),
+                new HostAdapter(shimmerBox), runAdapter, footer));
+        configureAnimator();
         bindHead(head);
 
-        btnRefresh.setOnClickListener(v -> load(true, false));
+        btnRefresh.setOnClickListener(v -> load(true, false, true));
         action(btnA1, R.drawable.ic_run, R.string.run_workflow, v -> runWorkflowFlow());
         action(btnA2, R.drawable.ic_more, R.string.more, v -> moreMenu());
-
-        listView.setOnItemClickListener((p, v, position, id) -> {
-            int pos = position - listView.getHeaderViewsCount();
-            if (pos < 0) return;
-            if (pos == shown.size()) {
-                page++;
-                load(false, false);
-                return;
-            }
-            if (pos > shown.size()) return;
-            android.content.Intent i = repoIntent(RunDetailActivity.class);
-            i.putExtra("runId", shown.get(pos).optLong("id"));
-            startActivity(i);
-        });
-        listView.setOnItemLongClickListener((p, v, position, id) -> {
-            int pos = position - listView.getHeaderViewsCount();
-            if (pos < 0 || pos >= shown.size()) return false;
-            runMenu(shown.get(pos));
-            return true;
-        });
         loadWorkflowsQuietly();
+    }
+
+    private void configureAnimator() {
+        if (!Motion.enabled()) {
+            rv.setItemAnimator(null);
+            return;
+        }
+        DefaultItemAnimator a = new DefaultItemAnimator();
+        a.setSupportsChangeAnimations(false);
+        a.setAddDuration(0);
+        a.setMoveDuration(Motion.base(this));
+        a.setRemoveDuration(Motion.fast(this));
+        rv.setItemAnimator(a);
+    }
+
+    @Override
+    protected boolean hasData() {
+        return !runs.isEmpty();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
+        configureAnimator();
         load(true, !firstLoad);
         firstLoad = false;
         ui.removeCallbacks(ticker);
@@ -172,6 +204,10 @@ public class ActionsActivity extends BaseRepoActivity {
         wfSub = head.findViewById(R.id.wfSub);
         countLine = head.findViewById(R.id.countLine);
         clearFilters = head.findViewById(R.id.clearFilters);
+        clearFilters.setMinHeight(Ui.dp(this, 48));
+        clearFilters.setMinWidth(Ui.dp(this, 48));
+        clearFilters.setGravity(Gravity.CENTER);
+        ViewCompat.setAccessibilityDelegate(clearFilters, A11y.button());
         filterChips = head.findViewById(R.id.filterChips);
         wfChips = head.findViewById(R.id.wfChips);
 
@@ -216,9 +252,9 @@ public class ActionsActivity extends BaseRepoActivity {
             public void afterTextChanged(Editable s) {
                 query = s.toString().trim().toLowerCase(Locale.ROOT);
                 applySearch();
-                runAdapter.notifyDataSetChanged();
+                submit();
                 updateCount();
-                showEmpty(shown.isEmpty() && !runs.isEmpty(), R.string.no_runs);
+                showEmpty(items.isEmpty() && !runs.isEmpty(), R.string.no_runs);
             }
         });
         clearFilters.setOnClickListener(v -> {
@@ -278,7 +314,7 @@ public class ActionsActivity extends BaseRepoActivity {
 
     private void updateCount() {
         int n = totalCount > 0 ? totalCount : runs.size();
-        if (!query.isEmpty()) countLine.setText(getString(R.string.act_count_shown, shown.size(), runs.size()));
+        if (!query.isEmpty()) countLine.setText(getString(R.string.act_count_shown, items.size(), runs.size()));
         else countLine.setText(getString(R.string.act_count, n));
     }
 
@@ -353,7 +389,52 @@ public class ActionsActivity extends BaseRepoActivity {
 
     // ------------------------------------------------------------------ loading
 
+    @Override
+    protected void loading(boolean on) {
+        super.loading(on);
+        if (shimmer == null) return;
+        if (on && runs.isEmpty()) {
+            showEmpty(false, R.string.no_runs);
+            shimmer.setAlpha(1f);
+            shimmer.setVisibility(View.VISIBLE);
+        } else if (!on && shimmer.getVisibility() == View.VISIBLE) {
+            shimmer.setVisibility(View.GONE);
+            Fx.slideIn(dash);
+        }
+    }
+
+    private static String nz(String v) {
+        return v == null ? "" : v;
+    }
+
+    private String cacheKey(long wf, String st, String br, String ev, String ac) {
+        return "runs:" + owner + "/" + repo + ":" + wf + ":" + nz(st) + ":" + nz(br) + ":" + nz(ev) + ":" + nz(ac);
+    }
+
+    private boolean fillFromCache(String key) {
+        ListCache.Hit hit = ListCache.get(this, key);
+        if (hit == null) return false;
+        try {
+            List<JSONObject> tmp = new ArrayList<>();
+            for (int i = 0; i < hit.data.length(); i++) tmp.add(hit.data.getJSONObject(i));
+            runs.clear();
+            runs.addAll(tmp);
+            totalCount = 0;
+            hasMore = tmp.size() >= PER_PAGE;
+            dataAt = hit.at;
+            render();
+            return true;
+        } catch (Exception e) {
+            runs.clear();
+            return false;
+        }
+    }
+
     private void load(final boolean reset, final boolean silent) {
+        load(reset, silent, false);
+    }
+
+    private void load(final boolean reset, final boolean silent, final boolean keep) {
         if (reset) page = 1;
         final int pg = page;
         final long wf = workflowId;
@@ -361,12 +442,24 @@ public class ActionsActivity extends BaseRepoActivity {
         final String br = branchFilter;
         final String ev = eventFilter;
         final String ac = actorFilter;
+        final String key = cacheKey(wf, st, br, ev, ac);
         final int myGen = ++gen;
+        if (reset && !silent && !keep) {
+            hasMore = false;
+            runs.clear();
+            items.clear();
+            entered.clear();
+            dashSig = "";
+            dash.removeAllViews();
+            submit();
+        }
+        if (pg == 1 && runs.isEmpty()) fillFromCache(key);
         if (!silent) loading(true);
         io.execute(() -> {
             try {
                 JSONObject resp = api.listRuns(owner, repo, wf, st, br, ev, ac, pg, PER_PAGE);
                 JSONArray arr = resp.optJSONArray("workflow_runs");
+                if (pg == 1 && arr != null) ListCache.put(getApplicationContext(), key, arr);
                 final int total = resp.optInt("total_count", 0);
                 final List<JSONObject> tmp = new ArrayList<>();
                 if (arr != null) {
@@ -421,6 +514,7 @@ public class ActionsActivity extends BaseRepoActivity {
                     runs.addAll(tmp);
                     totalCount = total;
                     hasMore = tmp.size() >= PER_PAGE;
+                    dataAt = System.currentTimeMillis();
                     render();
                     watchActive(tmp);
                     schedulePoll();
@@ -444,10 +538,18 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void applySearch() {
-        shown.clear();
+        items.clear();
         for (JSONObject r : runs) {
-            if (query.isEmpty() || matches(r)) shown.add(r);
+            if (query.isEmpty() || matches(r)) {
+                long id = r.optLong("id");
+                items.add(new RunItem(r, progress.get(id), stepNow.get(id), liveJobs.get(id)));
+            }
         }
+    }
+
+    private void submit() {
+        runAdapter.submitList(new ArrayList<>(items));
+        footer.set(hasMore);
     }
 
     private boolean matches(JSONObject r) {
@@ -466,8 +568,8 @@ public class ActionsActivity extends BaseRepoActivity {
         buildFilters();
         renderDash();
         updateCount();
-        runAdapter.notifyDataSetChanged();
-        showEmpty(shown.isEmpty(), R.string.no_runs);
+        submit();
+        showEmpty(items.isEmpty(), R.string.no_runs);
     }
 
     // ------------------------------------------------------------------ overview card
@@ -510,7 +612,11 @@ public class ActionsActivity extends BaseRepoActivity {
         n.setGravity(Gravity.CENTER);
         TextView l = text(getString(labelRes), 12, R.color.text_secondary);
         l.setGravity(Gravity.CENTER);
-        l.setSingleLine(true);
+        l.setMaxLines(2);
+        t.setFocusable(true);
+        t.setContentDescription(getString(R.string.a11y_stat, count, getString(labelRes)));
+        n.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        l.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         t.addView(n);
         t.addView(l);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
@@ -521,6 +627,14 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void renderDash() {
+        StringBuilder sg = new StringBuilder();
+        for (JSONObject r : runs) {
+            sg.append(r.optLong("id")).append(r.optString("status")).append(r.optString("conclusion"))
+                    .append(r.optString("updated_at")).append(';');
+        }
+        String sig = sg.toString();
+        if (sig.equals(dashSig) && dash.getChildCount() > 0) return;
+        dashSig = sig;
         dash.removeAllViews();
         if (runs.isEmpty()) return;
         dash.setPadding(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 14), Ui.dp(this, 6));
@@ -624,6 +738,7 @@ public class ActionsActivity extends BaseRepoActivity {
             bp.setMarginEnd(Ui.dp(this, 2));
             strip.addView(bar, bp);
         }
+        strip.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         card.addView(strip, sp);
         TextView cap = text(getString(R.string.act_last_runs, n), 11, R.color.text_hint);
         cap.setPadding(0, Ui.dp(this, 6), 0, 0);
@@ -682,56 +797,176 @@ public class ActionsActivity extends BaseRepoActivity {
         t.setCompoundDrawablesRelative(d[0], null, null, null);
     }
 
-    private final class RunAdapter extends BaseAdapter {
-        private int animatedUpTo = -1;
+    private static final class RunItem {
+        final long id;
+        final JSONObject run;
+        final int[] prog;
+        final String now;
+        final JSONArray jobs;
+        final String sig;
 
+        RunItem(JSONObject run, int[] prog, String now, JSONArray jobs) {
+            this.id = run.optLong("id");
+            this.run = run;
+            this.prog = prog;
+            this.now = now;
+            this.jobs = jobs;
+            this.sig = run.toString() + "|" + (prog == null ? "" : prog[0] + "/" + prog[1]) + "|"
+                    + (now == null ? "" : now) + "|" + (jobs == null ? "" : jobs.toString());
+        }
+    }
+
+    private static final DiffUtil.ItemCallback<RunItem> DIFF = new DiffUtil.ItemCallback<RunItem>() {
         @Override
-        public int getCount() {
-            return shown.size() + (hasMore ? 1 : 0);
+        public boolean areItemsTheSame(RunItem a, RunItem b) {
+            return a.id == b.id;
         }
 
         @Override
-        public Object getItem(int position) {
-            return position < shown.size() ? shown.get(position) : null;
+        public boolean areContentsTheSame(RunItem a, RunItem b) {
+            return a.sig.equals(b.sig);
+        }
+    };
+
+    private static final class HostAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private final View host;
+
+        HostAdapter(View host) {
+            this.host = host;
         }
 
         @Override
-        public long getItemId(int position) {
-            return position;
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            if (host.getParent() instanceof ViewGroup) ((ViewGroup) host.getParent()).removeView(host);
+            host.setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            RecyclerView.ViewHolder h = new RecyclerView.ViewHolder(host) {
+            };
+            h.setIsRecyclable(false);
+            return h;
         }
 
         @Override
-        public int getViewTypeCount() {
-            return 2;
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
         }
 
         @Override
-        public int getItemViewType(int position) {
-            return position < shown.size() ? 0 : 1;
+        public int getItemCount() {
+            return 1;
+        }
+    }
+
+    private final class FooterAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private boolean on = false;
+
+        void set(boolean visible) {
+            if (visible == on) return;
+            on = visible;
+            if (visible) notifyItemInserted(0);
+            else notifyItemRemoved(0);
         }
 
         @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            if (position >= shown.size()) {
-                View v = convertView != null ? convertView
-                        : LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_row, parent, false);
-                RowAdapter.bind(ActionsActivity.this, v, new Row(R.drawable.ic_refresh, false,
-                        getString(R.string.load_more), null, false, false));
-                Ui.shapeRow(ActionsActivity.this, v, true, true);
-                return v;
-            }
-            View v = convertView != null ? convertView
-                    : LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_run, parent, false);
-            bindRun(v, shown.get(position));
-            if (position > animatedUpTo) {
-                animatedUpTo = position;
-                Ui.enter(v, position);
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_row, parent, false);
+            v.setOnClickListener(x -> {
+                page++;
+                load(false, false);
+            });
+            return new RecyclerView.ViewHolder(v) {
+            };
+        }
+
+        @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+            RowAdapter.bind(ActionsActivity.this, holder.itemView, new Row(R.drawable.ic_refresh, false,
+                    getString(R.string.load_more), null, false, false));
+            Ui.shapeRow(ActionsActivity.this, holder.itemView, true, true);
+        }
+
+        @Override
+        public int getItemCount() {
+            return on ? 1 : 0;
+        }
+    }
+
+    private final class RunAdapter extends ListAdapter<RunItem, RunHolder> {
+        RunAdapter() {
+            super(DIFF);
+        }
+
+        RunItem at(int position) {
+            return getItem(position);
+        }
+
+        @Override
+        public RunHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            return new RunHolder(LayoutInflater.from(ActionsActivity.this).inflate(R.layout.item_run, parent, false));
+        }
+
+        @Override
+        public void onBindViewHolder(RunHolder holder, int position) {
+            RunItem item = getItem(position);
+            bindRun(holder.itemView, item);
+            if (entered.add(item.id)) {
+                Ui.enter(holder.itemView, position);
             } else {
-                v.animate().cancel();
-                v.setAlpha(1f);
-                v.setTranslationY(0f);
+                holder.itemView.animate().cancel();
+                holder.itemView.setAlpha(1f);
+                holder.itemView.setTranslationY(0f);
             }
-            return v;
+        }
+
+        @Override
+        public void onViewRecycled(RunHolder holder) {
+            holder.itemView.animate().cancel();
+            holder.itemView.setAlpha(1f);
+            holder.itemView.setTranslationY(0f);
+            Fx.pulse(holder.itemView.findViewById(R.id.icon), false);
+        }
+    }
+
+    private final class RunHolder extends RecyclerView.ViewHolder {
+        RunHolder(View v) {
+            super(v);
+            final View card = v.findViewById(R.id.card);
+            card.setOnClickListener(x -> {
+                RunItem it = current();
+                if (it != null) openRun(it, card);
+            });
+            card.setOnLongClickListener(x -> {
+                RunItem it = current();
+                if (it == null) return false;
+                runMenu(it.run);
+                return true;
+            });
+            ViewCompat.replaceAccessibilityAction(card, AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+                    getString(R.string.more), null);
+            int[] btns = {R.id.act1, R.id.act2, R.id.act4};
+            for (int id : btns) ViewCompat.setAccessibilityDelegate(v.findViewById(id), A11y.button());
+            int[] quiet = {R.id.title, R.id.line1, R.id.branchPill, R.id.badge, R.id.time, R.id.dur, R.id.progText};
+            for (int id : quiet) {
+                View q = v.findViewById(id);
+                if (q != null) q.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            }
+        }
+
+        RunItem current() {
+            int p = getBindingAdapterPosition();
+            return p == RecyclerView.NO_POSITION ? null : runAdapter.at(p);
+        }
+    }
+
+    private void openRun(RunItem it, View card) {
+        Intent i = repoIntent(RunDetailActivity.class);
+        i.putExtra("runId", it.id);
+        if (Motion.enabled()) {
+            String name = "run_card_" + it.id;
+            card.setTransitionName(name);
+            i.putExtra("transitionName", name);
+            startActivity(i, ActivityOptions.makeSceneTransitionAnimation(this, card, name).toBundle());
+        } else {
+            startActivity(i);
         }
     }
 
@@ -756,7 +991,8 @@ public class ActionsActivity extends BaseRepoActivity {
         }
     }
 
-    private void bindRun(View v, final JSONObject run) {
+    private void bindRun(View v, final RunItem item) {
+        final JSONObject run = item.run;
         final String s = run.optString("status");
         final String c = run.optString("conclusion");
         final String state = Status.state(s, c);
@@ -765,6 +1001,7 @@ public class ActionsActivity extends BaseRepoActivity {
 
         // card with a status-tinted outline for failed / running runs
         View card = v.findViewById(R.id.card);
+        card.setTransitionName("run_card_" + item.id);
         Ui.press(this, card);
         GradientDrawable fill = new GradientDrawable();
         fill.setColor(Ui.color(this, R.color.surface));
@@ -801,6 +1038,7 @@ public class ActionsActivity extends BaseRepoActivity {
 
         TextView branchPill = v.findViewById(R.id.branchPill);
         String hb = Fmt.s(run, "head_branch");
+        branchPill.setMaxWidth(Math.round(getResources().getDisplayMetrics().widthPixels * 0.45f));
         branchPill.setText(hb);
         branchPill.setVisibility(hb.isEmpty() ? View.GONE : View.VISIBLE);
         branchPill.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_branch, 0, 0, 0);
@@ -822,6 +1060,7 @@ public class ActionsActivity extends BaseRepoActivity {
 
         TextView time = v.findViewById(R.id.time);
         time.setText(Fmt.ago(Fmt.s(run, "created_at")));
+        time.setTag(R.id.run_time_tag, Fmt.s(run, "created_at"));
         smallIcon(time, R.drawable.ic_calendar);
 
         TextView dur = v.findViewById(R.id.dur);
@@ -842,21 +1081,21 @@ public class ActionsActivity extends BaseRepoActivity {
         // live pipeline: a progress bar plus every job with all of its steps
         View progWrap = v.findViewById(R.id.progWrap);
         LinearLayout liveWrap = v.findViewById(R.id.liveWrap);
-        int[] pr = progress.get(run.optLong("id"));
+        int[] pr = item.prog;
         if (active && pr != null && pr[1] > 0) {
             progWrap.setVisibility(View.VISIBLE);
             ProgressBar pb = v.findViewById(R.id.prog);
             int target = Math.max(4, pr[0] * 1000 / pr[1]);
             pb.setMax(1000);
             Ui.progress(pb, target);
-            String now = stepNow.get(run.optLong("id"));
+            String now = item.now;
             String line = getString(R.string.act_step_progress, pr[0], pr[1])
                     + (now == null || now.isEmpty() ? "" : "  ·  " + now);
             ((TextView) v.findViewById(R.id.progText)).setText(line);
         } else {
             progWrap.setVisibility(View.GONE);
         }
-        if (active) LiveSteps.bind(this, liveWrap, liveJobs.get(run.optLong("id")));
+        if (active) LiveSteps.bind(this, liveWrap, item.jobs);
         else liveWrap.setVisibility(View.GONE);
 
         // quick actions: cancel while running, re-run (failed jobs) after a failure
@@ -891,6 +1130,16 @@ public class ActionsActivity extends BaseRepoActivity {
             actions.setVisibility(View.GONE);
         }
         v.findViewById(R.id.act3).setOnClickListener(x -> runMenu(run));
+
+        StringBuilder cd = new StringBuilder();
+        cd.append(Status.label(s, c)).append(". ").append(title).append(". ").append(l1);
+        if (!hb.isEmpty()) cd.append(". ").append(getString(R.string.a11y_branch, hb));
+        String ago = Fmt.ago(Fmt.s(run, "created_at"));
+        if (!ago.isEmpty()) cd.append(". ").append(ago);
+        if (dur.getVisibility() == View.VISIBLE) {
+            cd.append(". ").append(getString(R.string.a11y_duration, dur.getText()));
+        }
+        card.setContentDescription(cd);
     }
 
     // ------------------------------------------------------------------ pickers

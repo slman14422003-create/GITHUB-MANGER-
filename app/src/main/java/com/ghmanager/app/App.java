@@ -16,13 +16,22 @@ import androidx.core.view.WindowInsetsCompat;
  * Android 16. This keeps every screen clear of the status bar, navigation bar, cutout and keyboard.
  */
 public class App extends Application {
+    private static volatile Application instance;
+
+    static Application context() {
+        return instance;
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         // more idle sockets kept open = fewer TCP/TLS handshakes when several requests run together
         System.setProperty("http.maxConnections", "10");
         Lang.init(this);
         Mirror.load(this);
+        Verify.init(this);
+        CommitQueueJob.schedule(this);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(Activity a, Bundle b) {

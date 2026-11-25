@@ -95,7 +95,7 @@ public class IosSpinner extends View {
     }
 
     private void update() {
-        boolean should = isShown() && isAttachedToWindow() && ValueAnimator.areAnimatorsEnabled();
+        boolean should = isShown() && isAttachedToWindow() && Motion.enabled();
         if (should == running) return;
         running = should;
         removeCallbacks(tick);

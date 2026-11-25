@@ -30,7 +30,7 @@ final class StepHeader {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(Ui.dp(ctx, 46));
-        row.setPadding(Ui.dp(ctx, 8), 0, Ui.dp(ctx, 12), 0);
+        row.setPaddingRelative(Ui.dp(ctx, 8), 0, Ui.dp(ctx, 12), 0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Ui.color(ctx, R.color.surface_high));
         bg.setCornerRadius(Ui.radius(ctx, R.dimen.radius_s));

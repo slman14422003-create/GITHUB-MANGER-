@@ -5,6 +5,8 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -73,6 +75,10 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected RowAdapter adapter;
     protected LinearLayout chipRow;
     protected View filterScroll;
+    protected TextView stateSub;
+    protected TextView stateRetry;
+    protected long dataAt = 0;
+    private boolean errorState = false;
 
     private ActivityResultLauncher<Intent> saveLauncher;
     private Source pendingSource;
@@ -226,27 +232,45 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     private View skeletonView;
+    protected boolean customSkeleton = false;
+
+    protected int skeletonKind() {
+        return ShimmerView.ROWS;
+    }
+
+    protected boolean hasData() {
+        return adapter != null && adapter.getCount() > 0;
+    }
 
     private void skeleton(boolean on) {
-        if (swipe == null || adapter == null) return;
+        if (customSkeleton || swipe == null || listView == null) return;
+        android.widget.ListAdapter shownAdapter = listView.getAdapter();
+        if (shownAdapter instanceof android.widget.HeaderViewListAdapter)
+            shownAdapter = ((android.widget.HeaderViewListAdapter) shownAdapter).getWrappedAdapter();
+        if (shownAdapter == null) return;
         android.view.ViewParent pr = swipe.getParent();
         if (!(pr instanceof android.widget.FrameLayout)) return;
         android.widget.FrameLayout parent = (android.widget.FrameLayout) pr;
-        if (on && adapter.getCount() == 0) {
+        if (on && shownAdapter.getCount() == 0) {
             if (skeletonView == null) {
-                skeletonView = Skeleton.build(this, 6);
-                parent.addView(skeletonView, parent.indexOfChild(swipe) + 1);
+                skeletonView = new ShimmerView(this, skeletonKind());
+                parent.addView(skeletonView, parent.indexOfChild(swipe) + 1,
+                        new android.widget.FrameLayout.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
             }
             skeletonView.setVisibility(View.VISIBLE);
-            Skeleton.pulse(skeletonView, true);
+            skeletonView.invalidate();
             if (emptyView != null) emptyView.setVisibility(View.GONE);
+            if (stateRetry != null) stateRetry.setVisibility(View.GONE);
+            if (stateSub != null) stateSub.setVisibility(View.GONE);
         } else if (skeletonView != null) {
-            Skeleton.pulse(skeletonView, false);
             skeletonView.setVisibility(View.GONE);
         }
     }
 
     protected void loading(boolean on) {
+        if (on && errorState) hideErrorState();
         skeleton(on);
         if (loadingBar != null) loadingBar.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
         if (!on && swipe != null && swipe.isRefreshing()) swipe.setRefreshing(false);
@@ -254,12 +278,25 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
 
     protected void initList() {
         listView = findViewById(R.id.list);
-        statusView = findViewById(R.id.status);
-        emptyView = findViewById(R.id.empty);
-        chipRow = findViewById(R.id.chipRow);
-        filterScroll = findViewById(R.id.filterScroll);
         adapter = new RowAdapter(this);
         listView.setAdapter(adapter);
+        initChrome();
+    }
+
+    protected void initChrome() {
+        statusView = findViewById(R.id.status);
+        emptyView = findViewById(R.id.empty);
+        stateSub = findViewById(R.id.stateSub);
+        stateRetry = findViewById(R.id.stateRetry);
+        chipRow = findViewById(R.id.chipRow);
+        filterScroll = findViewById(R.id.filterScroll);
+        if (stateRetry != null) {
+            stateRetry.setOnClickListener(v -> {
+                hideErrorState();
+                if (stateRetry != null) stateRetry.setVisibility(View.GONE);
+                if (btnRefresh != null) btnRefresh.performClick();
+            });
+        }
         swipe = findViewById(R.id.swipe);
         if (swipe != null) {
             final androidx.swiperefreshlayout.widget.SwipeRefreshLayout sw = swipe;
@@ -277,6 +314,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected void showStatus(String text) {
         if (statusView == null) return;
         if (errorBar != null) errorBar.setVisibility(View.GONE);
+        if ((text == null || text.isEmpty()) && errorState) hideErrorState();
         if (text == null || text.isEmpty()) {
             statusView.setVisibility(View.GONE);
         } else {
@@ -292,10 +330,60 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected void showEmpty(boolean show, int textRes, int iconRes) {
         if (emptyView == null) return;
         boolean was = emptyView.getVisibility() == View.VISIBLE;
+        errorState = false;
         emptyView.setText(textRes);
         Fx.emptyState(emptyView, iconRes);
         if (show && !was) Fx.reveal(emptyView);
         else emptyView.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (stateSub != null) stateSub.setVisibility(View.GONE);
+        if (stateRetry != null) {
+            boolean canRetry = show && btnRefresh != null && btnRefresh.isEnabled();
+            stateRetry.setText(R.string.refresh);
+            stateRetry.setVisibility(canRetry ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    protected boolean isOffline(Exception e) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
+            if (ni == null || !ni.isConnected()) return true;
+        } catch (Exception ignored) {
+        }
+        return !(e instanceof GitHubApi.ApiException);
+    }
+
+    protected void showErrorState(Exception e, String msg) {
+        if (emptyView == null) {
+            showStatus(msg);
+            showErrorBar(e, msg);
+            return;
+        }
+        boolean offline = isOffline(e);
+        errorState = true;
+        emptyView.setText(offline ? getString(R.string.state_offline)
+                : getString(R.string.state_error) + "\n" + msg);
+        Fx.emptyState(emptyView, R.drawable.ic_cloud_off);
+        Fx.reveal(emptyView);
+        if (stateSub != null) {
+            if (dataAt > 0) {
+                stateSub.setText(getString(R.string.cache_saved, Fmt.agoMs(dataAt)));
+                stateSub.setVisibility(View.VISIBLE);
+            } else {
+                stateSub.setVisibility(View.GONE);
+            }
+        }
+        if (stateRetry != null) {
+            stateRetry.setText(R.string.err_retry);
+            stateRetry.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void hideErrorState() {
+        errorState = false;
+        if (emptyView != null) emptyView.setVisibility(View.GONE);
+        if (stateSub != null) stateSub.setVisibility(View.GONE);
+        if (stateRetry != null) stateRetry.setVisibility(View.GONE);
     }
 
     // ------------------------------------------------------------------ threading
@@ -380,8 +468,17 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         post(() -> {
             loading(false);
             hideProgress();
-            showStatus(msg);
-            showErrorBar(e, msg);
+            if (hasData()) {
+                if (dataAt > 0 && isOffline(e)) {
+                    showStatus(getString(R.string.cache_offline, Fmt.agoMs(dataAt)));
+                } else {
+                    showStatus(msg);
+                }
+                showErrorBar(e, msg);
+            } else {
+                showStatus(null);
+                showErrorState(e, msg);
+            }
         });
     }
 

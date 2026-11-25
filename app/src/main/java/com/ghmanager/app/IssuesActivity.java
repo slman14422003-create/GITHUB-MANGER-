@@ -82,6 +82,11 @@ public class IssuesActivity extends BaseRepoActivity {
         filterScroll.setVisibility(android.view.View.VISIBLE);
     }
 
+    @Override
+    protected int skeletonKind() {
+        return ShimmerView.ISSUES;
+    }
+
     private void load(final boolean reset) {
         if (reset) page = 1;
         final int pg = page;
@@ -94,6 +99,7 @@ public class IssuesActivity extends BaseRepoActivity {
                 try {
                     for (int i = 0; i < hit.data.length(); i++) all.add(hit.data.getJSONObject(i));
                     hasMore = all.size() >= PER_PAGE;
+                    dataAt = hit.at;
                     render();
                 } catch (Exception ignored) {
                     all.clear();
@@ -114,6 +120,7 @@ public class IssuesActivity extends BaseRepoActivity {
                     if (pg == 1) all.clear();
                     all.addAll(tmp);
                     hasMore = tmp.size() >= PER_PAGE;
+                    dataAt = System.currentTimeMillis();
                     render();
                 });
             } catch (Exception e) {
