@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="wdg_bg">#1B1B1F</color>
-    <color name="wdg_stroke">#36363D</color>
-    <color name="wdg_btn">#26262B</color>
-    <color name="wdg_text">#FFFFFF</color>
-    <color name="wdg_sub">#B7B7C2</color>
-</resources>
