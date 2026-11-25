@@ -12,9 +12,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
+        android:paddingTop="4dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="4dp"
+        android:paddingBottom="2dp"
         android:scrollbars="none"
         android:visibility="gone">
 
@@ -48,7 +48,7 @@
                 android:divider="@null"
                 android:dividerHeight="0dp"
                 android:listSelector="@android:color/transparent"
-                android:paddingTop="4dp"
+                android:paddingTop="0dp"
                 android:paddingBottom="16dp"
                 android:scrollbars="none" />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
