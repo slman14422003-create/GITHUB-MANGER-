@@ -1,0 +1,760 @@
+package com.ghmanager.app;
+
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.SpannableStringBuilder;
+import android.text.TextWatcher;
+import android.text.style.BackgroundColorSpan;
+import android.text.Spanned;
+import android.util.TypedValue;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.TextView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Job viewer laid out like the GitHub website: every step is a row with its status, name and duration;
+ * tapping a step opens its output with line numbers. A running job is followed live (the running step
+ * opens by itself, its clock ticks and new lines appear as they are written).
+ */
+public class LogActivity extends BaseRepoActivity {
+    private static final int MAX_BYTES = 300 * 1024;
+    private static final int MAX_CLIP_CHARS = 150000;
+    private static final long POLL_MS = 3000;
+    private static final int LINES_PER_ROW = 10;
+    private static final int MAX_TOTAL = 24 * 1024 * 1024;
+    private static final int OVERLAP = 64;
+    private static final String ACCEPT = "application/vnd.github+json";
+
+    private long jobId;
+    private String jobName = "";
+    private String raw = "";
+    private boolean truncated = false;
+    private int mode = 0;
+    private boolean active = false;
+    private boolean resumed = false;
+    private boolean firstLoad = true;
+    private String statusLabel = "";
+    private TextView text;
+    private ListView list;
+    private List<StepLog.Step> steps = new ArrayList<>();
+    private final List<Item> items = new ArrayList<>();
+    private final Map<Integer, Boolean> expanded = new HashMap<>();
+    private int wantedStep = 0;
+    private final Object logLock = new Object();
+    private volatile byte[] rawBytes = new byte[0];
+    private final Map<String, Boolean> groupOpen = new HashMap<>();
+    private String qLower = "";
+    private LinearLayout searchBar;
+    private EditText searchInput;
+    private TextView searchCount;
+    private final List<Integer> hitPos = new ArrayList<>();
+    private final List<Integer> errPos = new ArrayList<>();
+    private int hitIndex = -1;
+    private int errIndex = -1;
+
+    private static final class Item {
+        final int type;
+        final StepLog.Step step;
+        final CharSequence text;
+        final String key;
+        final boolean open;
+        boolean hasErr;
+        boolean hasHit;
+
+        Item(int type, StepLog.Step step, CharSequence text) {
+            this(type, step, text, null, false);
+        }
+
+        Item(int type, StepLog.Step step, CharSequence text, String key, boolean open) {
+            this.type = type;
+            this.step = step;
+            this.text = text;
+            this.key = key;
+            this.open = open;
+        }
+    }
+
+    /** Each row holds a handful of lines, so no single view is ever taller than the GPU can draw. */
+    private final BaseAdapter adapter = new BaseAdapter() {
+        @Override
+        public int getCount() {
+            return items.size();
+        }
+
+        @Override
+        public Object getItem(int i) {
+            return items.get(i);
+        }
+
+        @Override
+        public long getItemId(int i) {
+            return i;
+        }
+
+        @Override
+        public int getViewTypeCount() {
+            return 4;
+        }
+
+        @Override
+        public int getItemViewType(int i) {
+            return items.get(i).type;
+        }
+
+        @Override
+        public View getView(int i, View v, ViewGroup parent) {
+            Item it = items.get(i);
+            if (it.type == 0) {
+                StepHeader h;
+                if (v == null) {
+                    h = new StepHeader(LogActivity.this);
+                    v = h.root;
+                } else {
+                    h = (StepHeader) v.getTag();
+                }
+                h.bind(it.step, isOpen(it.step));
+                return v;
+            }
+            TextView t;
+            if (v == null) {
+                FrameLayout w = new FrameLayout(LogActivity.this);
+                w.setPadding(Ui.dp(LogActivity.this, 8), 0, Ui.dp(LogActivity.this, 8), 0);
+                t = new TextView(LogActivity.this);
+                t.setTypeface(Typeface.MONOSPACE);
+                t.setLineSpacing(Ui.dp(LogActivity.this, 2), 1f);
+                t.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+                t.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+                t.setTextDirection(View.TEXT_DIRECTION_LTR);
+                if (it.type == 3) {
+                    t.setTextSize(12f);
+                    t.setTextColor(Ui.color(LogActivity.this, R.color.info));
+                    t.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+                    t.setBackgroundColor(Ui.color(LogActivity.this, R.color.field));
+                    t.setPadding(Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 8),
+                            Ui.dp(LogActivity.this, 10), Ui.dp(LogActivity.this, 8));
+                } else if (it.type == 1) {
+                    t.setTextSize(12f);
+                    t.setTextColor(Ui.color(LogActivity.this, R.color.text_primary));
+                    t.setBackgroundColor(Ui.color(LogActivity.this, R.color.field));
+                    t.setPadding(Ui.dp(LogActivity.this, 8), Ui.dp(LogActivity.this, 4),
+                            Ui.dp(LogActivity.this, 10), Ui.dp(LogActivity.this, 4));
+                } else {
+                    t.setTextSize(13f);
+                    t.setTextColor(Ui.color(LogActivity.this, R.color.text_hint));
+                    t.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
+                    t.setPadding(Ui.dp(LogActivity.this, 16), Ui.dp(LogActivity.this, 8),
+                            Ui.dp(LogActivity.this, 16), Ui.dp(LogActivity.this, 8));
+                }
+                w.addView(t, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+                w.setTag(t);
+                v = w;
+            } else {
+                t = (TextView) v.getTag();
+            }
+            t.setText(it.text);
+            return v;
+        }
+    };
+
+    private final Runnable poll = () -> {
+        if (resumed && active) load(true);
+    };
+
+    /** Advances the clock of the running step once a second. */
+    private final Runnable ticker = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed) return;
+            if (list != null) {
+                for (int i = 0; i < list.getChildCount(); i++) {
+                    Object tag = list.getChildAt(i).getTag();
+                    if (tag instanceof StepHeader) ((StepHeader) tag).tick();
+                }
+            }
+            ui.postDelayed(this, 1000);
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_log);
+        jobId = getIntent().getLongExtra("jobId", 0);
+        active = getIntent().getBooleanExtra("active", false);
+        wantedStep = getIntent().getIntExtra("step", 0);
+        if (wantedStep > 0) expanded.put(wantedStep, true);
+        String jn = getIntent().getStringExtra("jobName");
+        jobName = jn == null ? "" : jn;
+        bindHeader(jobName.isEmpty() ? getString(R.string.view_log) : jobName, getString(R.string.log_title));
+        text = findViewById(R.id.text);
+        list = findViewById(R.id.list);
+        list.setAdapter(adapter);
+        list.setOnItemClickListener((p, v, pos, id) -> {
+            if (pos < 0 || pos >= items.size() || mode == 1) return;
+            Item it = items.get(pos);
+            if (it.type == 3) {
+                groupOpen.put(it.key, !it.open);
+                rebuild(false);
+                return;
+            }
+            if (it.type != 0) return;
+            expanded.put(it.step.number, !isOpen(it.step));
+            rebuild(false);
+        });
+        // long press copies just that step (or just that block of lines)
+        list.setOnItemLongClickListener((p, v, pos, id) -> {
+            if (pos < 0 || pos >= items.size()) return true;
+            Item it = items.get(pos);
+            if (it.type == 0) {
+                StringBuilder b = new StringBuilder();
+                for (LogFmt.Line l : it.step.lines) b.append(l.plain).append('\n');
+                String s = b.toString().trim();
+                if (s.isEmpty()) toast(R.string.log_empty);
+                else copy("log", s);
+            } else if (it.type == 1) {
+                copy("log", it.text.toString());
+            }
+            return true;
+        });
+        chipRow = findViewById(R.id.chipRow);
+        filterScroll = findViewById(R.id.filterScroll);
+
+        btnRefresh.setOnClickListener(v -> load(false));
+        action(btnA1, R.drawable.ic_copy, R.string.lg_copy_all, v -> copyLog(0));
+        action(btnA2, R.drawable.ic_more, R.string.more, v -> moreMenu());
+        action(btnA3, R.drawable.ic_sparkles, R.string.ex_btn, v -> explainLocal());
+        findViewById(R.id.btnCopyAll).setOnClickListener(v -> copyLog(0));
+        findViewById(R.id.btnCopyErr).setOnClickListener(v -> copyLog(1));
+        findViewById(R.id.btnShare).setOnClickListener(v -> shareText(plain(0)));
+        buildChips();
+        load(false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        ui.removeCallbacks(poll);
+        ui.removeCallbacks(ticker);
+        if (active && !firstLoad) ui.postDelayed(poll, POLL_MS);
+        ui.postDelayed(ticker, 1000);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        resumed = false;
+        ui.removeCallbacks(poll);
+        ui.removeCallbacks(ticker);
+    }
+
+    private boolean lineHit(LogFmt.Line l) {
+        return !qLower.isEmpty() && l.text.toString().toLowerCase(Locale.ROOT).contains(qLower);
+    }
+
+    private boolean stepHas(StepLog.Step s) {
+        if (qLower.isEmpty()) return false;
+        for (LogFmt.Line l : s.lines) if (lineHit(l)) return true;
+        return false;
+    }
+
+    private boolean isOpen(StepLog.Step s) {
+        if (mode == 1) return true;
+        if (stepHas(s)) return true;
+        Boolean b = expanded.get(s.number);
+        if (b != null) return b;
+        return s.code == 1 || s.code == 3;
+    }
+
+    private void buildChips() {
+        setChipRow(new String[]{getString(R.string.log_all), getString(R.string.log_errors),
+                "\uD83D\uDD0D " + getString(R.string.lg_search), "\u26A0 " + getString(R.string.lg_first_error)}, mode, idx -> {
+            if (idx == 2) {
+                toggleSearch();
+                buildChips();
+                return;
+            }
+            if (idx == 3) {
+                nextError();
+                buildChips();
+                return;
+            }
+            mode = idx;
+            buildChips();
+            rebuild(true);
+        });
+    }
+
+    private void ensureSearchBar() {
+        if (searchBar != null) return;
+        searchBar = new LinearLayout(this);
+        searchBar.setOrientation(LinearLayout.HORIZONTAL);
+        searchBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        searchBar.setPaddingRelative(Ui.dp(this, 16), 0, Ui.dp(this, 10), Ui.dp(this, 8));
+        searchBar.setVisibility(View.GONE);
+        searchInput = Ui.edit(this, getString(R.string.lg_search_hint), null);
+        searchInput.setSingleLine(true);
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable e) {
+                qLower = e.toString().trim().toLowerCase(Locale.ROOT);
+                hitIndex = -1;
+                rebuild(false);
+                if (!hitPos.isEmpty()) stepHit(1);
+            }
+        });
+        searchBar.addView(searchInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        searchCount = new TextView(this);
+        searchCount.setTextColor(Ui.color(this, R.color.text_secondary));
+        searchCount.setTextSize(12);
+        searchCount.setPaddingRelative(Ui.dp(this, 10), 0, Ui.dp(this, 4), 0);
+        searchBar.addView(searchCount);
+        searchBar.addView(searchBtn(R.drawable.ic_arrow_up, v -> stepHit(-1)));
+        searchBar.addView(searchBtn(R.drawable.ic_arrow_down2, v -> stepHit(1)));
+        ViewGroup parent = (ViewGroup) filterScroll.getParent();
+        parent.addView(searchBar, parent.indexOfChild(filterScroll) + 1);
+    }
+
+    private ImageButton searchBtn(int icon, View.OnClickListener l) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(icon);
+        b.setImageTintList(android.content.res.ColorStateList.valueOf(Ui.color(this, R.color.text_primary)));
+        b.setBackgroundResource(R.drawable.bg_icon_btn);
+        b.setOnClickListener(l);
+        Ui.press(this, b);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 38), Ui.dp(this, 38));
+        lp.setMarginStart(Ui.dp(this, 4));
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void toggleSearch() {
+        ensureSearchBar();
+        boolean show = searchBar.getVisibility() != View.VISIBLE;
+        if (show) {
+            Fx.slideIn(searchBar);
+            searchInput.requestFocus();
+        } else {
+            searchInput.setText("");
+            qLower = "";
+            Fx.slideOut(searchBar, View.GONE);
+            rebuild(false);
+        }
+    }
+
+    private void stepHit(int dir) {
+        if (hitPos.isEmpty()) {
+            updateCounter();
+            return;
+        }
+        hitIndex = hitIndex < 0 ? (dir > 0 ? 0 : hitPos.size() - 1) : (hitIndex + dir + hitPos.size()) % hitPos.size();
+        updateCounter();
+        scrollTo(hitPos.get(hitIndex));
+    }
+
+    private void updateCounter() {
+        if (searchCount == null) return;
+        if (qLower.isEmpty()) searchCount.setText("");
+        else if (hitPos.isEmpty()) searchCount.setText(R.string.lg_no_hits);
+        else searchCount.setText((hitIndex < 0 ? 0 : hitIndex + 1) + "/" + hitPos.size());
+    }
+
+    private void nextError() {
+        if (mode == 1) {
+            mode = 0;
+            rebuild(false);
+        }
+        if (errPos.isEmpty()) {
+            toast(R.string.lg_no_errors_copy);
+            return;
+        }
+        errIndex = (errIndex + 1) % errPos.size();
+        toast(getString(R.string.lg_error_n, errIndex + 1, errPos.size()));
+        scrollTo(errPos.get(errIndex));
+    }
+
+    private void scrollTo(final int pos) {
+        list.post(() -> list.smoothScrollToPositionFromTop(pos, Ui.dp(this, 60), 250));
+    }
+
+    private void indexItems() {
+        hitPos.clear();
+        errPos.clear();
+        for (int i = 0; i < items.size(); i++) {
+            Item it = items.get(i);
+            if (it.hasHit) hitPos.add(i);
+            if (it.hasErr) errPos.add(i);
+        }
+        if (hitIndex >= hitPos.size()) hitIndex = -1;
+        if (errIndex >= errPos.size()) errIndex = -1;
+        updateCounter();
+    }
+
+    private List<StepLog.Step> fallback(List<LogFmt.Line> lines) {
+        List<StepLog.Step> out = new ArrayList<>();
+        StepLog.Step s = new StepLog.Step();
+        s.number = 1;
+        s.name = jobName;
+        s.code = active ? 1 : 2;
+        for (LogFmt.Line l : lines) {
+            s.lines.add(l);
+            l.no = s.lines.size();
+        }
+        out.add(s);
+        return out;
+    }
+
+    private byte[] fetchLog() throws Exception {
+        synchronized (logLock) {
+            String path = api.jobLogsPath(owner, repo, jobId);
+            byte[] base = rawBytes;
+            if (base.length >= MAX_TOTAL) return base;
+            if (base.length > 0) {
+                int overlap = Math.min(base.length, OVERLAP);
+                int from = base.length - overlap;
+                try {
+                    GitHubApi.Piece p = api.readFrom(path, ACCEPT, from);
+                    if (!p.ranged) {
+                        rawBytes = p.data;
+                        return p.data;
+                    }
+                    if (p.data.length >= overlap && sameTail(base, p.data, overlap)) {
+                        byte[] all = new byte[from + p.data.length];
+                        System.arraycopy(base, 0, all, 0, from);
+                        System.arraycopy(p.data, 0, all, from, p.data.length);
+                        rawBytes = all;
+                        return all;
+                    }
+                } catch (GitHubApi.ApiException e) {
+                    if (e.code != 416) throw e;
+                }
+            }
+            GitHubApi.Piece full = api.readFrom(path, ACCEPT, 0);
+            rawBytes = full.data;
+            return full.data;
+        }
+    }
+
+    private static boolean sameTail(byte[] base, byte[] data, int overlap) {
+        for (int i = 0; i < overlap; i++) {
+            if (base[base.length - overlap + i] != data[i]) return false;
+        }
+        return true;
+    }
+
+    private void load(final boolean silent) {
+        if (!silent) loading(true);
+        io.execute(() -> {
+            String newRaw = null;
+            boolean cut = false;
+            Exception err = null;
+            try {
+                byte[] all = fetchLog();
+                cut = all.length > MAX_BYTES;
+                byte[] shown = cut ? Arrays.copyOfRange(all, all.length - MAX_BYTES, all.length) : all;
+                newRaw = new String(shown, StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                err = e;
+            }
+            boolean stillActive = active;
+            String label = statusLabel;
+            JSONArray jobSteps = null;
+            try {
+                JSONObject job = api.getJob(owner, repo, jobId);
+                stillActive = Status.isActive(job.optString("status"));
+                label = Status.label(job.optString("status"), job.optString("conclusion"));
+                jobSteps = job.optJSONArray("steps");
+            } catch (Exception ignored) {
+            }
+            final String fRaw = newRaw;
+            final boolean fCut = cut;
+            final Exception fErr = err;
+            final boolean fActive = stillActive;
+            final String fLabel = label;
+            final boolean changed = fRaw != null && (firstLoad || !fRaw.equals(raw));
+            List<StepLog.Step> built = null;
+            if (fRaw != null || jobSteps != null) {
+                List<LogFmt.Line> lines = LogFmt.parse(this, fRaw != null ? fRaw : raw);
+                built = jobSteps != null && jobSteps.length() > 0 ? StepLog.build(jobSteps, lines) : fallback(lines);
+            }
+            final List<StepLog.Step> fBuilt = built;
+            post(() -> {
+                loading(false);
+                active = fActive;
+                statusLabel = fLabel;
+                if (fErr != null && !silent && !fActive && fBuilt == null) {
+                    fail(fErr);
+                    return;
+                }
+                setSubtitle(active ? "\u25CF " + getString(R.string.lg_live) : statusLabel);
+                if (fRaw != null && changed) {
+                    raw = fRaw;
+                    truncated = fCut;
+                }
+                if (fBuilt != null && (changed || firstLoad || fActive)) {
+                    steps = fBuilt;
+                    rebuild(firstLoad);
+                } else if (fBuilt == null && raw.isEmpty()) {
+                    message(getString(R.string.lg_waiting));
+                }
+                firstLoad = false;
+                ui.removeCallbacks(poll);
+                if (resumed && active) ui.postDelayed(poll, POLL_MS);
+            });
+        });
+    }
+
+    /** Shows a short message in place of the list (waiting, nothing to show). */
+    private void message(String m) {
+        items.clear();
+        adapter.notifyDataSetChanged();
+        list.setVisibility(View.GONE);
+        text.setVisibility(View.VISIBLE);
+        text.setText(m);
+    }
+
+    private List<LogFmt.Line> visible(StepLog.Step s) {
+        if (mode == 0) return s.lines;
+        List<LogFmt.Line> out = new ArrayList<>();
+        for (LogFmt.Line l : s.lines) if (l.err) out.add(l);
+        return out;
+    }
+
+    private SpannableStringBuilder block(List<LogFmt.Line> vis, int from, int to, int gutter) {
+        int hint = Ui.color(this, R.color.text_hint);
+        int pad = Ui.dp(this, 8);
+        SpannableStringBuilder b = new SpannableStringBuilder();
+        for (int j = from; j < to; j++) {
+            LogFmt.Line l = vis.get(j);
+            int st = b.length();
+            if (l.text.length() == 0) b.append(' ');
+            else b.append(l.text);
+            if (!qLower.isEmpty() && l.text.length() > 0) {
+                String low = l.text.toString().toLowerCase(Locale.ROOT);
+                int at = low.indexOf(qLower);
+                int mark = Ui.color(this, R.color.warn);
+                while (at >= 0) {
+                    b.setSpan(new BackgroundColorSpan((mark & 0x00FFFFFF) | 0x55000000), st + at,
+                            st + at + qLower.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    at = low.indexOf(qLower, at + qLower.length());
+                }
+            }
+            if (j < to - 1) b.append('\n');
+            b.setSpan(new LineNumberSpan(l.no, gutter, hint, pad), st, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return b;
+    }
+
+    private void rebuild(boolean forceEnd) {
+        int count = adapter.getCount();
+        boolean atBottom = forceEnd || count == 0 || list.getLastVisiblePosition() >= count - 2;
+        int first = list.getFirstVisiblePosition();
+        View top = list.getChildAt(0);
+        int offset = top == null ? 0 : top.getTop();
+        items.clear();
+        if (steps.isEmpty()) {
+            message(getString(raw.isEmpty() ? R.string.lg_waiting : R.string.log_empty));
+            return;
+        }
+        if (truncated && mode == 0) items.add(new Item(2, null, getString(R.string.log_truncated)));
+        Paint mp = new Paint();
+        mp.setTypeface(Typeface.MONOSPACE);
+        mp.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f,
+                getResources().getDisplayMetrics()));
+        float charW = mp.measureText("0");
+        boolean any = false;
+        int targetPos = -1;
+        for (StepLog.Step s : steps) {
+            List<LogFmt.Line> vis = visible(s);
+            if (mode == 1 && vis.isEmpty()) continue;
+            any = true;
+            if (s.number == wantedStep && firstLoad) targetPos = items.size();
+            items.add(new Item(0, s, null));
+            if (!isOpen(s)) continue;
+            if (vis.isEmpty()) {
+                items.add(new Item(2, s, getString(s.code == 0 ? R.string.step_pending : R.string.step_no_output)));
+                continue;
+            }
+            int digits = Math.max(2, String.valueOf(s.lines.size()).length());
+            int gutter = (int) (charW * digits) + Ui.dp(this, 14);
+            addLines(s, vis, gutter);
+        }
+        if (!any) {
+            message(getString(R.string.log_no_errors));
+            return;
+        }
+        text.setVisibility(View.GONE);
+        list.setVisibility(View.VISIBLE);
+        adapter.notifyDataSetChanged();
+        indexItems();
+        final int fTarget = targetPos;
+        if (fTarget >= 0) {
+            wantedStep = 0;
+            list.post(() -> list.setSelection(fTarget));
+        } else if (!qLower.isEmpty()) {
+            list.setSelectionFromTop(first, offset);
+        } else if (atBottom && active) {
+            list.post(() -> list.setSelection(adapter.getCount() - 1));
+        } else if (forceEnd && !active) {
+            if (mode == 0 && !errPos.isEmpty()) {
+                errIndex = 0;
+                final int firstErr = errPos.get(0);
+                list.post(() -> list.setSelectionFromTop(firstErr, Ui.dp(this, 60)));
+            } else {
+                list.post(() -> list.setSelection(0));
+            }
+        } else {
+            list.setSelectionFromTop(first, offset);
+        }
+    }
+
+    private void addChunks(List<LogFmt.Line> vis, int from, int to, int gutter, StepLog.Step s) {
+        for (int i = from; i < to; i += LINES_PER_ROW) {
+            int end = Math.min(to, i + LINES_PER_ROW);
+            Item chunk = new Item(1, s, block(vis, i, end, gutter));
+            for (int k = i; k < end; k++) {
+                if (vis.get(k).err) chunk.hasErr = true;
+                if (lineHit(vis.get(k))) chunk.hasHit = true;
+            }
+            items.add(chunk);
+        }
+    }
+
+    private void addLines(StepLog.Step s, List<LogFmt.Line> vis, int gutter) {
+        int n = vis.size();
+        if (mode == 1) {
+            addChunks(vis, 0, n, gutter, s);
+            return;
+        }
+        int lastHeader = -1;
+        for (int k = 0; k < n; k++) if (vis.get(k).group == 1) lastHeader = k;
+        Map<String, Integer> seen = new HashMap<>();
+        int i = 0;
+        while (i < n) {
+            LogFmt.Line l = vis.get(i);
+            if (l.group != 1) {
+                int j = i;
+                while (j < n && vis.get(j).group != 1) j++;
+                addChunks(vis, i, j, gutter, s);
+                i = j;
+                continue;
+            }
+            int j = i + 1;
+            boolean err = false;
+            boolean hit = false;
+            while (j < n && vis.get(j).group == 2 && vis.get(j).gid == l.gid) {
+                if (vis.get(j).err) err = true;
+                if (lineHit(vis.get(j))) hit = true;
+                j++;
+            }
+            String base = s.number + "|" + l.plain;
+            Integer c = seen.get(base);
+            int occ = c == null ? 0 : c;
+            seen.put(base, occ + 1);
+            String key = base + "|" + occ;
+            Boolean saved = groupOpen.get(key);
+            boolean open = hit || (saved != null ? saved : (err || (active && s.code == 1 && i == lastHeader)));
+            int count = j - i - 1;
+            String title = l.plain.startsWith("\u25B6 ") ? l.plain.substring(2) : l.plain;
+            String head = (open ? "\u25BE " : "\u25B8 ") + title
+                    + (count > 0 ? "  \u00B7  " + getString(R.string.lg_group_lines, count) : "");
+            items.add(new Item(3, s, head, key, open));
+            if (open && count > 0) addChunks(vis, i + 1, j, gutter, s);
+            i = j;
+        }
+    }
+
+    private String plain(int m) {
+        StringBuilder b = new StringBuilder();
+        for (LogFmt.Line l : LogFmt.parse(this, raw)) {
+            if (m == 1 && !l.err) continue;
+            b.append(l.plain).append('\n');
+        }
+        String s = b.toString().trim();
+        return s.length() > MAX_CLIP_CHARS ? s.substring(s.length() - MAX_CLIP_CHARS) : s;
+    }
+
+    private void copyLog(int m) {
+        String s = plain(m);
+        if (s.isEmpty()) {
+            toast(m == 1 ? R.string.lg_no_errors_copy : R.string.log_empty);
+            return;
+        }
+        copy("log", s);
+    }
+
+    private void setAll(boolean open) {
+        expanded.clear();
+        for (StepLog.Step s : steps) expanded.put(s.number, open);
+        rebuild(false);
+    }
+
+    private void moreMenu() {
+        String[] items = {getString(R.string.download), getString(R.string.share),
+                getString(R.string.log_expand_all), getString(R.string.log_collapse_all),
+                getString(R.string.go_top), getString(R.string.go_bottom), getString(R.string.ex_btn)};
+        choose(getString(R.string.more), items, (d, which) -> {
+            if (which == 0) {
+                saveAs("job-" + jobId + "-log.txt",
+                        () -> api.openDownload(api.jobLogsPath(owner, repo, jobId), "application/vnd.github+json"));
+            } else if (which == 1) {
+                shareText(plain(0));
+            } else if (which == 2) {
+                setAll(true);
+            } else if (which == 3) {
+                setAll(false);
+            } else if (which == 4) {
+                list.post(() -> list.setSelection(0));
+            } else if (which == 5) {
+                list.post(() -> list.setSelection(Math.max(0, adapter.getCount() - 1)));
+            } else {
+                explainLocal();
+            }
+        });
+    }
+
+    private void explainLocal() {
+        if (raw.isEmpty()) {
+            toast(R.string.log_empty);
+            return;
+        }
+        StepLog.Step failed = null;
+        for (StepLog.Step st : steps) {
+            if (st.code == 3 && !st.lines.isEmpty()) {
+                failed = st;
+                break;
+            }
+        }
+        List<LogFmt.Line> lines = failed != null ? failed.lines : LogFmt.parse(this, raw);
+        SemoExplain.Report r = SemoExplain.analyze(lines, jobName, failed == null ? "" : failed.name);
+        SemoExplain.show(this, r, null);
+    }
+}
