@@ -4,8 +4,6 @@ Languages: [English](README.md) | [العربية](README.ar.md) | [Français](R
 
 Safe use and misuse protection: [SAFE_USE.md](SAFE_USE.md)
 
-Thanks: [THANKS.md](THANKS.md)
-
 GitHub Manager is a native Android app (Java) for managing GitHub repositories, files, Actions workflows, issues and releases from a phone.
 
 ## Features
@@ -83,11 +81,5 @@ The Worker forwards requests to GitHub hosts only and refuses every request that
 8. If the key is ever exposed, replace it at once with the same command.
 
 ## Staying within GitHub rules
-
-- Use the app only with your own accounts and tokens, or accounts you are authorized to manage.
-- Do not run bulk or repeated automated actions. The app already waits when GitHub reports a rate limit; do not try to bypass it.
-- Keep your Worker private. Do not publish its address or key, and do not offer it to other people as a proxy or VPN. This can break the terms of GitHub and Cloudflare.
-- Do not use it to collect data about other users, to spam, or to publish harmful content.
-- Never commit tokens, keys or passwords. Turn on secret scanning and push protection in the repository settings.
 
 Read SAFE_USE.md for the full protection and misuse policy.
