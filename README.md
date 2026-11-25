@@ -38,7 +38,7 @@ Issues, releases and collaboration
 Security and privacy
 - The access token is stored with the Android Keystore.
 - Optional app lock using the phone fingerprint, pattern or PIN.
-- Screen capture is blocked inside the app.
+- Screen capture is blocked inside the app by default; turn it off in Settings, Security if you need screenshots.
 - HTTPS only, trusting system certificates only. Backups are disabled.
 - The APK can be sealed at build time, and the app checks the seal at start.
 - In-app updates are verified by SHA-256 and by the signing certificate.

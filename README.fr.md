@@ -38,7 +38,7 @@ Issues, releases et collaboration
 Securite et confidentialite
 - Le jeton d'acces est stocke avec l'Android Keystore.
 - Verrouillage facultatif par empreinte, schema ou code du telephone.
-- Les captures d'ecran sont bloquees dans l'application.
+- Les captures d'ecran sont bloquees par defaut dans l'application ; on peut les autoriser dans Reglages, Securite.
 - HTTPS uniquement, avec les certificats du systeme seulement. Sauvegardes desactivees.
 - L'APK peut etre scelle a la compilation et l'application verifie le sceau au demarrage.
 - Les mises a jour sont verifiees par SHA-256 et par le certificat de signature.

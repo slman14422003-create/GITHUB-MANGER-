@@ -38,7 +38,7 @@ Issue'lar, surumler ve is birligi
 Guvenlik ve gizlilik
 - Erisim token'i Android Keystore ile saklanir.
 - Telefonun parmak izi, deseni veya PIN'i ile istege bagli uygulama kilidi.
-- Uygulama icinde ekran goruntusu engellenir.
+- Uygulama icinde ekran goruntusu varsayilan olarak engellenir; Ayarlar, Guvenlik bolumunden izin verilebilir.
 - Yalnizca HTTPS; yalnizca sistem sertifikalarina guvenilir. Yedekleme kapalidir.
 - APK derleme sirasinda muhurlenebilir ve uygulama baslarken muhru dogrular.
 - Guncellemeler SHA-256 ve imza sertifikasi ile dogrulanir.

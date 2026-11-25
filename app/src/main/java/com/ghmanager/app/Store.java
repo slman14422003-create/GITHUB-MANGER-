@@ -346,6 +346,14 @@ public class Store {
         sp(c).edit().putBoolean("upd_file_grid", on).apply();
     }
 
+    public static boolean blockShots(Context c) {
+        return sp(c).getBoolean("block_shots", true);
+    }
+
+    public static void setBlockShots(Context c, boolean on) {
+        sp(c).edit().putBoolean("block_shots", on).apply();
+    }
+
     public static boolean syntaxOn(Context c) {
         return sp(c).getBoolean("upd_syntax", true);
     }

@@ -21,7 +21,7 @@ GitHub Manager is a personal tool to manage GitHub accounts, repositories and wo
 
 - The access token is stored with the Android Keystore and is removed when you sign out.
 - Optional app lock with the phone fingerprint, pattern or PIN.
-- Screen capture is blocked, backups are disabled, and traffic is HTTPS only with system certificates only.
+- Screen capture is blocked by default (you can allow it in Settings, Security), backups are disabled, and traffic is HTTPS only with system certificates only.
 - The APK can be sealed at build time. The app refuses to run if code or resources were changed after the build.
 - In-app updates are accepted only if the SHA-256 matches and the signing certificate is the same as the installed app. An APK that uses this app's package name with a different certificate is refused.
 - Links are restricted to https and the sign-in page to github.com.

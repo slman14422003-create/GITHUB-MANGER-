@@ -135,6 +135,13 @@ public class SettingsActivity extends BaseRepoActivity {
             render();
         });
         content.addView(lock.view);
+        final Ui.Toggle shots = Ui.toggle(this, content, R.string.shots_block, R.string.shots_block_sub,
+                Store.blockShots(this));
+        shots.onChange((b, on) -> {
+            Store.setBlockShots(this, on);
+            App.applyShotPolicy(this);
+        });
+        content.addView(shots.view);
         final Ui.Toggle verify = Ui.toggle(this, content, R.string.verify_enable, R.string.verify_enable_sub,
                 Verify.enabled(this));
         verify.onChange((b, on) -> {

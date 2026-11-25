@@ -499,8 +499,8 @@ final class TransferDock implements Transfers.Listener {
         ViewGroup frame = refresh == null ? null : (ViewGroup) refresh.getParent();
         ViewGroup header = frame == null ? null : (ViewGroup) frame.getParent();
         if (header instanceof LinearLayout) {
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(act, 48), Ui.dp(act, 48));
-            lp.setMarginEnd(Ui.dp(act, 6));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(act, 42), Ui.dp(act, 42));
+            lp.setMarginEnd(Ui.dp(act, 2));
             header.addView(button, header.indexOfChild(frame), lp);
             return;
         }

@@ -38,7 +38,7 @@ Issues, releases y colaboracion
 Seguridad y privacidad
 - El token de acceso se guarda con el Android Keystore.
 - Bloqueo opcional de la aplicacion con huella, patron o PIN del telefono.
-- Las capturas de pantalla estan bloqueadas dentro de la aplicacion.
+- Las capturas de pantalla estan bloqueadas por defecto dentro de la aplicacion; se pueden permitir en Ajustes, Seguridad.
 - Solo HTTPS, confiando unicamente en los certificados del sistema. Copias de seguridad desactivadas.
 - El APK puede sellarse al compilar y la aplicacion comprueba el sello al iniciar.
 - Las actualizaciones se verifican con SHA-256 y con el certificado de firma.

@@ -16,6 +16,13 @@ import androidx.core.view.WindowInsetsCompat;
  * Android 16. This keeps every screen clear of the status bar, navigation bar, cutout and keyboard.
  */
 public class App extends Application {
+
+    /** Screenshots and screen recording are blocked unless the user allowed them in Settings. */
+    static void applyShotPolicy(Activity a) {
+        if (BuildConfig.DEBUG) return;
+        if (Store.blockShots(a)) a.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        else a.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    }
     private static volatile Application instance;
 
     static Application context() {
@@ -43,10 +50,7 @@ public class App extends Application {
                     a.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
                 }
                 // sensitive app: no screenshots, no screen recording, no content in the recent-apps thumbnail
-                if (!BuildConfig.DEBUG) {
-                    a.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,
-                            WindowManager.LayoutParams.FLAG_SECURE);
-                }
+                applyShotPolicy(a);
             }
 
             @Override
@@ -83,6 +87,7 @@ public class App extends Application {
             @Override
             public void onActivityResumed(Activity a) {
                 Themes.refresh(a);
+                applyShotPolicy(a);
                 Ui.settleHeader(a);
                 // running uploads / downloads get a live progress card on every normal screen
                 if (!(a instanceof LockActivity) && !(a instanceof LoginActivity) && !(a instanceof TransfersActivity)) TransferDock.resume(a);
