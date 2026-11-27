@@ -640,4 +640,7 @@
     <string name="rollback_before_run">Failed? Go back to the version before it</string>
     <string name="rollback_detail">The change that failed: %1$s — %2$s\n\nNote: if there are newer changes on the branch they will be undone as well.</string>
     <string name="lg_group_lines">%1$d lines</string>
+    <string name="read_only_badge">Read only</string>
+    <string name="read_only_blocked">This repository is read-only. You do not have write access to it.</string>
+    <string name="view_only">View</string>
 </resources>

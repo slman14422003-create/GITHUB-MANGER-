@@ -40,4 +40,7 @@
     <string name="back">رجوع</string>
     <string name="branch_label">الفرع</string>
     <string name="folder_label">مجلد</string>
+    <string name="read_only_badge">قراءة فقط</string>
+    <string name="read_only_blocked">هذا المستودع للقراءة فقط، ولا تملك صلاحية الكتابة عليه.</string>
+    <string name="view_only">عرض</string>
 </resources>
