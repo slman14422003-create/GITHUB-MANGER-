@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ob_back">Back</string>
+    <string name="ob_next">Next</string>
+    <string name="ob_start">Get started</string>
+    <string name="ob_welcome">Welcome</string>
+    <string name="ob_welcome_sub">A quick setup before you start</string>
+    <string name="ob_f_repos">Your repositories</string>
+    <string name="ob_f_repos_sub">Browse, edit and upload files</string>
+    <string name="ob_f_actions">Builds and releases</string>
+    <string name="ob_f_actions_sub">Follow Actions and download artifacts</string>
+    <string name="ob_f_safe">Your account is protected</string>
+    <string name="ob_f_safe_sub">The app never sees your password when you sign in with GitHub</string>
+    <string name="ob_look">Language and theme</string>
+    <string name="ob_look_sub">You can change these later in Settings</string>
+    <string name="ob_language">Language</string>
+    <string name="ob_lang_ar">Arabic</string>
+    <string name="ob_lang_en">English</string>
+    <string name="ob_theme">Theme</string>
+    <string name="ob_dark">Dark</string>
+    <string name="ob_perms">Permissions</string>
+    <string name="ob_perms_sub">Optional, you can skip them</string>
+    <string name="ob_notif">Notifications</string>
+    <string name="ob_notif_sub">To follow uploads, downloads and builds</string>
+    <string name="ob_files">File access</string>
+    <string name="ob_files_sub">To upload folders and save downloads</string>
+    <string name="ob_allow">Allow</string>
+    <string name="ob_granted">Allowed</string>
+    <string name="lg_google">Continue with Google</string>
+    <string name="lg_github">Continue with GitHub</string>
+    <string name="lg_hint">You sign in on the official GitHub page.</string>
+    <string name="lg_google_steps">1. The code is copied automatically.\n2. On the GitHub page tap “Continue with Google”.\n3. If no code box appears after signing in, return to the app and tap “Open GitHub page”.\n4. Paste the code, approve, then return to the app.</string>
+    <string name="lg_time_left">Code expires in %1$s</string>
+    <string name="lg_use_token">Sign in with an access token</string>
+    <string name="lg_create_token">Create a new token</string>
+</resources>

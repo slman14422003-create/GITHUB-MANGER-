@@ -20,13 +20,10 @@
             android:src="@drawable/ic_back"
             android:visibility="gone" />
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="28dp" />
-
         <ImageView
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginTop="20dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_mark" />
 
@@ -34,21 +31,21 @@
             android:id="@+id/loginTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:fontFamily="serif"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
             android:text="@string/app_name"
             android:textColor="?attr/cTextPrimary"
-            android:textSize="32sp" />
+            android:textSize="28sp"
+            android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:gravity="center"
-            android:lineSpacingMultiplier="1.15"
             android:text="@string/login_subtitle"
             android:textColor="?attr/cTextSecondary"
-            android:textSize="15sp" />
+            android:textSize="14sp" />
 
         <!-- sign in with GitHub (device flow: Google, e-mail, password, passkey on GitHub's own page) -->
         <LinearLayout
@@ -60,11 +57,19 @@
             android:padding="20dp">
 
             <Button
-                android:id="@+id/btnOauth"
+                android:id="@+id/btnGoogle"
                 style="@style/BtnPrimary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/login_gh" />
+                android:text="@string/lg_google" />
+
+            <Button
+                android:id="@+id/btnOauth"
+                style="@style/BtnSecondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/lg_github" />
 
             <TextView
                 android:id="@+id/ghHint"
@@ -72,7 +77,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:lineSpacingMultiplier="1.2"
-                android:text="@string/login_gh_hint"
+                android:text="@string/lg_hint"
                 android:textAlignment="viewStart"
                 android:textColor="?attr/cTextSecondary"
                 android:textSize="13sp" />
@@ -87,6 +92,18 @@
                 android:orientation="vertical"
                 android:padding="16dp"
                 android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/googleSteps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:lineSpacingMultiplier="1.2"
+                    android:text="@string/lg_google_steps"
+                    android:textAlignment="viewStart"
+                    android:textColor="?attr/cTextPrimary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -159,6 +176,14 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/codeTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="?attr/cTextHint"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/btnCancelFlow"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -171,21 +196,25 @@
         </LinearLayout>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/tokenToggle"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:layout_marginBottom="14dp"
-            android:text="@string/login_or"
-            android:textColor="?attr/cTextHint"
-            android:textSize="13sp" />
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:minHeight="48dp"
+            android:text="@string/lg_use_token"
+            android:textColor="?attr/cAccentText"
+            android:textSize="14sp" />
 
         <!-- personal access token -->
         <LinearLayout
+            android:id="@+id/tokenPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="20dp"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -219,9 +248,18 @@
                 android:text="@string/login" />
 
             <TextView
+                android:id="@+id/btnTokenCreate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:gravity="center_vertical"
+                android:text="@string/lg_create_token"
+                android:textColor="?attr/cAccentText"
+                android:textSize="14sp" />
+
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
                 android:lineSpacingMultiplier="1.2"
                 android:text="@string/token_help"
                 android:textAlignment="viewStart"

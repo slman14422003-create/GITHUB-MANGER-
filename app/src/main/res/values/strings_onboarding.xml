@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ob_back">السابق</string>
+    <string name="ob_next">التالي</string>
+    <string name="ob_start">ابدأ</string>
+    <string name="ob_welcome">أهلًا بك</string>
+    <string name="ob_welcome_sub">إعداد سريع قبل البدء</string>
+    <string name="ob_f_repos">مستودعاتك</string>
+    <string name="ob_f_repos_sub">تصفّح وعدّل وارفع الملفات</string>
+    <string name="ob_f_actions">البناء والإصدارات</string>
+    <string name="ob_f_actions_sub">تابع Actions ونزّل الملفات</string>
+    <string name="ob_f_safe">حسابك محمي</string>
+    <string name="ob_f_safe_sub">التطبيق لا يرى كلمة مرورك عند الدخول عبر GitHub</string>
+    <string name="ob_look">المظهر واللغة</string>
+    <string name="ob_look_sub">يمكنك تغييرها لاحقًا من الإعدادات</string>
+    <string name="ob_language">اللغة</string>
+    <string name="ob_lang_ar">العربية</string>
+    <string name="ob_lang_en">الإنجليزية</string>
+    <string name="ob_theme">المظهر</string>
+    <string name="ob_dark">داكن</string>
+    <string name="ob_perms">الأذونات</string>
+    <string name="ob_perms_sub">اختيارية ويمكنك تخطيها</string>
+    <string name="ob_notif">الإشعارات</string>
+    <string name="ob_notif_sub">لمتابعة الرفع والتنزيل والبناء</string>
+    <string name="ob_files">الوصول إلى الملفات</string>
+    <string name="ob_files_sub">لرفع المجلدات وحفظ التنزيلات</string>
+    <string name="ob_allow">السماح</string>
+    <string name="ob_granted">تم السماح</string>
+    <string name="lg_google">المتابعة مع Google</string>
+    <string name="lg_github">المتابعة عبر GitHub</string>
+    <string name="lg_hint">يتم الدخول من صفحة GitHub الرسمية.</string>
+    <string name="lg_google_steps">1. نُسخ الرمز تلقائيًا.\n2. في صفحة GitHub اضغط «Continue with Google».\n3. إن لم تظهر خانة الرمز بعد الدخول، ارجع للتطبيق واضغط «فتح صفحة GitHub».\n4. الصق الرمز ووافق ثم ارجع للتطبيق.</string>
+    <string name="lg_time_left">الوقت المتبقي للرمز: %1$s</string>
+    <string name="lg_use_token">الدخول برمز الوصول</string>
+    <string name="lg_create_token">إنشاء رمز جديد</string>
+</resources>
