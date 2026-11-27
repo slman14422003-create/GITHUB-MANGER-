@@ -65,6 +65,7 @@ public class BrowserActivity extends BaseRepoActivity {
     private TextView chipSearch;
     private final AtomicInteger dateGen = new AtomicInteger();
     private TextView pathView;
+    private android.widget.HorizontalScrollView crumbScroll;
     private Spinner spinner;
     private List<String> branches = new ArrayList<>();
     private boolean needsReload = false;
@@ -90,10 +91,11 @@ public class BrowserActivity extends BaseRepoActivity {
         ((TextView) findViewById(R.id.title)).setText(repo);
 
         spinner = findViewById(R.id.branchSpinner);
-        pathView = findViewById(R.id.subtitle);
-        pathView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        pathView = findViewById(R.id.crumbBar);
+        crumbScroll = findViewById(R.id.crumbScroll);
+        View headerSub = findViewById(R.id.subtitle);
+        if (headerSub != null) headerSub.setVisibility(View.GONE);
         pathView.setTextDirection(View.TEXT_DIRECTION_LTR);
-        pathView.setEllipsize(android.text.TextUtils.TruncateAt.START);
         pathView.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
         pathView.setHighlightColor(android.graphics.Color.TRANSPARENT);
         wireRootNav();
@@ -615,6 +617,7 @@ public class BrowserActivity extends BaseRepoActivity {
             path = target;
             load();
         }));
+        crumbScroll.post(() -> crumbScroll.fullScroll(View.FOCUS_RIGHT));
         Store.setLastFolder(this, owner, repo, path);
         final String p = path;
         final String b = branch;

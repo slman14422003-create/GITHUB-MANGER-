@@ -58,6 +58,7 @@ public class ReposActivity extends AppCompatActivity {
     private View refreshBtn;
     private androidx.swiperefreshlayout.widget.SwipeRefreshLayout swipe;
     private GhStatusCard statusCard;
+    private StoreTab store;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private boolean resumed = false;
@@ -197,6 +198,10 @@ public class ReposActivity extends AppCompatActivity {
         getOnBackPressedDispatcher().addCallback(this, backCb);
         findViewById(R.id.btnNew).setOnClickListener(v -> newRepoDialog());
         findViewById(R.id.btnRefresh).setOnClickListener(v -> {
+            if (store != null && store.isShown()) {
+                store.refresh();
+                return;
+            }
             load();
             if (statusCard != null) statusCard.refresh();
         });
@@ -230,6 +235,10 @@ public class ReposActivity extends AppCompatActivity {
             }
         });
         buildChips();
+        store = new StoreTab(this, api, ui, () -> {
+            if (selectMode) exitSelect();
+            if (store != null && !store.isShown() && !allRepos.isEmpty()) render();
+        });
         load();
         Updater.autoCheck(this, io, ui);
     }
@@ -384,7 +393,7 @@ public class ReposActivity extends AppCompatActivity {
         return blend(Ui.color(this, R.color.ok), Ui.color(this, R.color.text_hint), f);
     }
 
-    private static int langColor(String lang) {
+    static int langColor(String lang) {
         switch (lang) {
             case "Java":
                 return 0xFFB07219;
@@ -461,7 +470,7 @@ public class ReposActivity extends AppCompatActivity {
             rows.add(row);
         }
         adapter.setRows(rows);
-        count.setText(getString(R.string.repos_count, rows.size()));
+        if (store == null || !store.isShown()) count.setText(getString(R.string.repos_count, rows.size()));
         if (rows.isEmpty() && !allRepos.isEmpty()) {
             emptyShown = true;
             status.setText(R.string.rs_empty_filter);
@@ -949,6 +958,7 @@ public class ReposActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (statusCard != null) statusCard.destroy();
+        if (store != null) store.destroy();
         io.shutdown();
     }
 }

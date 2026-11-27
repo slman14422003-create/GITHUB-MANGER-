@@ -167,7 +167,10 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         root.setId(R.id.btnRoot);
         root.setImageResource(R.drawable.ic_root);
         root.setContentDescription(getString(R.string.repo_root));
-        root.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48)));
+        LinearLayout.LayoutParams rootLp = new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48));
+        rootLp.setMarginStart(Ui.dp(this, 8));
+        rootLp.setMarginEnd(Ui.dp(this, 4));
+        root.setLayoutParams(rootLp);
         root.setOnClickListener(v -> goRepoRoot());
         Ui.press(this, root);
         row.addView(root, row.indexOfChild(back) + 1);

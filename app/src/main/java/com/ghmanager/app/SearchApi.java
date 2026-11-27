@@ -39,6 +39,16 @@ final class SearchApi extends ApiPart {
         return obj("/search/repositories?q=" + qe(q) + "&per_page=" + perPage + "&page=" + page);
     }
 
+    public JSONObject searchRepos(String q, String sort, String order, int page, int perPage) throws Exception {
+        StringBuilder p = new StringBuilder("/search/repositories?q=").append(qe(q));
+        if (sort != null && !sort.isEmpty()) {
+            p.append("&sort=").append(qe(sort)).append("&order=")
+                    .append(qe(order == null || order.isEmpty() ? "desc" : order));
+        }
+        p.append("&per_page=").append(perPage).append("&page=").append(page);
+        return obj(p.toString());
+    }
+
     public JSONObject searchCodeQuery(String q, int page, int perPage) throws Exception {
         return obj("/search/code?q=" + qe(q) + "&per_page=" + perPage + "&page=" + page);
     }

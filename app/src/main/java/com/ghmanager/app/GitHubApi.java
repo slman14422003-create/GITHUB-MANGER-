@@ -689,6 +689,10 @@ public class GitHubApi {
         return searchApi.searchRepos(q, page, perPage);
     }
 
+    public JSONObject searchRepos(String q, String sort, String order, int page, int perPage) throws Exception  {
+        return searchApi.searchRepos(q, sort, order, page, perPage);
+    }
+
     public JSONObject searchCodeQuery(String q, int page, int perPage) throws Exception  {
         return searchApi.searchCodeQuery(q, page, perPage);
     }

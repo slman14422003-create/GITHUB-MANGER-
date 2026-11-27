@@ -86,6 +86,7 @@ public class ActionsActivity extends BaseRepoActivity {
     private LinearLayout dash;
     private RunAdapter runAdapter;
     private ShimmerView shimmer;
+    private FrameLayout shimmerBox;
 
     // header views
     private TextView wfTitle;
@@ -144,7 +145,8 @@ public class ActionsActivity extends BaseRepoActivity {
         customSkeleton = true;
         shimmer = new ShimmerView(this);
         shimmer.setVisibility(View.GONE);
-        FrameLayout shimmerBox = new FrameLayout(this);
+        shimmerBox = new FrameLayout(this);
+        shimmerBox.setVisibility(View.GONE);
         shimmerBox.addView(shimmer, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 600)));
         runAdapter = new RunAdapter();
@@ -397,9 +399,12 @@ public class ActionsActivity extends BaseRepoActivity {
             showEmpty(false, R.string.no_runs);
             shimmer.setAlpha(1f);
             shimmer.setVisibility(View.VISIBLE);
-        } else if (!on && shimmer.getVisibility() == View.VISIBLE) {
+            shimmerBox.setVisibility(View.VISIBLE);
+        } else if (!on) {
             shimmer.setVisibility(View.GONE);
-            Fx.slideIn(dash);
+            shimmerBox.setVisibility(View.GONE);
+            dash.animate().cancel();
+            Fx.settle(dash);
         }
     }
 
@@ -633,6 +638,12 @@ public class ActionsActivity extends BaseRepoActivity {
                     .append(r.optString("updated_at")).append(';');
         }
         String sig = sg.toString();
+        dash.animate().cancel();
+        Fx.settle(dash);
+        dash.post(() -> {
+            dash.animate().cancel();
+            Fx.settle(dash);
+        });
         if (sig.equals(dashSig) && dash.getChildCount() > 0) return;
         dashSig = sig;
         dash.removeAllViews();
