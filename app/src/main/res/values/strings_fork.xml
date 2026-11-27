@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fk_title">Fork</string>
+    <string name="fk_sub">إنشاء ومزامنة وإدارة النسخ المتفرعة</string>
+    <string name="fk_from">متفرع من %1$s</string>
+    <string name="fk_state">متقدم: %1$d · متأخر: %2$d</string>
+    <string name="fk_create">إنشاء Fork</string>
+    <string name="fk_org">المنظمة (اتركه فارغًا لحسابك)</string>
+    <string name="fk_default_only">نسخ الفرع الافتراضي فقط</string>
+    <string name="fk_pending">ما زال GitHub يجهّز النسخة، حاول بعد قليل.</string>
+    <string name="fk_list">عرض نسخ Fork</string>
+    <string name="fk_open_parent">فتح المستودع الأصلي</string>
+    <string name="fk_branch">اختيار الفرع</string>
+    <string name="fk_compare">مقارنة مع الأصل</string>
+    <string name="fk_pr">طلب دمج إلى الأصل</string>
+    <string name="fk_pr_title">عنوان طلب الدمج</string>
+    <string name="fk_sync">مزامنة مع الأصل</string>
+    <string name="fk_sync_msg">دمج تحديثات الأصل في الفرع %1$s؟</string>
+    <string name="fk_reset">إعادة ضبط مطابقة للأصل</string>
+    <string name="fk_reset_msg">سيصبح الفرع %1$s مطابقًا لـ %2$s وتُفقد كل التزاماتك غير الموجودة في الأصل.</string>
+    <string name="fk_delete">حذف هذا الـ Fork</string>
+    <string name="fk_delete_msg">اكتب %1$s لتأكيد الحذف النهائي</string>
+</resources>

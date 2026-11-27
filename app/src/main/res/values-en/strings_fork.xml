@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fk_title">Fork</string>
+    <string name="fk_sub">Create, sync and manage forks</string>
+    <string name="fk_from">Forked from %1$s</string>
+    <string name="fk_state">Ahead: %1$d · Behind: %2$d</string>
+    <string name="fk_create">Create fork</string>
+    <string name="fk_org">Organization (empty for your account)</string>
+    <string name="fk_default_only">Copy the default branch only</string>
+    <string name="fk_pending">GitHub is still preparing the fork, try again shortly.</string>
+    <string name="fk_list">View forks</string>
+    <string name="fk_open_parent">Open original repository</string>
+    <string name="fk_branch">Choose branch</string>
+    <string name="fk_compare">Compare with upstream</string>
+    <string name="fk_pr">Pull request to upstream</string>
+    <string name="fk_pr_title">Pull request title</string>
+    <string name="fk_sync">Sync with upstream</string>
+    <string name="fk_sync_msg">Merge upstream changes into %1$s?</string>
+    <string name="fk_reset">Reset to match upstream</string>
+    <string name="fk_reset_msg">Branch %1$s will match %2$s and all your commits missing upstream will be lost.</string>
+    <string name="fk_delete">Delete this fork</string>
+    <string name="fk_delete_msg">Type %1$s to confirm permanent deletion</string>
+</resources>
