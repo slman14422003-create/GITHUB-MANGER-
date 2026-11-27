@@ -274,6 +274,10 @@ public class RepoHomeActivity extends BaseRepoActivity {
                 getString(R.string.branches_sub), false, true),
                 v -> startActivity(repoIntent(BranchesActivity.class)));
 
+        addRow(new Row(R.drawable.ic_branch, true, getString(R.string.fk_title),
+                getString(R.string.fk_sub), false, true),
+                v -> startActivity(repoIntent(ForkActivity.class)));
+
         addRow(new Row(R.drawable.ic_chart, true, getString(R.string.insights),
                 getString(R.string.insights_sub), false, true),
                 v -> startActivity(repoIntent(InsightsActivity.class)));

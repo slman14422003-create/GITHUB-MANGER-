@@ -69,6 +69,12 @@ public final class RepoAccess {
         if (c >= 0) end = c;
         if (q >= 0 && q < end) end = q;
         if (end <= b + 1) return false;
+        if (method.equals("POST")) {
+            String rest = q >= 0 && q < end ? "" : target.substring(end);
+            int cut = rest.indexOf('?');
+            if (cut >= 0) rest = rest.substring(0, cut);
+            if (rest.equals("/forks") || rest.equals("/pulls")) return false;
+        }
         Boolean k = KNOWN.get(key(decode(target.substring(a, b)), decode(target.substring(b + 1, end))));
         return k != null && !k;
     }

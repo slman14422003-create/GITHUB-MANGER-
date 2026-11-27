@@ -248,6 +248,23 @@ public class GitHubApi {
         return repoApi.createRepo(name, isPrivate);
     }
 
+    public JSONObject createFork(String o, String r, String org, String name, boolean defaultOnly) throws Exception {
+        return repoApi.createFork(o, r, org, name, defaultOnly);
+    }
+
+    public JSONArray listForks(String o, String r) throws Exception {
+        return repoApi.listForks(o, r);
+    }
+
+    public JSONObject mergeUpstream(String o, String r, String branch) throws Exception {
+        return repoApi.mergeUpstream(o, r, branch);
+    }
+
+    public void resetToUpstream(String o, String r, String branch, String parentOwner, String parentRepo,
+                                String parentBranch) throws Exception {
+        repoApi.resetToUpstream(o, r, branch, parentOwner, parentRepo, parentBranch);
+    }
+
     public JSONObject getRepo(String o, String r) throws Exception  {
         return repoApi.getRepo(o, r);
     }

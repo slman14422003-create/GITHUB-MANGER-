@@ -51,6 +51,34 @@ final class RepoApi extends ApiPart {
         return new JSONObject(request("POST", "/user/repos", b));
     }
 
+    public JSONObject createFork(String o, String r, String org, String name, boolean defaultOnly) throws Exception {
+        JSONObject b = new JSONObject();
+        if (!org.isEmpty()) b.put("organization", org);
+        if (!name.isEmpty()) b.put("name", name);
+        b.put("default_branch_only", defaultOnly);
+        return new JSONObject(request("POST", repo(o, r) + "/forks", b));
+    }
+
+    public JSONArray listForks(String o, String r) throws Exception {
+        return arr(repo(o, r) + "/forks?sort=newest&per_page=100");
+    }
+
+    public JSONObject mergeUpstream(String o, String r, String branch) throws Exception {
+        JSONObject b = new JSONObject();
+        b.put("branch", branch);
+        return new JSONObject(request("POST", repo(o, r) + "/merge-upstream", b));
+    }
+
+    public void resetToUpstream(String o, String r, String branch, String parentOwner, String parentRepo,
+                                String parentBranch) throws Exception {
+        String sha = obj(repo(parentOwner, parentRepo) + "/git/ref/heads/" + enc(parentBranch))
+                .getJSONObject("object").getString("sha");
+        JSONObject b = new JSONObject();
+        b.put("sha", sha);
+        b.put("force", true);
+        request("PATCH", repo(o, r) + "/git/refs/heads/" + enc(branch), b);
+    }
+
     public JSONObject getRepo(String o, String r) throws Exception {
         JSONObject j = obj(repo(o, r));
         RepoAccess.recordJson(o, r, j);
