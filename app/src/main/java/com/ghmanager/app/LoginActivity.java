@@ -47,6 +47,19 @@ public class LoginActivity extends AppCompatActivity {
 
     private Button btnOauth;
     private Button loginBtn;
+    private Button btnGoogle;
+    private TextView codeTimer;
+    private boolean google = false;
+    private final Runnable clock = new Runnable() {
+        @Override
+        public void run() {
+            if (destroyed || dev == null || codeTimer == null) return;
+            long left = Math.max(0, (deadline - System.currentTimeMillis()) / 1000);
+            codeTimer.setText(getString(R.string.lg_time_left,
+                    String.format(java.util.Locale.US, "%d:%02d", left / 60, left % 60)));
+            ui.postDelayed(this, 1000);
+        }
+    };
     private View codePanel;
     private TextView codeText;
 
@@ -69,6 +82,12 @@ public class LoginActivity extends AppCompatActivity {
                     .setCancelable(false)
                     .setPositiveButton(android.R.string.ok, (d, w) -> finishAffinity())
                     .show();
+            return;
+        }
+        if (!getIntent().getBooleanExtra("add", false) && !getIntent().getBooleanExtra("reauth", false)
+                && Store.getToken(this).isEmpty() && !OnboardingActivity.done(this)) {
+            startActivity(new Intent(this, OnboardingActivity.class));
+            finish();
             return;
         }
         final long start = SystemClock.uptimeMillis();
@@ -108,7 +127,26 @@ public class LoginActivity extends AppCompatActivity {
         loginBtn = findViewById(R.id.login);
         final EditText tokenView = findViewById(R.id.token);
 
+        btnGoogle = findViewById(R.id.btnGoogle);
+        codeTimer = findViewById(R.id.codeTimer);
+        google = savedInstanceState != null && savedInstanceState.getBoolean("google");
+        final View tokenPanel = findViewById(R.id.tokenPanel);
+        if (reauth) tokenPanel.setVisibility(View.VISIBLE);
+        findViewById(R.id.tokenToggle).setOnClickListener(v -> tokenPanel.setVisibility(
+                tokenPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        findViewById(R.id.btnTokenCreate).setOnClickListener(v -> openGithub(
+                "https://github.com/settings/tokens/new?scopes=repo,workflow&description=GitHubManager"));
+
+        btnGoogle.setOnClickListener(v -> {
+            google = true;
+            if (Store.oauthClientId(this).isEmpty()) {
+                clientDialog(this::startFlow);
+            } else {
+                startFlow();
+            }
+        });
         btnOauth.setOnClickListener(v -> {
+            google = false;
             if (Store.oauthClientId(this).isEmpty()) {
                 clientDialog(this::startFlow);
             } else {
@@ -164,7 +202,7 @@ public class LoginActivity extends AppCompatActivity {
     private void startFlow(final boolean open) {
         final String cid = Store.oauthClientId(this);
         if (cid.isEmpty()) return;
-        btnOauth.setEnabled(false);
+        setFlowButtons(false);
         io.execute(() -> {
             try {
                 final DeviceFlow.Code c = DeviceFlow.start(cid);
@@ -174,7 +212,7 @@ public class LoginActivity extends AppCompatActivity {
                 });
             } catch (Exception e) {
                 ui.post(() -> {
-                    btnOauth.setEnabled(true);
+                    setFlowButtons(true);
                     failed(e);
                 });
             }
@@ -188,7 +226,10 @@ public class LoginActivity extends AppCompatActivity {
         polling = false;
         codeText.setText(c.userCode);
         codePanel.setVisibility(View.VISIBLE);
-        btnOauth.setEnabled(false);
+        setFlowButtons(false);
+        findViewById(R.id.googleSteps).setVisibility(google ? View.VISIBLE : View.GONE);
+        ui.removeCallbacks(clock);
+        ui.post(clock);
     }
 
     private void applyCode(DeviceFlow.Code c, boolean open) {
@@ -197,7 +238,16 @@ public class LoginActivity extends AppCompatActivity {
         copyCode(c.userCode);
         if (open) {
             renewals = 0;
-            openGithub(c.uri);
+            if (google) {
+                new Dlg(this)
+                        .setTitle(R.string.lg_google)
+                        .setMessage(R.string.lg_google_steps)
+                        .setPositiveButton(R.string.login_open_gh, (d, w) -> openGithub(c.uri))
+                        .setNegativeButton(R.string.cancel, (d, w) -> stopFlow())
+                        .show();
+            } else {
+                openGithub(c.uri);
+            }
         } else {
             Toast.makeText(this, R.string.login_renewed, Toast.LENGTH_LONG).show();
         }
@@ -290,7 +340,19 @@ public class LoginActivity extends AppCompatActivity {
         DeviceFlow.clear(this);
         ui.removeCallbacks(pollTask);
         if (codePanel != null) codePanel.setVisibility(View.GONE);
-        if (btnOauth != null) btnOauth.setEnabled(true);
+        ui.removeCallbacks(clock);
+        if (btnOauth != null) setFlowButtons(true);
+    }
+
+    private void setFlowButtons(boolean on) {
+        btnOauth.setEnabled(on);
+        btnGoogle.setEnabled(on);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putBoolean("google", google);
     }
 
     private void copyCode(String code) {
@@ -410,6 +472,7 @@ public class LoginActivity extends AppCompatActivity {
         super.onDestroy();
         destroyed = true;
         ui.removeCallbacks(pollTask);
+        ui.removeCallbacks(clock);
         io.shutdown();
     }
 }
