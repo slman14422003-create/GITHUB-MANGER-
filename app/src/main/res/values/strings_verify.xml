@@ -7,4 +7,7 @@
     <string name="verify_code_title">رمز التحقق</string>
     <string name="verify_need_notifications">فعّل الإشعارات ليصلك الرمز</string>
     <string name="verify_failed">لم يتم التحقق، أُلغيت العملية</string>
+    <string name="verify_show_hint">اضغط على الرمز لتعبئته تلقائيًا</string>
+    <string name="verify_totp_left">يتجدد خلال %d ث</string>
+    <string name="verify_code_valid">صالح لمدة 90 ثانية</string>
 </resources>

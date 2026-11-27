@@ -128,6 +128,32 @@
     </FrameLayout>
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/tokenWarn"
+        style="@style/StatusBanner"
+        android:drawablePadding="10dp"
+        android:minHeight="48dp"
+        android:textColor="?attr/cTextPrimary"
+        android:textIsSelectable="false"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/tabBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginEnd="14dp"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal" />
+
+    <LinearLayout
+        android:id="@+id/paneMine"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
     <EditText
         android:id="@+id/search"
         android:layout_width="match_parent"
@@ -173,15 +199,6 @@
         style="@style/StatusBanner"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tokenWarn"
-        style="@style/StatusBanner"
-        android:drawablePadding="10dp"
-        android:minHeight="48dp"
-        android:textColor="?attr/cTextPrimary"
-        android:textIsSelectable="false"
-        android:visibility="gone" />
-
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipe"
         android:layout_width="match_parent"
@@ -200,4 +217,148 @@
             android:paddingBottom="20dp"
             android:scrollbars="none" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/paneStore"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="14dp">
+
+            <EditText
+                android:id="@+id/storeSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_input"
+                android:drawableStart="@drawable/ic_search"
+                android:drawablePadding="12dp"
+                android:drawableTint="?attr/cTextHint"
+                android:hint="@string/store_search_hint"
+                android:imeOptions="actionSearch"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingStart="18dp"
+                android:paddingTop="14dp"
+                android:paddingEnd="52dp"
+                android:paddingBottom="14dp"
+                android:textColor="?attr/cTextPrimary"
+                android:textColorHint="?attr/cTextHint"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/storeClear"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="end|center_vertical"
+                android:contentDescription="@string/store_clear_search"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="?attr/cTextSecondary"
+                android:textSize="16sp"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/storeRecent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="14dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="2dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/storeChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            android:id="@+id/storeStatus"
+            style="@style/StatusBanner"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/storeRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center"
+            android:minHeight="48dp"
+            android:paddingStart="22dp"
+            android:paddingEnd="22dp"
+            android:text="@string/rs_retry"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <FrameLayout
+            android:id="@+id/storeHost"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/storeSwipe"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ListView
+                    android:id="@+id/storeList"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:divider="@null"
+                    android:dividerHeight="0dp"
+                    android:listSelector="@android:color/transparent"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="12dp"
+                    android:scrollbars="none" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <ImageView
+                android:id="@+id/storeTop"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="16dp"
+                android:clickable="true"
+                android:contentDescription="@string/store_top"
+                android:focusable="true"
+                android:padding="12dp"
+                android:src="@drawable/ic_arrow_up"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/storeMore"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:minHeight="48dp"
+            android:padding="12dp"
+            android:textColor="?attr/cTextSecondary"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </LinearLayout>
 </LinearLayout>

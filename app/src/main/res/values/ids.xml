@@ -15,4 +15,5 @@
     <item name="chip_state" type="id" />
     <item name="run_time_tag" type="id" />
     <item name="detailScroll" type="id" />
+    <item name="store_stats" type="id" />
 </resources>

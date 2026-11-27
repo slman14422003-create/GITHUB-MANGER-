@@ -7,4 +7,7 @@
     <string name="verify_code_title">Verification code</string>
     <string name="verify_need_notifications">Enable notifications to receive the code</string>
     <string name="verify_failed">Not verified, action cancelled</string>
+    <string name="verify_show_hint">Tap the code to fill it in</string>
+    <string name="verify_totp_left">Refreshes in %d s</string>
+    <string name="verify_code_valid">Valid for 90 seconds</string>
 </resources>
