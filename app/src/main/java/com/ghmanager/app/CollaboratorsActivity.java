@@ -19,10 +19,23 @@ public class CollaboratorsActivity extends BaseRepoActivity {
     private final List<JSONObject> invites = new ArrayList<>();
 
     @Override
+    protected void onAccessChanged() {
+        if (!canWrite && !isFinishing()) {
+            requireWrite();
+            finish();
+        }
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
         bindHeader(getString(R.string.col_title), repo);
+        if (!canWrite) {
+            requireWrite();
+            finish();
+            return;
+        }
         initList();
         btnRefresh.setOnClickListener(v -> load());
         action(btnA1, R.drawable.ic_add, R.string.col_add, v -> inviteDialog());
@@ -91,6 +104,7 @@ public class CollaboratorsActivity extends BaseRepoActivity {
     }
 
     private void personMenu(final JSONObject o) {
+        if (!requireWrite()) return;
         final String login = o.optString("login");
         if (login.equalsIgnoreCase(owner)) return;
         String[] opts = {getString(R.string.col_change), getString(R.string.col_remove)};
@@ -114,6 +128,7 @@ public class CollaboratorsActivity extends BaseRepoActivity {
     }
 
     private void inviteMenu(final JSONObject o) {
+        if (!requireWrite()) return;
         final long id = o.optLong("id");
         JSONObject invitee = o.optJSONObject("invitee");
         final String login = invitee == null ? "" : invitee.optString("login");
@@ -125,6 +140,7 @@ public class CollaboratorsActivity extends BaseRepoActivity {
     }
 
     private void inviteDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText user = Ui.edit(this, getString(R.string.col_user), null);
         final Spinner perm = Ui.spinner(this, Arrays.asList(permLabels()), 2);

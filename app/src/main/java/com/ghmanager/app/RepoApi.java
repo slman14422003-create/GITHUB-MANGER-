@@ -52,7 +52,9 @@ final class RepoApi extends ApiPart {
     }
 
     public JSONObject getRepo(String o, String r) throws Exception {
-        return obj(repo(o, r));
+        JSONObject j = obj(repo(o, r));
+        RepoAccess.recordJson(o, r, j);
+        return j;
     }
 
     public JSONObject updateRepo(String o, String r, JSONObject patch) throws Exception {

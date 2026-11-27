@@ -231,6 +231,7 @@ public final class Accounts {
     }
 
     public static void setActive(Context c, String id) {
+        RepoAccess.clear();
         write(c, read(c), id);
     }
 
@@ -248,6 +249,7 @@ public final class Accounts {
         RepoCache.clearAccount(c, id);
         ListCache.clearAccount(c, id);
         TokenExpiry.forget(c, id);
+        RepoAccess.clear();
         if (list.isEmpty()) {
             Store.clear(c);
             return 0;
@@ -268,6 +270,7 @@ public final class Accounts {
 
     /** Signs every account out. */
     public static void signOutAll(Activity a) {
+        RepoAccess.clear();
         Store.clear(a);
         Intent i = new Intent(a, LoginActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);

@@ -210,8 +210,22 @@ public class BrowserActivity extends BaseRepoActivity {
             }
         });
 
+        applyWriteUi();
         loadBranches();
         load();
+    }
+
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+    }
+
+    private void applyWriteUi() {
+        if (uploadBar == null || btnNew == null || btnDeleteSel == null) return;
+        uploadBar.setVisibility(canWrite && !selecting ? View.VISIBLE : View.GONE);
+        btnNew.setVisibility(!canWrite ? View.GONE : selecting ? View.INVISIBLE : View.VISIBLE);
+        btnDeleteSel.setVisibility(canWrite ? View.VISIBLE : View.GONE);
+        updateAccessBadge();
     }
 
     private int seenFinished = -1;
@@ -806,9 +820,8 @@ public class BrowserActivity extends BaseRepoActivity {
     private void applySelectUi() {
         hintRow.setVisibility(selecting ? View.GONE : View.VISIBLE);
         Fx.show(selBar, selecting);
-        uploadBar.setVisibility(selecting ? View.GONE : View.VISIBLE);
         Fx.show(deleteBar, selecting);
-        btnNew.setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
+        applyWriteUi();
         if (!selecting) return;
         int n = selected.size();
         selCount.setText(n == 0 ? getString(R.string.sel_hint)
@@ -830,22 +843,22 @@ public class BrowserActivity extends BaseRepoActivity {
         final String p = o.optString("path");
         List<String> labels = new ArrayList<>();
         labels.add(getString(R.string.sel_mode));
-        if (!dir) labels.add(getString(R.string.view_edit));
+        if (!dir) labels.add(getString(canWrite ? R.string.view_edit : R.string.view_only));
         final boolean fav = FileMarks.isFavorite(this, owner, repo, p);
         labels.add(getString(fav ? R.string.bs_fav_remove : R.string.bs_fav_add));
         if (!dir) labels.add(getString(R.string.df_history));
         if (!dir) labels.add(getString(R.string.download));
         if (dir) labels.add(getString(R.string.dl_folder));
-        labels.add(getString(R.string.rename_move));
+        if (canWrite) labels.add(getString(R.string.rename_move));
         labels.add(getString(R.string.copy_path));
         labels.add(getString(R.string.copy_link));
-        labels.add(getString(R.string.delete));
+        if (canWrite) labels.add(getString(R.string.delete));
         final String[] arr = labels.toArray(new String[0]);
         choose(name, arr, (d, which) -> {
             String chosen = arr[which];
             if (chosen.equals(getString(R.string.sel_mode))) {
                 enterSelect(p);
-            } else if (chosen.equals(getString(R.string.view_edit))) {
+            } else if (chosen.equals(getString(R.string.view_edit)) || chosen.equals(getString(R.string.view_only))) {
                 openFile(p);
             } else if (chosen.equals(getString(R.string.bs_fav_add)) || chosen.equals(getString(R.string.bs_fav_remove))) {
                 FileMarks.setFavorite(this, owner, repo, p, !fav);
@@ -860,18 +873,19 @@ public class BrowserActivity extends BaseRepoActivity {
             } else if (chosen.equals(getString(R.string.dl_folder))) {
                 downloadPaths(java.util.Collections.singletonList(p), name);
             } else if (chosen.equals(getString(R.string.rename_move))) {
-                renameDialog(o);
+                if (requireWrite()) renameDialog(o);
             } else if (chosen.equals(getString(R.string.copy_path))) {
                 copy("path", p);
             } else if (chosen.equals(getString(R.string.copy_link))) {
                 copy("link", webUrl((dir ? "/tree/" : "/blob/") + branch + "/" + p));
             } else {
-                confirmDelete(o);
+                if (requireWrite()) confirmDelete(o);
             }
         });
     }
 
     private void newMenu() {
+        if (!requireWrite()) return;
         String[] opts = {getString(R.string.new_file), getString(R.string.new_folder)};
         choose(getString(R.string.new_item), opts, (d, which) -> {
             LinearLayout box = Ui.box(this);
@@ -905,6 +919,7 @@ public class BrowserActivity extends BaseRepoActivity {
     }
 
     private void renameDialog(final JSONObject o) {
+        if (!requireWrite()) return;
         final String oldPath = o.optString("path");
         final boolean dir = "dir".equals(o.optString("type"));
         final String blobSha = o.optString("sha");
@@ -978,6 +993,10 @@ public class BrowserActivity extends BaseRepoActivity {
     // ---------- upload ----------
 
     private void askUploadOptions(final Uri tree, final List<Uri> files) {
+        if (!requireWrite()) {
+            pickedRoots = null;
+            return;
+        }
         LinearLayout box = Ui.box(this);
         final EditText target = Ui.edit(this, getString(R.string.dlg_path_hint), path);
         target.setTextDirection(View.TEXT_DIRECTION_LTR);
@@ -1010,6 +1029,10 @@ public class BrowserActivity extends BaseRepoActivity {
      */
     private void startUpload(final String base, final String message, final boolean includeRoot,
                              final boolean skipJunk) {
+        if (!requireWrite()) {
+            pickedRoots = null;
+            return;
+        }
         final List<java.io.File> roots = pickedRoots;
         final boolean folderPick = pickedFolder;
         pickedRoots = null;
@@ -1058,6 +1081,7 @@ public class BrowserActivity extends BaseRepoActivity {
 
     private void beginUpload(final List<java.io.File> roots, final String base, final String message, final String b,
                              final boolean incRoot, final boolean skipJunk) {
+        if (!requireWrite()) return;
         Transfers.start(getApplicationContext(), getString(R.string.tr_upload_title, repo),
                 "upload:" + owner + "/" + repo,
                 TransferTasks.upload(api, owner, repo, b, base, message, roots, incRoot, skipJunk),
@@ -1075,6 +1099,7 @@ public class BrowserActivity extends BaseRepoActivity {
     // ---------- delete ----------
 
     private void confirmDelete(final JSONObject o) {
+        if (!requireWrite()) return;
         final String name = o.optString("name");
         final String p = o.optString("path");
         final boolean dir = "dir".equals(o.optString("type"));
@@ -1107,6 +1132,7 @@ public class BrowserActivity extends BaseRepoActivity {
     // ---------- delete several / all (one commit) ----------
 
     private void confirmDeleteSelected() {
+        if (!requireWrite()) return;
         final List<JSONObject> chosen = new ArrayList<>();
         for (JSONObject o : items) if (selected.contains(o.optString("path"))) chosen.add(o);
         if (chosen.isEmpty()) {
@@ -1138,6 +1164,7 @@ public class BrowserActivity extends BaseRepoActivity {
     }
 
     private void deleteChosen(final List<JSONObject> chosen) {
+        if (!requireWrite()) return;
         if (busy) return;
         final int n = chosen.size();
         showProgress(getString(R.string.sel_delete_progress, n));

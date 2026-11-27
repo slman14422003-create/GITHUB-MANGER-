@@ -85,6 +85,8 @@ public class ActionsActivity extends BaseRepoActivity {
     private final Map<Long, JSONArray> liveJobs = new HashMap<>();
     private LinearLayout dash;
     private RunAdapter runAdapter;
+    private View writeRunBtn;
+    private final List<View> writeChips = new ArrayList<>();
     private ShimmerView shimmer;
     private FrameLayout shimmerBox;
 
@@ -159,7 +161,21 @@ public class ActionsActivity extends BaseRepoActivity {
         btnRefresh.setOnClickListener(v -> load(true, false, true));
         action(btnA1, R.drawable.ic_run, R.string.run_workflow, v -> runWorkflowFlow());
         action(btnA2, R.drawable.ic_more, R.string.more, v -> moreMenu());
+        applyWriteUi();
         loadWorkflowsQuietly();
+    }
+
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+        if (runAdapter != null) runAdapter.notifyDataSetChanged();
+    }
+
+    private void applyWriteUi() {
+        int vis = canWrite ? View.VISIBLE : View.GONE;
+        if (btnA1 != null) btnA1.setVisibility(vis);
+        if (writeRunBtn != null) writeRunBtn.setVisibility(vis);
+        for (View c : writeChips) c.setVisibility(vis);
     }
 
     private void configureAnimator() {
@@ -219,6 +235,7 @@ public class ActionsActivity extends BaseRepoActivity {
         run.setCompoundDrawablePadding(Ui.dp(this, 8));
         run.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.color(this, R.color.on_accent)));
         run.setOnClickListener(v -> runWorkflowFlow());
+        writeRunBtn = run;
         Button wf = Ui.button(this, R.string.act_workflows, false);
         wf.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_list, 0, 0, 0);
         wf.setCompoundDrawablePadding(Ui.dp(this, 8));
@@ -234,12 +251,22 @@ public class ActionsActivity extends BaseRepoActivity {
         LinearLayout mgmt = head.findViewById(R.id.mgmtRow);
         mgmt.addView(iconChip(R.string.manage_workflows, R.drawable.ic_code,
                 v -> startActivity(repoIntent(WorkflowsActivity.class))));
-        mgmt.addView(iconChip(R.string.caches, R.drawable.ic_drive, v -> openData("caches")));
+        TextView chipCaches = iconChip(R.string.caches, R.drawable.ic_drive, v -> openData("caches"));
+        mgmt.addView(chipCaches);
         mgmt.addView(iconChip(R.string.artifacts, R.drawable.ic_package, v -> openData("artifacts")));
-        mgmt.addView(iconChip(R.string.variables, R.drawable.ic_clipboard, v -> openData("variables")));
-        mgmt.addView(iconChip(R.string.secrets, R.drawable.ic_lock, v -> openData("secrets")));
-        mgmt.addView(iconChip(R.string.act_cleanup, R.drawable.ic_trash_sweep, v -> cleanupMenu()));
-        mgmt.addView(iconChip(R.string.select_items, R.drawable.ic_check_circle, v -> selectRunsForDelete()));
+        TextView chipVars = iconChip(R.string.variables, R.drawable.ic_clipboard, v -> openData("variables"));
+        mgmt.addView(chipVars);
+        TextView chipSecrets = iconChip(R.string.secrets, R.drawable.ic_lock, v -> openData("secrets"));
+        mgmt.addView(chipSecrets);
+        TextView chipClean = iconChip(R.string.act_cleanup, R.drawable.ic_trash_sweep, v -> cleanupMenu());
+        mgmt.addView(chipClean);
+        TextView chipSelect = iconChip(R.string.select_items, R.drawable.ic_check_circle, v -> selectRunsForDelete());
+        mgmt.addView(chipSelect);
+        writeChips.add(chipCaches);
+        writeChips.add(chipVars);
+        writeChips.add(chipSecrets);
+        writeChips.add(chipClean);
+        writeChips.add(chipSelect);
 
         ((EditText) head.findViewById(R.id.runSearch)).addTextChangedListener(new TextWatcher() {
             @Override
@@ -766,6 +793,7 @@ public class ActionsActivity extends BaseRepoActivity {
     // ------------------------------------------------------------------ run rows
 
     private void quickRerun(final JSONObject run, final boolean failedOnly) {
+        if (!requireWrite()) return;
         final long id = run.optLong("id");
         bg(() -> {
             if (failedOnly) api.rerunFailed(owner, repo, id);
@@ -778,6 +806,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void quickCancel(final JSONObject run) {
+        if (!requireWrite()) return;
         final long id = run.optLong("id");
         bg(() -> {
             api.cancelRun(owner, repo, id, false);
@@ -1140,6 +1169,11 @@ public class ActionsActivity extends BaseRepoActivity {
         } else {
             actions.setVisibility(View.GONE);
         }
+        if (!canWrite) {
+            a1.setVisibility(View.GONE);
+            a2.setVisibility(View.GONE);
+            if (a4.getVisibility() != View.VISIBLE) actions.setVisibility(View.GONE);
+        }
         v.findViewById(R.id.act3).setOnClickListener(x -> runMenu(run));
 
         StringBuilder cd = new StringBuilder();
@@ -1296,6 +1330,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void runWorkflowFlow() {
+        if (!requireWrite()) return;
         if (workflowId > 0) {
             dispatchDialog(workflowId, workflowName, () -> ui.postDelayed(() -> load(true, true), 3000));
             return;
@@ -1319,7 +1354,7 @@ public class ActionsActivity extends BaseRepoActivity {
     // ------------------------------------------------------------------ menus
 
     private void moreMenu() {
-        String[] items = {
+        final String[] allItems = {
                 getString(R.string.manage_workflows),
                 getString(R.string.artifacts),
                 getString(R.string.caches),
@@ -1328,7 +1363,10 @@ public class ActionsActivity extends BaseRepoActivity {
                 getString(R.string.delete_failed_runs),
                 getString(R.string.delete_cancelled_runs),
                 getString(R.string.delete_all_completed_runs)};
+        final int shown = canWrite ? allItems.length : 2;
+        String[] items = java.util.Arrays.copyOf(allItems, shown);
         choose(getString(R.string.more), items, (d, which) -> {
+            if (which >= 2 && !requireWrite()) return;
             switch (which) {
                 case 0:
                     startActivity(repoIntent(WorkflowsActivity.class));
@@ -1359,6 +1397,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void cleanupMenu() {
+        if (!requireWrite()) return;
         String[] items = {
                 getString(R.string.delete_failed_runs),
                 getString(R.string.delete_cancelled_runs),
@@ -1371,6 +1410,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void selectRunsForDelete() {
+        if (!requireWrite()) return;
         if (runs.isEmpty()) { toast(R.string.no_runs); return; }
         final List<JSONObject> snap = new ArrayList<>(runs);   // the list may reload while the dialog is open
         List<String> labels = new ArrayList<>();
@@ -1383,6 +1423,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void deleteSelectedRuns(final List<Long> ids) {
+        if (!requireWrite()) return;
         if (ids.isEmpty()) { toast(R.string.nothing_selected); return; }
         confirm(getString(R.string.delete_selected), getString(R.string.delete_selected_msg, ids.size()), R.string.delete, () -> {
             if (busy) return; busy = true; showProgress(getString(R.string.working));
@@ -1405,7 +1446,7 @@ public class ActionsActivity extends BaseRepoActivity {
         JSONObject actorObj = run.optJSONObject("triggering_actor");
         if (actorObj == null) actorObj = run.optJSONObject("actor");
         final String login = actorObj == null ? "" : actorObj.optString("login");
-        final String[] items = {
+        final String[] allItems = {
                 getString(R.string.act_rerun_short),
                 getString(R.string.act_rerun_failed_short),
                 getString(R.string.cancel_run),
@@ -1417,7 +1458,11 @@ public class ActionsActivity extends BaseRepoActivity {
                 getString(R.string.act_only_actor),
                 getString(R.string.rw_notify_me),
                 getString(R.string.ex_btn)};
-        choose("#" + run.optInt("run_number") + " · " + Fmt.s(run, "name"), items, (d, which) -> {
+        final int skip = canWrite ? 0 : 4;
+        final String[] items = java.util.Arrays.copyOfRange(allItems, skip, allItems.length);
+        choose("#" + run.optInt("run_number") + " · " + Fmt.s(run, "name"), items, (d, pos) -> {
+            final int which = pos + skip;
+            if (which < 4 && !requireWrite()) return;
             switch (which) {
                 case 0:
                     if (active) {
@@ -1495,6 +1540,7 @@ public class ActionsActivity extends BaseRepoActivity {
     }
 
     private void bulkDelete(final String status) {
+        if (!requireWrite()) return;
         confirm(getString(R.string.bulk_delete_title), getString(R.string.bulk_delete_msg), R.string.delete, () -> {
             if (busy) return;
             busy = true;

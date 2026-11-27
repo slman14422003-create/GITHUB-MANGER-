@@ -2,6 +2,7 @@ package com.ghmanager.app;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
@@ -28,6 +29,7 @@ public class BranchesActivity extends BaseRepoActivity {
         defaultBranch = branch;
         btnRefresh.setOnClickListener(v -> load());
         action(btnA1, R.drawable.ic_add, R.string.new_branch, v -> createDialog(defaultBranch));
+        applyWriteUi();
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos >= 0 && pos < items.size()) menu(items.get(pos));
         });
@@ -70,10 +72,20 @@ public class BranchesActivity extends BaseRepoActivity {
         showEmpty(items.isEmpty(), R.string.nothing_here);
     }
 
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+    }
+
+    private void applyWriteUi() {
+        if (btnA1 != null) btnA1.setVisibility(canWrite ? View.VISIBLE : View.GONE);
+    }
+
     private void menu(final JSONObject o) {
         final String name = o.optString("name");
         final boolean isDefault = name.equals(defaultBranch);
-        String[] opts = {
+        final int[] all = {0, 1, 2, 3, 4, 5, 6, 7};
+        final String[] allLabels = {
                 getString(R.string.browse_files),
                 getString(R.string.commits),
                 getString(R.string.new_branch_from),
@@ -82,7 +94,17 @@ public class BranchesActivity extends BaseRepoActivity {
                 getString(R.string.df_create_pr),
                 getString(R.string.set_default),
                 getString(R.string.delete)};
-        choose(name, opts, (d, which) -> {
+        final List<Integer> codes = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        for (int k = 0; k < all.length; k++) {
+            boolean writeOnly = all[k] >= 2 && all[k] != 4;
+            if (writeOnly && !canWrite) continue;
+            codes.add(all[k]);
+            labels.add(allLabels[k]);
+        }
+        choose(name, labels.toArray(new String[0]), (d, pos) -> {
+            final int which = codes.get(pos);
+            if (which >= 2 && which != 4 && !requireWrite()) return;
             switch (which) {
                 case 0: {
                     Intent i = repoIntent(BrowserActivity.class);
@@ -156,6 +178,7 @@ public class BranchesActivity extends BaseRepoActivity {
     }
 
     private void createPullDialog(final String head) {
+        if (!requireWrite()) return;
         final List<String> targets = otherBranches(head);
         if (targets.isEmpty()) {
             toast(R.string.nothing_here);
@@ -202,6 +225,7 @@ public class BranchesActivity extends BaseRepoActivity {
     }
 
     private void createDialog(String from) {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.new_branch_name), null);
         final List<String> names = new ArrayList<>();
@@ -229,6 +253,7 @@ public class BranchesActivity extends BaseRepoActivity {
     }
 
     private void mergeInto(final String head) {
+        if (!requireWrite()) return;
         final List<String> targets = new ArrayList<>();
         for (JSONObject o : items) {
             if (!o.optString("name").equals(head)) targets.add(o.optString("name"));

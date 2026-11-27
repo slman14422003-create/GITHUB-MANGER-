@@ -115,6 +115,7 @@ final class ApiCore {
     HttpURLConnection open(String method, String url, String accept, boolean api) throws IOException {
         // never talk plain HTTP (a redirect to http:// must not downgrade a download)
         if (!url.startsWith("https://")) throw new IOException("Blocked non-HTTPS URL");
+        if (RepoAccess.writeBlocked(method, url)) throw new IOException(RepoAccess.message(ctx));
         if (api && !Mirror.isMirrored(url)) {
             // the token may only ever be sent to GitHub's own API hosts (a crafted path such as
             // "@evil.com" must never be able to redirect it somewhere else)
@@ -140,7 +141,14 @@ final class ApiCore {
         return c;
     }
 
+    void guardRepo(String o, String r) throws ApiException {
+        if (RepoAccess.writeBlocked("POST", repo(o, r))) {
+            throw new ApiException(403, RepoAccess.message(ctx));
+        }
+    }
+
     String request(String method, String path, JSONObject body) throws IOException, ApiException {
+        if (RepoAccess.writeBlocked(method, path)) throw new ApiException(403, RepoAccess.message(ctx));
         final String cat = Verify.category(method, path, body);
         if (cat == null) return send(method, path, body);
         final Context lc = ctx != null ? ctx : App.context();

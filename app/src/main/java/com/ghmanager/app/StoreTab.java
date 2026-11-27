@@ -514,6 +514,7 @@ final class StoreTab {
             i.putExtra("owner", own != null ? own.optString("login") : "");
             i.putExtra("repo", o.optString("name"));
             i.putExtra("branch", o.optString("default_branch", "main"));
+            i.putExtra("canWrite", RepoAccess.fromJson(o));
             a.startActivity(i);
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
@@ -1288,6 +1289,7 @@ final class StoreTab {
             i.putExtra("owner", login);
             i.putExtra("repo", name);
             i.putExtra("branch", o.optString("default_branch", "main"));
+            i.putExtra("canWrite", RepoAccess.fromJson(o));
             a.startActivity(i);
         }).setNegativeButton(R.string.close, null).show();
         pool.execute(() -> {

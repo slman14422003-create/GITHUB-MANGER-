@@ -55,6 +55,11 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         load();
     }
 
+    @Override
+    protected void onAccessChanged() {
+        if (rel != null) render();
+    }
+
     private void load() {
         loading(true);
         io.execute(() -> {
@@ -94,18 +99,20 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
         else if (rel.optBoolean("prerelease")) meta.append("\n").append(getString(R.string.prerelease));
         content.addView(Ui.body(this, meta.toString(), 13, R.color.text_secondary));
 
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), 0);
-        if (rel.optBoolean("draft")) {
-            Button publish = Ui.button(this, R.string.publish, true);
-            publish.setOnClickListener(v -> patch("draft", false));
-            buttons.addView(publish, weighted());
+        if (canWrite) {
+            LinearLayout buttons = new LinearLayout(this);
+            buttons.setOrientation(LinearLayout.HORIZONTAL);
+            buttons.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), 0);
+            if (rel.optBoolean("draft")) {
+                Button publish = Ui.button(this, R.string.publish, true);
+                publish.setOnClickListener(v -> patch("draft", false));
+                buttons.addView(publish, weighted());
+            }
+            Button edit = Ui.button(this, R.string.edit, false);
+            edit.setOnClickListener(v -> editDialog());
+            buttons.addView(edit, weighted());
+            content.addView(buttons);
         }
-        Button edit = Ui.button(this, R.string.edit, false);
-        edit.setOnClickListener(v -> editDialog());
-        buttons.addView(edit, weighted());
-        content.addView(buttons);
 
         String body = Fmt.s(rel, "body");
         content.addView(Ui.sectionTitle(this, getString(R.string.release_notes)));
@@ -123,14 +130,16 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
                     new Row(R.drawable.ic_package, false, a.optString("name"), sub, false, true),
                     v -> assetMenu(a)));
         }
-        LinearLayout up = new LinearLayout(this);
-        up.setOrientation(LinearLayout.HORIZONTAL);
-        up.setPadding(Ui.dp(this, 16), Ui.dp(this, 6), Ui.dp(this, 16), 0);
-        Button upload = Ui.button(this, R.string.upload_assets, true);
-        upload.setOnClickListener(v -> pickFiles.launch(
-                new Intent(this, FileManagerActivity.class).putExtra("pick", "files")));
-        up.addView(upload, weighted());
-        content.addView(up);
+        if (canWrite) {
+            LinearLayout up = new LinearLayout(this);
+            up.setOrientation(LinearLayout.HORIZONTAL);
+            up.setPadding(Ui.dp(this, 16), Ui.dp(this, 6), Ui.dp(this, 16), 0);
+            Button upload = Ui.button(this, R.string.upload_assets, true);
+            upload.setOnClickListener(v -> pickFiles.launch(
+                    new Intent(this, FileManagerActivity.class).putExtra("pick", "files")));
+            up.addView(upload, weighted());
+            content.addView(up);
+        }
 
         content.addView(Ui.sectionTitle(this, getString(R.string.source_code)));
         content.addView(Ui.rowView(this, content,
@@ -140,7 +149,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
                 new Row(R.drawable.ic_download, false, "Source code (tar.gz)", null, false, false),
                 v -> saveAs(repo + "-" + tag.replace('/', '-') + ".tar.gz", () -> api.openTarball(owner, repo, tag))));
 
-        if (!rel.optBoolean("draft")) {
+        if (canWrite && !rel.optBoolean("draft")) {
             content.addView(Ui.sectionTitle(this, getString(R.string.rollback_section)));
             content.addView(Ui.rowView(this, content,
                     new Row(R.drawable.ic_undo, true, getString(R.string.restore_to_release, tag),
@@ -156,6 +165,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     }
 
     private void patch(final String key, final Object value) {
+        if (!requireWrite()) return;
         bg(() -> {
             JSONObject b = new JSONObject();
             b.put(key, value);
@@ -170,13 +180,16 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     private void assetMenu(final JSONObject a) {
         final long id = a.optLong("id");
         final String name = a.optString("name");
-        String[] items = {getString(R.string.download), getString(R.string.copy_link), getString(R.string.delete)};
+        String[] items = canWrite
+                ? new String[]{getString(R.string.download), getString(R.string.copy_link), getString(R.string.delete)}
+                : new String[]{getString(R.string.download), getString(R.string.copy_link)};
         choose(name, items, (d, which) -> {
             if (which == 0) {
                 saveAs(name, () -> api.openDownload(api.assetPath(owner, repo, id), "application/octet-stream"));
             } else if (which == 1) {
                 copy("asset", a.optString("browser_download_url"));
             } else {
+                if (!requireWrite()) return;
                 confirm(getString(R.string.delete), getString(R.string.delete_msg, name), R.string.delete, () ->
                         bg(() -> {
                             api.deleteAsset(owner, repo, id);
@@ -187,6 +200,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     }
 
     private void editDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText tag = Ui.edit(this, getString(R.string.tag_name), Fmt.s(rel, "tag_name"));
         final EditText title = Ui.edit(this, getString(R.string.release_title), Fmt.s(rel, "name"));
@@ -245,7 +259,9 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     }
 
     private void moreMenu() {
-        String[] items = {getString(R.string.copy_link), getString(R.string.delete_release)};
+        String[] items = canWrite
+                ? new String[]{getString(R.string.copy_link), getString(R.string.delete_release)}
+                : new String[]{getString(R.string.copy_link)};
         choose(getString(R.string.more), items, (d, which) -> {
             if (which == 0) {
                 if (rel != null) copy("release", Fmt.s(rel, "html_url"));
@@ -256,6 +272,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     }
 
     private void deleteDialog() {
+        if (!requireWrite()) return;
         final String tag = Fmt.s(rel, "tag_name");
         final String name = Fmt.s(rel, "name").isEmpty() ? tag : Fmt.s(rel, "name");
         LinearLayout box = Ui.box(this);
@@ -300,6 +317,7 @@ public class ReleaseDetailActivity extends BaseRepoActivity {
     }
 
     private void uploadFiles(final List<Uri> uris) {
+        if (!requireWrite()) return;
         List<java.io.File> files = new ArrayList<>();
         for (Uri u : uris) {
             String path = u.getPath();

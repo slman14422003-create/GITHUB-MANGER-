@@ -36,6 +36,11 @@ public class RepoHomeActivity extends BaseRepoActivity {
         load();
     }
 
+    @Override
+    protected void onAccessChanged() {
+        if (repoJson != null) render();
+    }
+
     private void updateStar() {
         int c = Ui.color(this, starred ? R.color.warn : R.color.text_primary);
         btnA1.setImageTintList(ColorStateList.valueOf(c));
@@ -75,6 +80,7 @@ public class RepoHomeActivity extends BaseRepoActivity {
                 post(() -> {
                     loading(false);
                     repoJson = r;
+                    adoptRepoJson(r);
                     starred = fSt;
                     lastRun = fRun;
                     updateStar();
@@ -290,8 +296,10 @@ public class RepoHomeActivity extends BaseRepoActivity {
                 repoJson.optString("clone_url"), false, false),
                 v -> copy("clone", repoJson.optString("clone_url")));
 
-        addRow(new Row(R.drawable.ic_settings, false, getString(R.string.repo_settings),
-                null, false, true),
-                v -> startActivity(repoIntent(RepoSettingsActivity.class)));
+        if (canWrite) {
+            addRow(new Row(R.drawable.ic_settings, false, getString(R.string.repo_settings),
+                    null, false, true),
+                    v -> startActivity(repoIntent(RepoSettingsActivity.class)));
+        }
     }
 }

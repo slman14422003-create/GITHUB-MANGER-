@@ -74,10 +74,22 @@ public class ActionsDataActivity extends BaseRepoActivity {
             action(btnA2, R.drawable.ic_lock, R.string.sec_key_setup, v -> keyIntro());
             showStatus(getString(R.string.secrets_note));
         }
+        applyWriteButtons();
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos >= 0 && pos < items.size()) itemMenu(items.get(pos));
         });
         load();
+    }
+
+    private void applyWriteButtons() {
+        int vis = canWrite ? android.view.View.VISIBLE : android.view.View.GONE;
+        if (btnA1 != null) btnA1.setVisibility(vis);
+        if (btnA2 != null && "secrets".equals(mode)) btnA2.setVisibility(vis);
+    }
+
+    @Override
+    protected void onAccessChanged() {
+        applyWriteButtons();
     }
 
     private void load() {
@@ -160,6 +172,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void selectArtifactsForDelete() {
+        if (!requireWrite()) return;
         if (items.isEmpty()) { toast(R.string.nothing_here); return; }
         final List<JSONObject> snap = new ArrayList<>(items);   // the list may reload while the dialog is open
         List<String> labels = new ArrayList<>();
@@ -175,6 +188,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void deleteSelectedArtifacts(final List<Long> ids) {
+        if (!requireWrite()) return;
         if(ids.isEmpty()){toast(R.string.nothing_selected);return;}
         confirm(getString(R.string.delete_selected),getString(R.string.delete_selected_msg,ids.size()),R.string.delete,()->{
             if(busy)return; busy=true; showProgress(getString(R.string.working));
@@ -190,12 +204,14 @@ public class ActionsDataActivity extends BaseRepoActivity {
                 artifactMenu(o, this::load);
                 break;
             case "caches": {
+                if (!requireWrite()) return;
                 final long id = o.optLong("id");
                 String key = o.optString("key");
                 deleteWithConfirm(key, () -> api.deleteCache(owner, repo, id));
                 break;
             }
             case "variables": {
+                if (!requireWrite()) return;
                 final String name = o.optString("name");
                 String[] opts = {getString(R.string.edit), getString(R.string.delete)};
                 choose(name, opts, (d, which) -> {
@@ -205,6 +221,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
                 break;
             }
             default: {
+                if (!requireWrite()) return;
                 final String name = o.optString("name");
                 String[] opts = {getString(R.string.sec_update), getString(R.string.delete)};
                 choose(name, opts, (d, which) -> {
@@ -217,6 +234,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void deleteWithConfirm(String name, final Job job) {
+        if (!requireWrite()) return;
         confirm(getString(R.string.delete), getString(R.string.delete_msg, name), R.string.delete, () ->
                 bg(() -> {
                     job.run();
@@ -225,6 +243,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void deleteAllCaches() {
+        if (!requireWrite()) return;
         if (items.isEmpty()) return;
         confirm(getString(R.string.delete_all_caches), getString(R.string.delete_all_caches_msg), R.string.delete, () -> {
             if (busy) return;
@@ -251,6 +270,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void variableDialog(final JSONObject existing) {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.var_name), existing == null ? null : existing.optString("name"));
         final EditText value = Ui.editMulti(this, getString(R.string.var_value), existing == null ? null : existing.optString("value"), 2);
@@ -277,6 +297,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     // ------------------------------------------------------------------ secrets (encrypted writes)
 
     private void secretDialog(final String existing) {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.sec_name_hint), existing);
         final EditText value = Ui.editMulti(this, getString(R.string.sec_value_hint), null, 3);
@@ -314,6 +335,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void keyIntro() {
+        if (!requireWrite()) return;
         new Dlg(this)
                 .setTitle(R.string.sec_key_setup)
                 .setMessage(R.string.sec_key_intro)
@@ -334,6 +356,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void keystoreDialog(final Uri uri) {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText storePass = passwordField(Ui.edit(this, "", null));
         final EditText alias = Ui.edit(this, "", null);
@@ -363,6 +386,7 @@ public class ActionsDataActivity extends BaseRepoActivity {
     }
 
     private void saveKeystore(final Uri uri, final String storePass, final String alias, final String keyPass) {
+        if (!requireWrite()) return;
         if (busy) return;
         busy = true;
         showProgress(getString(R.string.sec_encrypting));

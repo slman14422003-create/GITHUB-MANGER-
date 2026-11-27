@@ -122,6 +122,7 @@ final class GitDataApi extends ApiPart {
         JSONObject body = new JSONObject();
         body.put("query", "mutation($input: CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}");
         body.put("variables", vars);
+        core.guardRepo(o, r);
         JSONObject res = new JSONObject(request("POST", "/graphql", body));
         return ApiParse.commitOid(res);
     }

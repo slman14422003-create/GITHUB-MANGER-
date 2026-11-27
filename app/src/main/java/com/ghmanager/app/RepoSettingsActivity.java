@@ -35,10 +35,23 @@ public class RepoSettingsActivity extends BaseRepoActivity {
     private Spinner spBranch;
 
     @Override
+    protected void onAccessChanged() {
+        if (!canWrite && !isFinishing()) {
+            requireWrite();
+            finish();
+        }
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_detail);
         bindHeader(getString(R.string.repo_settings), repo);
+        if (!canWrite) {
+            requireWrite();
+            finish();
+            return;
+        }
         content = findViewById(R.id.content);
         btnRefresh.setOnClickListener(v -> load());
         action(btnA1, R.drawable.ic_check, R.string.save, v -> save());
@@ -163,6 +176,7 @@ public class RepoSettingsActivity extends BaseRepoActivity {
     }
 
     private void save() {
+        if (!requireWrite()) return;
         if (data == null) return;
         final String newName = fName.getText().toString().trim();
         if (newName.isEmpty()) return;
@@ -212,6 +226,7 @@ public class RepoSettingsActivity extends BaseRepoActivity {
     }
 
     private void deleteDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         box.addView(Ui.label(this, getString(R.string.delete_repo_msg, repo)));
         final EditText confirmText = Ui.edit(this, repo, null);

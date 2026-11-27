@@ -11,6 +11,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -78,6 +81,9 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected TextView stateSub;
     protected TextView stateRetry;
     protected long dataAt = 0;
+    protected boolean canWrite = true;
+    private boolean accessResolved = false;
+    private boolean accessFailed = false;
     private boolean errorState = false;
 
     private ActivityResultLauncher<Intent> saveLauncher;
@@ -112,6 +118,118 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         if (branch == null || branch.isEmpty()) branch = "main";
         api = new GitHubApi(this);
         Perms.ensureNotifications(this);
+        Boolean known = RepoAccess.known(owner, repo);
+        if (known != null) {
+            canWrite = known;
+            accessResolved = true;
+        } else if (i.hasExtra("canWrite")) {
+            canWrite = i.getBooleanExtra("canWrite", false);
+        }
+        if (!accessResolved) resolveAccess();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Boolean k = RepoAccess.known(owner, repo);
+        if (k != null) {
+            if (k != canWrite || !accessResolved) applyAccess(k);
+        } else if (accessFailed) {
+            accessFailed = false;
+            resolveAccess();
+        }
+    }
+
+    private void resolveAccess() {
+        if (owner == null || owner.isEmpty() || repo == null || repo.isEmpty()) return;
+        io.execute(() -> {
+            boolean w;
+            boolean failed = false;
+            try {
+                w = RepoAccess.fromJson(api.getRepo(owner, repo));
+            } catch (Exception e) {
+                w = false;
+                failed = true;
+            }
+            final boolean fw = w;
+            final boolean ff = failed;
+            post(() -> {
+                applyAccess(fw);
+                accessFailed = ff;
+            });
+        });
+    }
+
+    protected void retargetAccess(Intent i) {
+        accessFailed = false;
+        accessResolved = false;
+        Boolean k = RepoAccess.known(owner, repo);
+        if (k != null) {
+            applyAccess(k);
+            return;
+        }
+        if (i != null && i.hasExtra("canWrite")) canWrite = i.getBooleanExtra("canWrite", false);
+        resolveAccess();
+    }
+
+    protected void adoptRepoJson(JSONObject r) {
+        if (r == null) return;
+        RepoAccess.recordJson(owner, repo, r);
+        applyAccess(RepoAccess.fromJson(r));
+    }
+
+    protected void applyAccess(boolean w) {
+        boolean first = !accessResolved;
+        boolean changed = canWrite != w;
+        accessResolved = true;
+        accessFailed = false;
+        canWrite = w;
+        updateAccessBadge();
+        if (changed || first) onAccessChanged();
+    }
+
+    protected void onAccessChanged() {
+    }
+
+    protected boolean requireWrite() {
+        Boolean k = RepoAccess.known(owner, repo);
+        if (canWrite && (k == null || k)) return true;
+        toast(R.string.read_only_blocked);
+        return false;
+    }
+
+    protected void updateAccessBadge() {
+        View t = findViewById(R.id.title);
+        if (t == null || !(t.getParent() instanceof LinearLayout)) return;
+        LinearLayout col = (LinearLayout) t.getParent();
+        View existing = col.findViewWithTag("ro_badge");
+        boolean show = !canWrite && owner != null && !owner.isEmpty();
+        if (!show) {
+            if (existing != null) existing.setVisibility(View.GONE);
+            return;
+        }
+        if (existing != null) {
+            existing.setVisibility(View.VISIBLE);
+            return;
+        }
+        TextView b = new TextView(this);
+        b.setTag("ro_badge");
+        b.setText(R.string.read_only_badge);
+        b.setTextSize(11);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setSingleLine(true);
+        int c = Ui.color(this, R.color.warn);
+        b.setTextColor(c);
+        b.setPadding(Ui.dp(this, 9), Ui.dp(this, 2), Ui.dp(this, 9), Ui.dp(this, 2));
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(Ui.radius(this, R.dimen.radius_pill));
+        g.setColor((c & 0x00FFFFFF) | 0x26000000);
+        b.setBackground(g);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.CENTER_HORIZONTAL;
+        lp.topMargin = Ui.dp(this, 3);
+        col.addView(b, lp);
     }
 
     // ------------------------------------------------------------------ header / list
@@ -135,6 +253,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         if (loadingBar instanceof ProgressBar) Ui.tint(this, (ProgressBar) loadingBar);
         View rows = findViewById(R.id.content);
         if (rows instanceof android.view.ViewGroup) Ui.autoGroup(this, (android.view.ViewGroup) rows);
+        updateAccessBadge();
     }
 
     // ------------------------------------------------------------------ fast navigation
@@ -581,6 +700,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
         i.putExtra("owner", owner);
         i.putExtra("repo", repo);
         i.putExtra("branch", branch);
+        if (accessResolved) i.putExtra("canWrite", canWrite);
         return i;
     }
 
@@ -619,6 +739,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     }
 
     protected void dispatchDialog(final long workflowId, final String workflowName, final Runnable after) {
+        if (!requireWrite()) return;
         loading(true);
         // read the workflow file first: the dialog then shows its real inputs (tag, version, options...)
         io.execute(() -> {
@@ -872,10 +993,12 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
     protected void artifactMenu(final JSONObject art, final Runnable onChanged) {
         final long id = art.optLong("id");
         final String name = art.optString("name");
-        String[] items = {getString(R.string.artifact_apk), getString(R.string.artifact_zip),
-                getString(R.string.delete)};
+        String[] items = canWrite
+                ? new String[]{getString(R.string.artifact_apk), getString(R.string.artifact_zip), getString(R.string.delete)}
+                : new String[]{getString(R.string.artifact_apk), getString(R.string.artifact_zip)};
         choose(name, items, (d, which) -> {
             if (which == 2) {
+                if (!requireWrite()) return;
                 confirm(getString(R.string.delete), getString(R.string.delete_msg, name), R.string.delete, () ->
                         bg(() -> {
                             api.deleteArtifact(owner, repo, id);
@@ -915,6 +1038,7 @@ public abstract class BaseRepoActivity extends AppCompatActivity {
      */
     protected void restoreVersion(final String targetBranch, final String ref, final String label,
                                   final String detail, final Runnable after) {
+        if (!requireWrite()) return;
         String msg = getString(R.string.restore_msg, label, targetBranch);
         if (detail != null && !detail.isEmpty()) msg = msg + "\n\n" + detail;
         confirm(getString(R.string.restore_title), msg, R.string.restore_action, () -> {

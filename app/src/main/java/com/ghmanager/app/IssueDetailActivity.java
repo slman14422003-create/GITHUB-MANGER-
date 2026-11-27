@@ -35,6 +35,11 @@ public class IssueDetailActivity extends BaseRepoActivity {
         load();
     }
 
+    @Override
+    protected void onAccessChanged() {
+        if (issue != null) render();
+    }
+
     private void load() {
         loading(true);
         io.execute(() -> {
@@ -118,13 +123,16 @@ public class IssueDetailActivity extends BaseRepoActivity {
         comment.setOnClickListener(v -> commentDialog());
         buttons.addView(comment, weighted());
         Button toggle = Ui.button(this, open ? R.string.close_item : R.string.reopen_item, false);
-        toggle.setOnClickListener(v -> bg(() -> {
-            api.setIssueState(owner, repo, number, !open);
-            post(this::load);
-        }));
+        toggle.setOnClickListener(v -> {
+            if (!requireWrite()) return;
+            bg(() -> {
+                api.setIssueState(owner, repo, number, !open);
+                post(this::load);
+            });
+        });
         boolean merged = pull != null && pull.optBoolean("merged");
         if (!merged) buttons.addView(toggle, weighted());
-        content.addView(buttons);
+        if (canWrite) content.addView(buttons);
 
         if (isPr && pull != null) prSection(open);
 
@@ -148,6 +156,7 @@ public class IssueDetailActivity extends BaseRepoActivity {
     }
 
     private void commentDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText body = Ui.editMulti(this, getString(R.string.comment_hint), null, 4);
         box.addView(body);
@@ -210,13 +219,13 @@ public class IssueDetailActivity extends BaseRepoActivity {
         files.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(Ui.color(this, R.color.text_primary)));
         files.setOnClickListener(v -> startActivity(CommitDiffActivity.pull(this, number)));
         row.addView(files, weighted());
-        if (open) {
+        if (open && canWrite) {
             Button review = Ui.button(this, R.string.pr_review, false);
             review.setOnClickListener(v -> reviewDialog());
             row.addView(review, weighted());
         }
         content.addView(row);
-        if (open && !merged) {
+        if (canWrite && open && !merged) {
             boolean notMergeable = !pull.isNull("mergeable") && !pull.optBoolean("mergeable", true);
             if (notMergeable) {
                 content.addView(Ui.body(this, getString(R.string.pr_not_mergeable), 13, R.color.bad));
@@ -266,11 +275,13 @@ public class IssueDetailActivity extends BaseRepoActivity {
     }
 
     private void reviewDialog() {
+        if (!requireWrite()) return;
         JSONObject h = pull == null ? null : pull.optJSONObject("head");
         ReviewDialog.show(this, number, h == null ? "" : h.optString("sha"), this::load);
     }
 
     private void mergeDialog() {
+        if (!requireWrite()) return;
         final String[] methods = {"merge", "squash", "rebase"};
         String[] labels = {getString(R.string.merge_commit), getString(R.string.merge_squash), getString(R.string.merge_rebase)};
         final String prTitle = issue == null ? "" : issue.optString("title");

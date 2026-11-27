@@ -34,6 +34,7 @@ public class IssuesActivity extends BaseRepoActivity {
         initList();
         btnRefresh.setOnClickListener(v -> load(true));
         action(btnA1, R.drawable.ic_add, R.string.new_issue, v -> newIssueDialog());
+        applyWriteUi();
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == shown.size()) {
                 page++;
@@ -85,6 +86,15 @@ public class IssuesActivity extends BaseRepoActivity {
     @Override
     protected int skeletonKind() {
         return ShimmerView.ISSUES;
+    }
+
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+    }
+
+    private void applyWriteUi() {
+        if (btnA1 != null) btnA1.setVisibility(canWrite ? android.view.View.VISIBLE : android.view.View.GONE);
     }
 
     private void load(final boolean reset) {
@@ -157,6 +167,7 @@ public class IssuesActivity extends BaseRepoActivity {
     }
 
     private void newIssueDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText title = Ui.edit(this, getString(R.string.issue_title), null);
         final EditText body = Ui.editMulti(this, getString(R.string.issue_body), null, 4);

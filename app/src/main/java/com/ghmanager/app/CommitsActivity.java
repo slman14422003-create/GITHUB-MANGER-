@@ -34,6 +34,7 @@ public class CommitsActivity extends BaseRepoActivity {
         btnRefresh.setOnClickListener(v -> load(true));
         action(btnA1, R.drawable.ic_branch, R.string.branch_label, v -> pickBranch());
         if (filePath.isEmpty()) action(btnA2, R.drawable.ic_undo, R.string.undo_last, v -> undoLast());
+        applyWriteUi();
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == items.size()) {
                 page++;
@@ -136,14 +137,31 @@ public class CommitsActivity extends BaseRepoActivity {
         });
     }
 
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+    }
+
+    private void applyWriteUi() {
+        if (btnA2 != null && filePath.isEmpty()) btnA2.setVisibility(canWrite ? android.view.View.VISIBLE : android.view.View.GONE);
+    }
+
     private void menu(final JSONObject o) {
         final String sha = o.optString("sha");
         JSONObject cm = o.optJSONObject("commit");
         final String msg = cm == null ? "" : Fmt.firstLine(cm.optString("message"));
-        String[] opts = {getString(R.string.df_view_changes), getString(R.string.sm_btn), getString(R.string.details),
+        final String[] allOpts = {getString(R.string.df_view_changes), getString(R.string.sm_btn), getString(R.string.details),
                 getString(R.string.download_version), getString(R.string.restore_here), getString(R.string.copy_sha),
                 getString(R.string.create_branch_here), getString(R.string.open_in_github)};
-        choose(Fmt.shortSha(sha), opts, (d, which) -> {
+        final List<Integer> codes = new ArrayList<>();
+        List<String> opts = new ArrayList<>();
+        for (int k = 0; k < allOpts.length; k++) {
+            if (!canWrite && (k == 4 || k == 6)) continue;
+            codes.add(k);
+            opts.add(allOpts[k]);
+        }
+        choose(Fmt.shortSha(sha), opts.toArray(new String[0]), (d, pos) -> {
+            final int which = codes.get(pos);
             if (which == 0) startActivity(CommitDiffActivity.commit(this, sha, filePath.isEmpty() ? null : filePath));
             else if (which == 1) summarize(sha);
             else if (which == 2) details(sha);
@@ -172,6 +190,7 @@ public class CommitsActivity extends BaseRepoActivity {
 
     /** One tap rollback: puts the branch back to the version just before the latest commit. */
     private void undoLast() {
+        if (!requireWrite()) return;
         if (items.isEmpty()) return;
         JSONObject head = items.get(0);
         JSONArray parents = head.optJSONArray("parents");
@@ -224,6 +243,7 @@ public class CommitsActivity extends BaseRepoActivity {
     }
 
     private void branchHere(final String sha) {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText name = Ui.edit(this, getString(R.string.new_branch_name), null);
         box.addView(name);

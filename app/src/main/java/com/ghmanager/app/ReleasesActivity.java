@@ -42,6 +42,7 @@ public class ReleasesActivity extends BaseRepoActivity {
         action(btnA1, R.drawable.ic_add, R.string.new_release, v -> createDialog());
         action(btnA2, R.drawable.ic_package, R.string.br_title, v -> buildReleaseDialog());
         action(btnA3, R.drawable.ic_check_circle, R.string.select_items, v -> selectReleasesForDelete());
+        applyWriteUi();
         listView.setOnItemClickListener((p, v, pos, id) -> {
             if (pos == items.size()) {
                 page++;
@@ -87,6 +88,18 @@ public class ReleasesActivity extends BaseRepoActivity {
         });
     }
 
+    @Override
+    protected void onAccessChanged() {
+        applyWriteUi();
+    }
+
+    private void applyWriteUi() {
+        int vis = canWrite ? android.view.View.VISIBLE : android.view.View.GONE;
+        if (btnA1 != null) btnA1.setVisibility(vis);
+        if (btnA2 != null) btnA2.setVisibility(vis);
+        if (btnA3 != null) btnA3.setVisibility(vis);
+    }
+
     private void render() {
         List<Row> rows = new ArrayList<>();
         for (JSONObject o : items) {
@@ -112,6 +125,7 @@ public class ReleasesActivity extends BaseRepoActivity {
     }
 
     private void selectReleasesForDelete() {
+        if (!requireWrite()) return;
         if (items.isEmpty()) { toast(R.string.no_releases); return; }
         final List<JSONObject> snap = new ArrayList<>(items);   // the list may reload while the dialog is open
         List<String> labels = new ArrayList<>();
@@ -128,6 +142,7 @@ public class ReleasesActivity extends BaseRepoActivity {
     }
 
     private void deleteSelectedReleases(final List<Long> ids){
+        if (!requireWrite()) return;
         if(ids.isEmpty()){toast(R.string.nothing_selected);return;}
         confirm(getString(R.string.delete_selected),getString(R.string.delete_selected_msg,ids.size()),R.string.delete,()->{
             if(busy)return;busy=true;showProgress(getString(R.string.working));
@@ -136,6 +151,7 @@ public class ReleasesActivity extends BaseRepoActivity {
     }
 
     private void createDialog() {
+        if (!requireWrite()) return;
         LinearLayout box = Ui.box(this);
         final EditText tag = Ui.edit(this, getString(R.string.tag_name), null);
         final EditText target = Ui.edit(this, getString(R.string.target_branch), branch);
@@ -230,6 +246,7 @@ public class ReleasesActivity extends BaseRepoActivity {
     }
 
     private void buildReleaseDialog() {
+        if (!requireWrite()) return;
         if (busy) return;
         busy = true;
         showProgress(getString(R.string.br_loading));

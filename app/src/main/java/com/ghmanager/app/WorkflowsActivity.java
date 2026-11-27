@@ -89,7 +89,13 @@ public class WorkflowsActivity extends BaseRepoActivity {
                 getString(active ? R.string.disable : R.string.enable),
                 getString(pin ? R.string.pw_unpin : R.string.pw_pin),
                 getString(R.string.pw_stats)};
-        choose(name, opts, (d, which) -> {
+        final int[] map = canWrite ? new int[]{0, 1, 2, 3, 4, 5} : new int[]{1, 2, 4, 5};
+        String[] shown = new String[map.length];
+        for (int i = 0; i < map.length; i++) shown[i] = opts[map[i]];
+        if (!canWrite) shown[1] = getString(R.string.view_only);
+        choose(name, shown, (d, picked) -> {
+            final int which = map[picked];
+            if ((which == 0 || which == 3) && !requireWrite()) return;
             if (which == 0) {
                 dispatchDialog(id, name, null);
             } else if (which == 1) {

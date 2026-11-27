@@ -103,6 +103,14 @@ public class RunDetailActivity extends BaseRepoActivity {
         ui.removeCallbacks(ticker);
     }
 
+    @Override
+    protected void onAccessChanged() {
+        if (content != null && run != null) {
+            silentRender = true;
+            render();
+        }
+    }
+
     private void updateExtra(JSONObject r) {
         String st = Status.state(r.optString("status"), r.optString("conclusion"));
         boolean active = Status.isActive(r.optString("status"));
@@ -342,6 +350,7 @@ public class RunDetailActivity extends BaseRepoActivity {
         boolean any = false;
         boolean isFailure = false;
         if (Status.isActive(s)) {
+            if (!canWrite) return;
             Button cancel = Ui.button(this, R.string.cancel_run, false);
             cancel.setOnClickListener(v -> doRunAction("cancel"));
             row.addView(cancel, weighted());
@@ -349,13 +358,15 @@ public class RunDetailActivity extends BaseRepoActivity {
         } else {
             Button rerun = Ui.button(this, R.string.rerun, true);
             rerun.setOnClickListener(v -> doRunAction("rerun"));
-            row.addView(rerun, weighted());
-            any = true;
+            if (canWrite) {
+                row.addView(rerun, weighted());
+                any = true;
+            }
             String state = Status.state(s, c);
             if ("failure".equals(state) || "timed_out".equals(state)) {
                 Button failed = Ui.button(this, R.string.rerun_failed, false);
                 failed.setOnClickListener(v -> doRunAction("rerun_failed"));
-                row.addView(failed, weighted());
+                if (canWrite) row.addView(failed, weighted());
                 isFailure = true;
             }
         }
@@ -366,7 +377,7 @@ public class RunDetailActivity extends BaseRepoActivity {
             back.setPadding(Ui.dp(this, 16), Ui.dp(this, 8), Ui.dp(this, 16), 0);
             Button rollback = Ui.button(this, R.string.rollback_before_run, false);
             rollback.setOnClickListener(v -> rollbackBeforeRun());
-            back.addView(rollback, weighted());
+            if (canWrite) back.addView(rollback, weighted());
             Button compare = Ui.button(this, R.string.cmp_btn, false);
             compare.setOnClickListener(v -> {
                 Intent ci = repoIntent(RunCompareActivity.class);
@@ -413,6 +424,7 @@ public class RunDetailActivity extends BaseRepoActivity {
     }
 
     private void doRunAction(final String what) {
+        if (!requireWrite()) return;
         bg(() -> {
             if ("cancel".equals(what)) api.cancelRun(owner, repo, runId, false);
             else if ("force".equals(what)) api.cancelRun(owner, repo, runId, true);
@@ -428,14 +440,16 @@ public class RunDetailActivity extends BaseRepoActivity {
     private void jobMenu(final JSONObject job) {
         final long jobId = job.optLong("id");
         final boolean done = "completed".equals(job.optString("status"));
-        String[] items = {
-                getString(R.string.view_log),
-                getString(R.string.rerun_job),
-                getString(R.string.open_in_github)};
-        choose(job.optString("name"), items, (d, which) -> {
+        final boolean write = canWrite;
+        String[] items = write
+                ? new String[]{getString(R.string.view_log), getString(R.string.rerun_job), getString(R.string.open_in_github)}
+                : new String[]{getString(R.string.view_log), getString(R.string.open_in_github)};
+        choose(job.optString("name"), items, (d, picked) -> {
+            final int which = !write && picked == 1 ? 2 : picked;
             if (which == 0) {
                 openLog(job, 0);
             } else if (which == 1) {
+                if (!requireWrite()) return;
                 if (!done) {
                     toast(R.string.job_not_finished);
                     return;
@@ -455,16 +469,18 @@ public class RunDetailActivity extends BaseRepoActivity {
 
     private void moreMenu() {
         final boolean active = run != null && Status.isActive(run.optString("status"));
-        String[] items = {
-                getString(R.string.download_all_logs),
-                getString(R.string.copy_link),
-                getString(active ? R.string.force_cancel : R.string.delete_run)};
+        String[] items = canWrite
+                ? new String[]{getString(R.string.download_all_logs), getString(R.string.copy_link),
+                        getString(active ? R.string.force_cancel : R.string.delete_run)}
+                : new String[]{getString(R.string.download_all_logs), getString(R.string.copy_link)};
         choose(getString(R.string.more), items, (d, which) -> {
             if (which == 0) {
                 saveAs("run-" + runId + "-logs.zip", () -> api.openDownload(api.runLogsPath(owner, repo, runId),
                         "application/vnd.github+json"));
             } else if (which == 1) {
                 if (run != null) copy("run", Fmt.s(run, "html_url"));
+            } else if (!requireWrite()) {
+                return;
             } else if (active) {
                 confirm(getString(R.string.force_cancel), getString(R.string.force_cancel_msg), R.string.confirm_ok,
                         () -> doRunAction("force"));

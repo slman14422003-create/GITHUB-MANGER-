@@ -209,6 +209,7 @@ public class EditorActivity extends BaseRepoActivity {
         owner = o;
         repo = r;
         branch = b;
+        retargetAccess(getIntent());
         tabs.clear();
         cur = null;
         treeSnap = null;
@@ -307,7 +308,22 @@ public class EditorActivity extends BaseRepoActivity {
     private void handleIntent(Intent i) {
         String p = i.getStringExtra("path");
         if (p == null) p = "";
-        openTab(p, i.getBooleanExtra("new", false));
+        boolean isNew = i.getBooleanExtra("new", false);
+        if (isNew && !requireWrite()) {
+            if (tabs.isEmpty()) finish();
+            return;
+        }
+        openTab(p, isNew);
+    }
+
+    private boolean canEdit(Tab t) {
+        return t != null && t.editable && canWrite;
+    }
+
+    @Override
+    protected void onAccessChanged() {
+        updateAccessBadge();
+        if (cur != null && cur.loaded) applyCurrent();
     }
 
     // ------------------------------------------------------------------ tabs
@@ -367,7 +383,7 @@ public class EditorActivity extends BaseRepoActivity {
         draftHandler.removeCallbacks(draftTick);
         saveCurrentState();
         for (Tab t : tabs) {
-            if (t.loaded && t.dirty && t.editable && !t.isImage) Drafts.save(this, draftOf(t, t.text));
+            if (t.loaded && t.dirty && canEdit(t) && !t.isImage) Drafts.save(this, draftOf(t, t.text));
         }
     }
 
@@ -391,7 +407,7 @@ public class EditorActivity extends BaseRepoActivity {
 
     private void saveDraftAsync() {
         final Tab t = cur;
-        if (t == null || !t.loaded || !t.dirty || !t.editable || t.isImage) return;
+        if (t == null || !t.loaded || !t.dirty || !canEdit(t) || t.isImage) return;
         final Drafts.Draft d = draftOf(t, editor.getText().toString());
         final android.content.Context app = getApplicationContext();
         try {
@@ -412,7 +428,7 @@ public class EditorActivity extends BaseRepoActivity {
     }
 
     private void offerDraft(final Tab t) {
-        if (!t.loaded || !t.editable || t.isImage) return;
+        if (!t.loaded || !canEdit(t) || t.isImage) return;
         final Drafts.Draft d = Drafts.load(this, owner, repo, branch, t.path);
         if (d == null) return;
         if (d.text.equals(t.text)) {
@@ -501,10 +517,10 @@ public class EditorActivity extends BaseRepoActivity {
         editor.setTracking(true);
         suppress = false;
         editor.useHistory(t.history);
-        editor.setEnabled(t.editable);
-        tools.setEditable(t.editable);
+        editor.setEnabled(canEdit(t));
+        tools.setEditable(canEdit(t));
         tools.refreshHistory();
-        btnA1.setVisibility(t.editable ? View.VISIBLE : View.GONE);
+        btnA1.setVisibility(canEdit(t) ? View.VISIBLE : View.GONE);
         boolean md = t.editable && isMarkdown(t.path);
         btnA3.setVisibility(md ? View.VISIBLE : View.GONE);
         if (md) {
@@ -517,7 +533,7 @@ public class EditorActivity extends BaseRepoActivity {
         } else {
             showMode(false, false);
         }
-        showStatus(t.lockMsg != 0 ? getString(t.lockMsg) : null);
+        showStatus(t.lockMsg != 0 ? getString(t.lockMsg) : !canWrite ? getString(R.string.read_only_blocked) : null);
         highlighter.setPath(t.path);
         highlighter.schedule(0);
         tools.onTextLoaded();
@@ -818,6 +834,7 @@ public class EditorActivity extends BaseRepoActivity {
     private void saveDialog() {
         final Tab t = cur;
         if (t == null || !t.editable) return;
+        if (!requireWrite()) return;
         final String name = t.name();
         final String current = editor.getText().toString();
         final LineDiff.Result diff = current.length() + t.base.length() > 600000 ? null
